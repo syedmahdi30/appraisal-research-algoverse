@@ -1,0 +1,13 @@
+# Stage A — text appraisal replication gate. See docs/experiment-1.md, docs/probes.md.
+model: google/gemma-3-4b-it
+device: cuda
+seed: 0
+
+# Tak et al. sampling: 500/emotion, guilt & shame 250 each. Set false to use full split.
+tak_subset: true
+
+# Ridge regularization (tune on val, report on test).
+ridge_alpha: 1.0
+
+# Steering strengths to sweep.
+betas: [-4, -2, -1, 1, 2, 4]

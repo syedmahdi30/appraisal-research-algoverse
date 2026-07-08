@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Secrets / env
+.env
+
+# Data (large, gated — never commit)
+data/raw/
+data/processed/
+*.zip
+*.mat
+*.npy
+*.npz
+
+# Results (regenerable — commit only curated tables/figures if desired)
+results/**/*.pt
+results/**/*.pkl
+results/**/*.joblib
+results/**/cache/
+
+# Model / HF caches
+*.safetensors
+hf_cache/

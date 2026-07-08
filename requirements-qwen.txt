@@ -1,0 +1,13 @@
+# Qwen3-VL verification path ONLY. Use a SEPARATE virtualenv from requirements.txt.
+# Qwen3-VL requires transformers>=4.57.0 (older versions raise:
+#   ValueError: model type qwen3_vl but Transformers does not recognize this architecture)
+# This is NOT bridge-supported — Qwen-VL uses raw HuggingFace forward hooks.
+
+transformers>=4.57.0,<5.0
+torch>=2.2
+pillow>=10.0
+accelerate>=0.30
+qwen-vl-utils>=0.0.8
+numpy>=1.26
+# Optional cleaner hook API over the raw HF module graph:
+# nnsight>=0.3
