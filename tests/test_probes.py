@@ -4,6 +4,8 @@ import pytest
 from src.probes.train import (
     fit_appraisal_probes,
     fit_ridge,
+    fit_ridge_cv,
+    fit_ridge_cv_multi,
     unique_effect_vector,
     unique_effect_vectors,
 )
@@ -17,6 +19,21 @@ def test_fit_ridge_recovers_linear_signal():
     y = X @ w + 0.5
     coef, intercept = fit_ridge(X, y, alpha=1e-3)
     assert probe_r2(X, y, coef, intercept) > 0.99
+
+
+def test_fit_ridge_cv_multi_matches_single():
+    # batched multi-target fit must equal per-target fits on the same X (shared decomposition)
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((120, 8)).astype(np.float32)
+    Y = np.column_stack([X @ rng.standard_normal(8), X @ rng.standard_normal(8)])
+    alphas = (1.0, 10.0, 100.0)
+    coef_m, inter_m, alpha_m = fit_ridge_cv_multi(X, Y, alphas=alphas)
+    assert coef_m.shape == (2, 8) and inter_m.shape == (2,) and alpha_m.shape == (2,)
+    for j in range(2):
+        c, b, a = fit_ridge_cv(X, Y[:, j], alphas=alphas)
+        assert np.allclose(coef_m[j], c, atol=1e-4)
+        assert np.isclose(inter_m[j], b, atol=1e-4)
+        assert alpha_m[j] == a
 
 
 def test_unique_effect_vector_is_orthogonal_to_others():

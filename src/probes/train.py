@@ -81,6 +81,24 @@ def fit_ridge_cv(X: np.ndarray, y: np.ndarray, alphas=DEFAULT_ALPHAS) -> tuple[n
     return coef, intercept, float(model.alpha_)
 
 
+def fit_ridge_cv_multi(X: np.ndarray, Y: np.ndarray, alphas=DEFAULT_ALPHAS):
+    """Multi-target RidgeCV sharing ONE decomposition of X across all columns of Y.
+
+    `Y`: [n, k]. Returns raw-space (coef [k, d], intercept [k], alpha [k]). Fitting all
+    targets against the same standardized X in a single call is ~k times cheaper than k
+    separate fits — the layer sweep reuses the identical X for every appraisal + baseline.
+    """
+    X = np.asarray(X, dtype=np.float32)
+    Y = np.asarray(Y, dtype=np.float32)
+    scaler = StandardScaler().fit(X)
+    model = RidgeCV(alphas=list(alphas), alpha_per_target=True).fit(scaler.transform(X), Y)
+    scale = scaler.scale_.copy()
+    scale[scale == 0] = 1.0
+    coef_raw = (model.coef_ / scale).astype(np.float32)                 # [k, d]
+    intercept_raw = (model.intercept_ - coef_raw @ scaler.mean_).astype(np.float32)  # [k]
+    return coef_raw, intercept_raw, np.atleast_1d(model.alpha_).astype(float)
+
+
 def unique_effect_vector(v_a: np.ndarray, others: np.ndarray) -> np.ndarray:
     """Remove from v_a the components spanned by `others` ([k, d]); return unit vector.
 
