@@ -58,12 +58,12 @@ def _load_targets(split, tak_subset, seed, limit):
     return df["text"].tolist(), Y
 
 
-def run(config_path: str) -> dict:
+def run(config_path: str, limit_override: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     seed = int(cfg.get("seed", 0))
     alpha = float(cfg.get("ridge_alpha", 1.0))
-    limit = cfg.get("limit")  # None = full run; int = quick pipeline test
+    limit = limit_override if limit_override is not None else cfg.get("limit")
 
     tr_texts, Ytr = _load_targets("train", cfg.get("tak_subset", True), seed, limit)
     va_texts, Yva = _load_targets("val", False, seed, (limit // 4 or 1) if limit else None)
@@ -112,8 +112,10 @@ def run(config_path: str) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage A — text appraisal replication gate")
     ap.add_argument("--config", default="config/stage_a.yaml")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="process only N train examples (fast dry run); overrides the config")
     args = ap.parse_args()
-    m = run(args.config)
+    m = run(args.config, limit_override=args.limit)
     print(f"\nStage A done. critical_layer={m['critical_layer']} "
           f"n_train={m['n_train']} n_val={m['n_val']}. See {STAGE_A_DIR/'metrics.json'}")
     # quick console peek: best val r2 per appraisal at the MHSA tap
