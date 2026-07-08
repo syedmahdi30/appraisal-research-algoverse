@@ -26,8 +26,17 @@ Use the `/update-memory` skill to add entries.
 
 ## Tokenization / labels
 - Avoid: assuming emotion labels are single-token. Verify per model with `bridge.tokenizer.encode(" "+w)`
-  (keep the leading space for the SentencePiece ▁ prefix). Some labels (e.g. "boredom", "disgust")
-  may split; use first-subtoken or summed-logprob scoring, identical across Gemma and Qwen.
+  (keep the leading space for the SentencePiece ▁ prefix).
+- Verified (Gemma-3-4b-it, 2026-07): ALL 13 crowd-enVENT emotion labels are SINGLE-token — closed-vocab
+  scoring needs no first-subtoken/summed-logprob workaround. Re-verify if the model changes.
+
+## Smoke test (verified 2026-07 on A100)
+- Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
+  `n_layers=34`, one forward pass caches 102 tensors (3 taps × 34 layers), all three LM taps fire.
+  Stack: transformers 5.12.1, transformer-lens 3.x, torch 2.11+cu128, Python 3.12.
+- Known issue (harmless): boot logs many `Hook alias ... on SiglipVisionEncoderLayerBridge did not
+  resolve` warnings — the bridge registers LM-style aliases on the SigLIP vision tower. We only probe
+  LM `blocks.{i}...`, so these are expected; `boot_gemma` now filters them.
 
 ## Compute / Colab workflow
 - Decision: runs on a Colab **A100** (40 GB) via the VS Code Colab extension; local files
