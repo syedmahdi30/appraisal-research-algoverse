@@ -14,5 +14,8 @@ ridge_alphas: [1.0, 10.0, 100.0, 1000.0, 10000.0]
 # confirm the whole pipeline runs before the full job. Leave null/absent for the full run.
 limit: null
 
-# Steering strengths to sweep (steering test is a later iteration).
-betas: [-4, -2, -1, 1, 2, 4]
+# --- Steering test (stage_a_steering.py) ---
+# Adds beta * z_a_unit at the critical layer's residual stream; measures emotion-valence shift.
+steering_betas: [-4, -2, -1, 1, 2, 4]
+steering_n_prompts: 60          # test-split prompts to average over
+# steering_appraisals: [pleasantness, unpleasantness]   # default: all probed appraisals
