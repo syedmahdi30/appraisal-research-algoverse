@@ -1,22 +1,26 @@
 #!/usr/bin/env python
-"""One-shot Colab session setup. Run once at the start of every Colab session.
+"""One-shot Colab session setup (deps + optional Drive persistence + env check).
 
-Colab runtimes are EPHEMERAL — packages, model weights, and outputs are wiped when the
-runtime recycles. This script rebuilds the session:
-  1. confirm we're on a Colab GPU runtime
-  2. install requirements.txt (skips torch — keep Colab's CUDA-matched build)
-  3. load HF_TOKEN from Colab Secrets (the key icon), fall back to env
-  4. optionally mount Google Drive and redirect data/ + results/ there so they persist
-  5. run scripts/check_environment.py
+IMPORTANT: `google.colab.drive.mount` and `google.colab.userdata` only work inside a
+notebook CELL (they need the live kernel); they crash in a `!python` subprocess. So this
+script does NOT mount Drive or read Secrets itself. Do those in a cell FIRST — then this
+script (and every other `!python` call) inherits the mounted drive and the HF_TOKEN env:
 
-Usage (from the repo root on the runtime):
-    !python scripts/colab_bootstrap.py                # outputs stay on ephemeral disk
-    !python scripts/colab_bootstrap.py --drive        # persist data/ + results/ to Drive
+    # --- run this in a notebook cell, once per session ---
+    from google.colab import userdata, drive
+    import os
+    os.environ["HF_TOKEN"] = userdata.get("HF_TOKEN")   # token from the Colab key icon
+    drive.mount("/content/drive")
+
+Then, from the repo root:
+    !python scripts/colab_bootstrap.py            # deps + env check
+    !python scripts/colab_bootstrap.py --drive    # + persist results/ & data/processed to Drive
 """
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -26,7 +30,7 @@ DRIVE_PROJECT = "/content/drive/MyDrive/algoverse-appraisal"  # persistent home 
 
 
 def _on_colab() -> bool:
-    return "google.colab" in sys.modules or Path("/content").exists()
+    return Path("/content").exists()
 
 
 def install_requirements() -> None:
@@ -37,37 +41,30 @@ def install_requirements() -> None:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(req)], check=True)
 
 
-def load_hf_token() -> bool:
+def check_hf_token() -> bool:
     if os.environ.get("HF_TOKEN"):
-        print("[token] HF_TOKEN already set in env")
+        print("[token] HF_TOKEN present in env")
         return True
-    try:
-        from google.colab import userdata  # type: ignore
-
-        token = userdata.get("HF_TOKEN")
-        if token:
-            os.environ["HF_TOKEN"] = token
-            print("[token] loaded HF_TOKEN from Colab Secrets")
-            return True
-    except Exception as e:  # noqa: BLE001 - secret missing / not on Colab
-        print(f"[token] could not read Colab Secret: {e}")
-    print("[token] HF_TOKEN NOT set — add it via the Colab key icon (name: HF_TOKEN, "
-          "notebook access ON). Gemma is gated and will not load without it.")
+    print("[token] HF_TOKEN NOT set. In a NOTEBOOK CELL (not !python) run:\n"
+          "    from google.colab import userdata; import os\n"
+          "    os.environ['HF_TOKEN'] = userdata.get('HF_TOKEN')\n"
+          "  (add the token first via the Colab key icon, name HF_TOKEN, notebook access ON).\n"
+          "  Gemma is gated and will not load without it.")
     return False
 
 
-def mount_drive_and_link() -> None:
-    """Persist the SMALL, worth-keeping dirs to Drive via symlink.
+def link_drive() -> None:
+    """Symlink the small persistent dirs to Drive — IF Drive is already mounted in a cell.
 
-    Only `results/` and `data/processed/` are persisted — they're small and expensive to
-    recompute. `data/raw/` stays on Colab's fast local disk (large image sets read slowly
-    from mounted Drive; raw archives live in Drive and are re-extracted per session).
+    Persists only `results/` and `data/processed/` (small, expensive to recompute).
+    `data/raw/` stays on fast local disk. Does nothing (with guidance) if Drive isn't
+    mounted, rather than crashing — mounting needs the notebook kernel.
     """
-    import shutil
-
-    from google.colab import drive  # type: ignore
-
-    drive.mount("/content/drive")
+    if not Path("/content/drive/MyDrive").exists():
+        print("[drive] /content/drive not mounted. In a NOTEBOOK CELL run:\n"
+              "    from google.colab import drive; drive.mount('/content/drive')\n"
+              "  then re-run with --drive. Skipping persistence for now.")
+        return
     for sub in ("results", "data/processed"):
         target = Path(DRIVE_PROJECT) / sub
         target.mkdir(parents=True, exist_ok=True)
@@ -83,7 +80,7 @@ def mount_drive_and_link() -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Colab session bootstrap")
-    ap.add_argument("--drive", action="store_true", help="persist data/ + results/ to Google Drive")
+    ap.add_argument("--drive", action="store_true", help="persist results/ + data/processed to Drive")
     ap.add_argument("--skip-deps", action="store_true", help="skip pip install (already done)")
     args = ap.parse_args()
 
@@ -92,9 +89,9 @@ def main() -> int:
 
     if not args.skip_deps:
         install_requirements()
-    load_hf_token()
+    check_hf_token()
     if args.drive:
-        mount_drive_and_link()
+        link_drive()
 
     print("\n[check] running scripts/check_environment.py ...\n")
     subprocess.run([sys.executable, str(ROOT / "scripts" / "check_environment.py")])

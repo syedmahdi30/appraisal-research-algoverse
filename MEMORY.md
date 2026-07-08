@@ -39,6 +39,13 @@ Use the `/update-memory` skill to add entries.
   bound) so pip won't swap it and break CUDA.
 - Verified: HF_TOKEN comes from Colab Secrets (🔑 icon, name `HF_TOKEN`, notebook access ON) —
   never paste tokens into code or chat.
+- Avoid: calling `google.colab.drive.mount` or `userdata.get` inside a `!python` subprocess —
+  they need the live kernel and crash with `'NoneType' object has no attribute 'kernel'`. Do both
+  in a NOTEBOOK CELL first; `os.environ['HF_TOKEN']` and the `/content/drive` mount are then
+  inherited by every later `!python`. `colab_bootstrap.py` only does deps + symlinks + env check.
+- Verified: EMOTIC loader is correct — conversion yields train 23706 / val 3334 / test 7280 =
+  34,320 persons (the canonical EMOTIC total). Repo lives on GitHub; clone + `%cd` on Colab so
+  `import src` resolves (running a lone script from /content fails: No module named 'src').
 
 ## Data access
 - Verified: crowd-enVENT is a free direct download: `romanklinger.de/data-sets/crowd-enVent2023.zip`.
