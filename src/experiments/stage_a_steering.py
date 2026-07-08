@@ -51,7 +51,7 @@ def valence_score(logits_last, tok_ids) -> float:
 def run(config_path: str, limit_override: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
-    betas = list(cfg.get("steering_betas", [-4, -2, -1, 1, 2, 4]))
+    betas = list(cfg.get("steering_betas", [-0.5, -0.25, -0.1, 0.1, 0.25, 0.5]))
     n_prompts = limit_override or int(cfg.get("steering_n_prompts", 60))
     device = cfg.get("device", "cuda")
 
@@ -85,11 +85,11 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
         base_vals.append(valence_score(logits[0, -1], tok_ids))
     A = np.stack(A)
 
-    # Natural steering unit per direction = std of the residual's projection onto it.
-    sigma = {d: float(np.std(A @ v)) for d, v in unit.items()}
+    # Gemma's residual norm is huge (~1e4-1e5) and RMSNorm divides by it, so steering must
+    # be a FRACTION OF THE RESIDUAL NORM to survive normalization. beta = that fraction.
+    sigma = {d: float(np.std(A @ v)) for d, v in unit.items()}  # reported for context
     resid_norm = float(np.mean(np.linalg.norm(A, axis=1)))
-    # Steering vector added = beta * sigma_d * z_d  (i.e. "beta std along the appraisal").
-    scaled = {d: torch.tensor(sigma[d] * v, dtype=torch.float32, device=dev) for d, v in unit.items()}
+    scaled = {d: torch.tensor(resid_norm * v, dtype=torch.float32, device=dev) for d, v in unit.items()}
 
     # Pass 2: steer at beta * sigma along each direction; measure valence shift.
     deltas = {d: {b: [] for b in betas} for d in unit}
@@ -103,7 +103,7 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     mean_delta = {d: {b: float(np.mean(v)) for b, v in bs.items()} for d, bs in deltas.items()}
     metrics = {"run": run_stamp(), "critical_layer": crit, "betas": betas,
                "n_prompts": len(prompts), "resid_norm_mean": resid_norm,
-               "sigma_per_direction": sigma, "beta_units": "std of residual projection onto direction",
+               "sigma_per_direction": sigma, "beta_units": "fraction of mean residual norm",
                "mean_delta_valence": mean_delta,
                "valence_groups": {"positive": POSITIVE, "negative": NEGATIVE}}
 
@@ -123,7 +123,7 @@ def _plot(mean_delta, betas):
         style = "k--" if d == "_random" else "-o"
         ax.plot(xs, [bs[b] for b in xs], style, ms=4, label=d.replace("_random", "random (control)"))
     ax.axhline(0, color="gray", lw=0.5)
-    ax.set_xlabel("steering strength β  (std along direction)"); ax.set_ylabel("Δ valence  (P[pos] − P[neg])")
+    ax.set_xlabel("steering strength β  (fraction of residual norm)"); ax.set_ylabel("Δ valence  (P[pos] − P[neg])")
     ax.set_title("Stage A steering: emotion-valence shift vs appraisal direction")
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -140,8 +140,8 @@ def main() -> None:
     m = run(args.config, limit_override=args.limit)
     print(f"\nSteering done (crit layer {m['critical_layer']}, {m['n_prompts']} prompts, "
           f"mean residual norm {m['resid_norm_mean']:.1f}).")
-    print("β is in units of the residual's projection std along each direction (self-calibrated).\n")
-    print(f"{'direction':22s} " + "  ".join(f"β={b:+d}" for b in m["betas"]))
+    print("β = fraction of the mean residual norm added along each direction.\n")
+    print(f"{'direction':22s} " + "  ".join(f"β={b:+.2f}" for b in m["betas"]))
     for d, bs in m["mean_delta_valence"].items():
         name = d.replace("_random", "random (control)")
         print(f"{name:22s} " + "  ".join(f"{bs[b]:+.3f}" for b in m["betas"]))

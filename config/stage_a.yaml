@@ -15,7 +15,8 @@ ridge_alphas: [1.0, 10.0, 100.0, 1000.0, 10000.0]
 limit: null
 
 # --- Steering test (stage_a_steering.py) ---
-# Adds beta * z_a_unit at the critical layer's residual stream; measures emotion-valence shift.
-steering_betas: [-4, -2, -1, 1, 2, 4]
+# beta = fraction of the mean residual norm added along z_a (Gemma residual norm is ~1e4-1e5;
+# RMSNorm divides by it, so steering must be a real fraction of the norm to have any effect).
+steering_betas: [-0.5, -0.25, -0.1, 0.1, 0.25, 0.5]
 steering_n_prompts: 60          # test-split prompts to average over
 # steering_appraisals: [pleasantness, unpleasantness]   # default: all probed appraisals
