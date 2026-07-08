@@ -12,7 +12,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, RidgeCV
+from sklearn.preprocessing import StandardScaler
+
+# Default alpha grid for RidgeCV. Activations are ~2560-dim and collinear, so a fixed
+# small alpha is ill-conditioned; standardizing + CV-selecting alpha fixes both.
+DEFAULT_ALPHAS: tuple[float, ...] = (1.0, 10.0, 100.0, 1000.0, 10000.0)
 
 
 @dataclass
@@ -39,12 +44,41 @@ class AppraisalProbes:
         return self.z_unit[self.index(name)]
 
 
+def _fold_scaler(coef_std, intercept_std, scaler) -> tuple[np.ndarray, float]:
+    """Fold a StandardScaler into (coef, intercept) so they apply to RAW X.
+
+    Ridge fits on z=(x-mean)/scale: pred = z·w + b0. In raw space that is
+    x·(w/scale) + (b0 - mean·(w/scale)). Returning raw-space coefficients keeps the probe
+    interface (apply to raw activations) and keeps steering vectors in activation space.
+    """
+    scale = scaler.scale_.copy()
+    scale[scale == 0] = 1.0  # constant feature -> zero contribution
+    coef_raw = (coef_std / scale).astype(np.float32)
+    intercept_raw = float(intercept_std - np.sum(scaler.mean_ * coef_std / scale))
+    return coef_raw, intercept_raw
+
+
 def fit_ridge(X: np.ndarray, y: np.ndarray, alpha: float = 1.0) -> tuple[np.ndarray, float]:
-    """Fit Ridge, returning (coef [d], intercept). Casts X, y to fp32."""
+    """Standardize, fit Ridge at fixed `alpha`, return raw-space (coef [d], intercept)."""
     X = np.asarray(X, dtype=np.float32)
     y = np.asarray(y, dtype=np.float32)
-    model = Ridge(alpha=alpha).fit(X, y)
-    return model.coef_.astype(np.float32), float(model.intercept_)
+    scaler = StandardScaler().fit(X)
+    model = Ridge(alpha=alpha).fit(scaler.transform(X), y)
+    return _fold_scaler(model.coef_, float(model.intercept_), scaler)
+
+
+def fit_ridge_cv(X: np.ndarray, y: np.ndarray, alphas=DEFAULT_ALPHAS) -> tuple[np.ndarray, float, float]:
+    """Standardize + RidgeCV (alpha chosen by efficient LOO/GCV). Returns (coef, intercept, alpha).
+
+    Standardization + a data-driven alpha removes the ill-conditioning that a fixed small
+    alpha causes on high-dim collinear activations.
+    """
+    X = np.asarray(X, dtype=np.float32)
+    y = np.asarray(y, dtype=np.float32)
+    scaler = StandardScaler().fit(X)
+    model = RidgeCV(alphas=list(alphas)).fit(scaler.transform(X), y)
+    coef, intercept = _fold_scaler(model.coef_, float(model.intercept_), scaler)
+    return coef, intercept, float(model.alpha_)
 
 
 def unique_effect_vector(v_a: np.ndarray, others: np.ndarray) -> np.ndarray:
@@ -81,19 +115,21 @@ def unique_effect_vectors(coef: np.ndarray) -> np.ndarray:
 def fit_appraisal_probes(
     X: np.ndarray,
     Y: dict[str, np.ndarray],
-    alpha: float = 1.0,
+    alphas=DEFAULT_ALPHAS,
 ) -> AppraisalProbes:
-    """Fit one Ridge per appraisal and assemble unique-effect steering vectors.
+    """Fit one RidgeCV probe per appraisal and assemble unique-effect steering vectors.
 
-    `X`: [n, d] last-token activations. `Y`: {appraisal_name: [n] ratings}. The steering
-    vectors for appraisal a exclude the other appraisals in `Y` (the unique effect).
+    `X`: [n, d] last-token activations. `Y`: {appraisal_name: [n] ratings}. Alpha is chosen
+    per appraisal by CV. The steering vectors for appraisal a exclude the other appraisals
+    in `Y` (the unique effect).
     """
     names = list(Y.keys())
-    coefs, intercepts = [], []
+    coefs, intercepts, chosen = [], [], []
     for name in names:
-        c, b = fit_ridge(X, Y[name], alpha=alpha)
+        c, b, a = fit_ridge_cv(X, Y[name], alphas=alphas)
         coefs.append(c)
         intercepts.append(b)
+        chosen.append(a)
     coef = np.stack(coefs)
     z_unit = unique_effect_vectors(coef)
     return AppraisalProbes(
@@ -101,5 +137,6 @@ def fit_appraisal_probes(
         coef=coef,
         intercept=np.asarray(intercepts, dtype=np.float32),
         z_unit=z_unit,
-        alpha=alpha,
+        alpha=float(np.median(chosen)),
+        meta={"alphas_per_appraisal": dict(zip(names, chosen))},
     )

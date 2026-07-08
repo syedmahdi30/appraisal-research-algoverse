@@ -29,7 +29,7 @@ from ..data import APPRAISAL_TARGETS, EMOTION_LABELS, verify_label_tokenization
 from ..data.crowd_envent import load_split, sample_tak_subset
 from ..paths import STAGE_A_DIR, ensure_dirs
 from ..probes.evaluate import best_layer, probe_r2
-from ..probes.train import fit_appraisal_probes, fit_ridge
+from ..probes.train import DEFAULT_ALPHAS, fit_appraisal_probes, fit_ridge_cv
 from .common import load_config, run_stamp, save_json, save_probes
 
 
@@ -62,7 +62,7 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     seed = int(cfg.get("seed", 0))
-    alpha = float(cfg.get("ridge_alpha", 1.0))
+    alphas = cfg.get("ridge_alphas", DEFAULT_ALPHAS)
     limit = limit_override if limit_override is not None else cfg.get("limit")
 
     tr_texts, Ytr = _load_targets("train", cfg.get("tak_subset", True), seed, limit)
@@ -76,7 +76,7 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     Xva = extract_all_taps(bridge, va_texts, n_layers, desc="val acts")
 
     rng = np.random.default_rng(seed)
-    metrics = {"run": run_stamp(), "seed": seed, "alpha": alpha, "limit": limit,
+    metrics = {"run": run_stamp(), "seed": seed, "alphas": list(alphas), "limit": limit,
                "n_train": len(tr_texts), "n_val": len(va_texts),
                "tokenization": tok_report, "layerwise_val_r2": {},
                "shuffled_baseline_val_r2": {}, "best_layer": {}}
@@ -86,12 +86,13 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
         metrics["shuffled_baseline_val_r2"][tap] = {}
         for appraisal in Ytr:
             ytr, yva = Ytr[appraisal], Yva[appraisal]
+            yperm = rng.permutation(ytr)
             lr2, base = {}, {}
             for layer in range(n_layers):
-                coef, b = fit_ridge(Xtr[tap][layer], ytr, alpha=alpha)
+                coef, b, _ = fit_ridge_cv(Xtr[tap][layer], ytr, alphas=alphas)
                 lr2[layer] = probe_r2(Xva[tap][layer], yva, coef, b)
                 # shuffled-label baseline: same fit on permuted y, scored on val
-                sc, sb = fit_ridge(Xtr[tap][layer], rng.permutation(ytr), alpha=alpha)
+                sc, sb, _ = fit_ridge_cv(Xtr[tap][layer], yperm, alphas=alphas)
                 base[layer] = probe_r2(Xva[tap][layer], yva, sc, sb)
             metrics["layerwise_val_r2"][tap][appraisal] = lr2
             metrics["shuffled_baseline_val_r2"][tap][appraisal] = base
@@ -103,7 +104,8 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     metrics["critical_layer"] = crit_layer
 
     # Frozen probes for Stage C: fit at the critical MHSA layer on TRAIN activations.
-    probes = fit_appraisal_probes(Xtr["hook_attn_out"][crit_layer], Ytr, alpha=alpha)
+    probes = fit_appraisal_probes(Xtr["hook_attn_out"][crit_layer], Ytr, alphas=alphas)
+    metrics["chosen_alphas"] = probes.meta.get("alphas_per_appraisal", {})
     save_probes(probes, STAGE_A_DIR / "probes.npz")
     save_json(metrics, STAGE_A_DIR / "metrics.json")
     return metrics
