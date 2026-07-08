@@ -16,7 +16,8 @@ limit: null
 
 # --- Steering test (stage_a_steering.py) ---
 # beta = fraction of the mean residual norm added along z_a (Gemma residual norm is ~1e4-1e5;
-# RMSNorm divides by it, so steering must be a real fraction of the norm to have any effect).
-steering_betas: [-0.5, -0.25, -0.1, 0.1, 0.25, 0.5]
-steering_n_prompts: 60          # test-split prompts to average over
-# steering_appraisals: [pleasantness, unpleasantness]   # default: all probed appraisals
+# RMSNorm divides by it). Window: <0.02 is swamped, >0.1 breaks coherence (random moves too),
+# so sweep the coherent band ~0.02-0.08 and check pleasantness/unpleasantness beat the control.
+steering_betas: [-0.08, -0.04, -0.02, 0.02, 0.04, 0.08]
+steering_n_prompts: 120         # more prompts -> less noise in the mean valence shift
+steering_appraisals: [pleasantness, unpleasantness]   # cleanest valence predictions
