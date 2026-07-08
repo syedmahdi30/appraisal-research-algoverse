@@ -6,8 +6,9 @@ seed: 0
 # Tak et al. sampling: 500/emotion, guilt & shame 250 each. Set false to use full split.
 tak_subset: true
 
-# Ridge regularization (tune on val, report on test).
-ridge_alpha: 1.0
+# Ridge regularization: RidgeCV picks alpha from this grid per appraisal (features are
+# standardized first). A fixed small alpha is ill-conditioned on ~2560-dim activations.
+ridge_alphas: [1.0, 10.0, 100.0, 1000.0, 10000.0]
 
 # Quick pipeline dry run: set to e.g. 40 to process only 40 train / 10 val examples and
 # confirm the whole pipeline runs before the full job. Leave null/absent for the full run.

@@ -49,7 +49,7 @@ def test_fit_appraisal_probes_end_to_end():
         "pleasantness": X @ rng.standard_normal(6),
         "suddenness": X @ rng.standard_normal(6),
     }
-    probes = fit_appraisal_probes(X, Y, alpha=1e-2)
+    probes = fit_appraisal_probes(X, Y, alphas=(0.01, 0.1, 1.0))
     assert probes.names == ["pleasantness", "suddenness"]
     assert probes.coef.shape == (2, 6)
     assert probes.z_unit.shape == (2, 6)
