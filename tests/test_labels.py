@@ -11,7 +11,13 @@ def test_emotion_labels_count():
 def test_appraisal_targets_are_the_six():
     assert len(labels.APPRAISAL_TARGETS) == 6
     assert "pleasantness" in labels.APPRAISAL_TARGETS
-    assert "others_responsibility" in labels.APPRAISAL_TARGETS
+    # keyed by the real crowd-enVENT column names
+    assert "other_responsblt" in labels.APPRAISAL_TARGETS
+    assert "predict_event" in labels.APPRAISAL_TARGETS
+
+
+def test_appraisal_display_covers_all_targets():
+    assert set(labels.APPRAISAL_DISPLAY) == set(labels.APPRAISAL_TARGETS)
 
 
 def test_emotic_mapping_covers_all_26_categories():

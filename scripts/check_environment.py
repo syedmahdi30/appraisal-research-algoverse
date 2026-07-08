@@ -75,14 +75,14 @@ def main() -> int:
     if not has_token:
         warnings.append("HF_TOKEN not set — Gemma is gated and will not load")
 
-    envent = ROOT / "data" / "raw" / "crowd-enVent2023"
+    envent = ROOT / "data" / "raw" / "corpus" / "crowd-enVent_generation.tsv"
     emotic = ROOT / "data" / "raw" / "emotic"
     print(f"crowd-enVENT      : {'present' if envent.exists() else 'missing'} ({envent})")
-    print(f"EMOTIC            : {'present' if emotic.exists() else 'missing'} ({emotic})")
+    print(f"EMOTIC (images)   : {'present' if emotic.exists() else 'missing'} ({emotic})")
     if not envent.exists():
         warnings.append("crowd-enVENT missing — python scripts/download_data.py --dataset crowd-envent")
     if not emotic.exists():
-        warnings.append("EMOTIC missing — gated; submit the form (see docs/datasets.md)")
+        warnings.append("EMOTIC images missing — gated; extract emotic.zip (see docs/datasets.md)")
 
     print("\n--- verdict ---")
     if blockers:

@@ -1,7 +1,10 @@
 # Rules — data preprocessing and splits
 
-- **Use predefined splits.** crowd-enVENT ships train/val/test (4,320 / 1,080 / 1,200) — do not
-  re-split. EMOTIC has official partitions — use them. Never mix data across the Stage A/C boundary.
+- **Splits.** crowd-enVENT's public download ships ONE corpus (`crowd-enVent_generation.tsv`, 6,600),
+  not separate split files, so `src/data/crowd_envent.py` derives a deterministic emotion-stratified
+  split at the canonical 4,320 / 1,080 / 1,200 sizes (fixed `SEED`) — reproducible but report it as a
+  caveat (not the paper's exact partition). EMOTIC has official train/val/test partitions — use them.
+  Never mix data across the Stage A/C boundary, and keep the same seed across a run.
 - **Verify tokenization before logit scoring.** Emotion/appraisal labels are NOT assumed single-token.
   Run `src/data/labels.py::verify_label_tokenization(tokenizer)` per model; keep the leading space
   (SentencePiece ▁). For multi-token labels use first-subtoken OR summed log-prob — identically across

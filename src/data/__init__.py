@@ -1,5 +1,6 @@
 """Dataset loaders and the shared emotion/appraisal label space."""
 from .labels import (
+    APPRAISAL_DISPLAY,
     APPRAISAL_TARGETS,
     EMOTIC_CATEGORIES,
     EMOTIC_TO_SHARED,
@@ -10,6 +11,7 @@ from .labels import (
 )
 
 __all__ = [
+    "APPRAISAL_DISPLAY",
     "APPRAISAL_TARGETS",
     "EMOTIC_CATEGORIES",
     "EMOTIC_TO_SHARED",
