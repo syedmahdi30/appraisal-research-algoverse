@@ -66,35 +66,45 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=device)
     tok_ids = emotion_token_ids(bridge)
     hook_name = resid_post_name(crit)
+    dev = next(bridge.parameters()).device
 
     # norm-matched random control (unit norm, like the z_a_unit vectors)
     rng = np.random.default_rng(int(cfg.get("seed", 0)))
     rand = rng.standard_normal(probes.z_unit.shape[1]).astype(np.float32)
     rand /= np.linalg.norm(rand)
+    unit = {a: probes.steering_vector(a) for a in appraisals}
+    unit["_random"] = rand
 
-    def z_tensor(vec):
-        return torch.tensor(vec, dtype=torch.float32, device=next(bridge.parameters()).device)
-
-    directions = {a: z_tensor(probes.steering_vector(a)) for a in appraisals}
-    directions["_random"] = z_tensor(rand)
-
-    # {direction: {beta: [per-prompt delta valence]}}
-    deltas = {d: {b: [] for b in betas} for d in directions}
-    resid_norms = []
-
-    for text in tqdm(prompts, desc="steering"):
+    # Pass 1: cache the critical-layer residual (last token) + baseline valence per prompt.
+    A, base_vals, token_ids_cache = [], [], []
+    for text in tqdm(prompts, desc="calibrate"):
         input_ids = bridge.to_tokens(TEXT_EMOTION_PROMPT.format(text=text))
-        base_logits = bridge.run_with_hooks(input_ids, fwd_hooks=[])
-        base_val = valence_score(base_logits[0, -1], tok_ids)
-        for d, z in directions.items():
+        token_ids_cache.append(input_ids)
+        logits, cache = bridge.run_with_cache(input_ids, names_filter=lambda n: n == hook_name)
+        A.append(cache[hook_name][0, -1].float().cpu().numpy())
+        base_vals.append(valence_score(logits[0, -1], tok_ids))
+    A = np.stack(A)
+
+    # Natural steering unit per direction = std of the residual's projection onto it.
+    sigma = {d: float(np.std(A @ v)) for d, v in unit.items()}
+    resid_norm = float(np.mean(np.linalg.norm(A, axis=1)))
+    # Steering vector added = beta * sigma_d * z_d  (i.e. "beta std along the appraisal").
+    scaled = {d: torch.tensor(sigma[d] * v, dtype=torch.float32, device=dev) for d, v in unit.items()}
+
+    # Pass 2: steer at beta * sigma along each direction; measure valence shift.
+    deltas = {d: {b: [] for b in betas} for d in unit}
+    for i, input_ids in enumerate(tqdm(token_ids_cache, desc="steering")):
+        for d, z in scaled.items():
             for b in betas:
                 hook = make_steer_hook(z, b)
                 logits = bridge.run_with_hooks(input_ids, fwd_hooks=[(hook_name, hook)])
-                deltas[d][b].append(valence_score(logits[0, -1], tok_ids) - base_val)
+                deltas[d][b].append(valence_score(logits[0, -1], tok_ids) - base_vals[i])
 
     mean_delta = {d: {b: float(np.mean(v)) for b, v in bs.items()} for d, bs in deltas.items()}
     metrics = {"run": run_stamp(), "critical_layer": crit, "betas": betas,
-               "n_prompts": len(prompts), "mean_delta_valence": mean_delta,
+               "n_prompts": len(prompts), "resid_norm_mean": resid_norm,
+               "sigma_per_direction": sigma, "beta_units": "std of residual projection onto direction",
+               "mean_delta_valence": mean_delta,
                "valence_groups": {"positive": POSITIVE, "negative": NEGATIVE}}
 
     save_json(metrics, STAGE_A_DIR / "steering_metrics.json")
@@ -113,7 +123,7 @@ def _plot(mean_delta, betas):
         style = "k--" if d == "_random" else "-o"
         ax.plot(xs, [bs[b] for b in xs], style, ms=4, label=d.replace("_random", "random (control)"))
     ax.axhline(0, color="gray", lw=0.5)
-    ax.set_xlabel("steering strength β"); ax.set_ylabel("Δ valence  (P[pos] − P[neg])")
+    ax.set_xlabel("steering strength β  (std along direction)"); ax.set_ylabel("Δ valence  (P[pos] − P[neg])")
     ax.set_title("Stage A steering: emotion-valence shift vs appraisal direction")
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -128,7 +138,9 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="use only N test prompts (dry run)")
     args = ap.parse_args()
     m = run(args.config, limit_override=args.limit)
-    print(f"\nSteering done (crit layer {m['critical_layer']}, {m['n_prompts']} prompts).")
+    print(f"\nSteering done (crit layer {m['critical_layer']}, {m['n_prompts']} prompts, "
+          f"mean residual norm {m['resid_norm_mean']:.1f}).")
+    print("β is in units of the residual's projection std along each direction (self-calibrated).\n")
     print(f"{'direction':22s} " + "  ".join(f"β={b:+d}" for b in m["betas"]))
     for d, bs in m["mean_delta_valence"].items():
         name = d.replace("_random", "random (control)")
