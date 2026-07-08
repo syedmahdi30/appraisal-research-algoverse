@@ -30,6 +30,15 @@ Use the `/update-memory` skill to add entries.
 - Verified (Gemma-3-4b-it, 2026-07): ALL 13 crowd-enVENT emotion labels are SINGLE-token — closed-vocab
   scoring needs no first-subtoken/summed-logprob workaround. Re-verify if the model changes.
 
+## Stage A localization RESULT (verified 2026-07, A100, seed 0)
+- Verified: Tak-style localization REPLICATES on Gemma-3-4b-it. All 6 appraisals peak mid-network
+  (MHSA `hook_attn_out`, layers 17-21) with val r2 far above the shuffled baseline (~0):
+  pleasantness L18 r2=0.64, unpleasantness L18 0.60, self_responsblt L21 0.44, suddenness L17 0.32,
+  other_responsblt L19 0.31, predict_event L17 0.24. critical_layer=18. n_train=4320 n_val=1080.
+- Frozen probes saved to results/stage_a/probes.npz (unique-effect steering vectors ready for Stage C).
+- This clears the LOCALIZATION half of the go/no-go gate. STEERING half (beta sweep, causal) still TODO.
+- Analyzer: `python -m src.experiments.analyze_stage_a` -> table + results/figures/stage_a_localization.png.
+
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
   `n_layers=34`, one forward pass caches 102 tensors (3 taps × 34 layers), all three LM taps fire.
