@@ -4,15 +4,19 @@
 - Troiano, Oberländer & Klinger 2023, *Computational Linguistics* 49(1):1–72, DOI 10.1162/coli_a_00461.
 - **Free direct download:** `https://www.romanklinger.de/data-sets/crowd-enVent2023.zip`
 - Reference code: GitHub `sarnthil/crowd-enVent-modeling`.
-- **6,600** experiencer event descriptions, each annotated with **21 appraisal dimensions** on a
-  **1–5 Likert** scale. Predefined splits: **train 4,320 / val 1,080 / test 1,200**.
-- **13 emotion labels:** anger, boredom, disgust, fear, guilt, joy, pride, relief, sadness, shame,
-  surprise, trust, "no emotion" (neutral).
+- **6,600** experiencer event descriptions, each annotated with appraisal dimensions on a
+  **1–5 Likert** scale. The six experiment targets map to these exact `generation.tsv` columns:
+  `pleasantness`, `unpleasantness`, `suddenness`, `predict_event` (Event Predictability),
+  `self_responsblt` (Own Responsibility), `other_responsblt` (Others' Responsibility).
+- **13 emotion labels** (`emotion` column): anger, boredom, disgust, fear, guilt, joy, pride,
+  relief, sadness, shame, surprise, trust, "no emotion" (neutral). Text is `generated_text`.
 - Tak et al. sampling: 500 examples per emotion, EXCEPT guilt and shame (250 each).
-- Appraisal names include the six experiment targets: **Pleasantness, Unpleasantness, Suddenness,
-  Event Predictability, Own Responsibility (self-agency), Others' Responsibility (other-agency)**
-  plus Familiarity, Goal Relevance, Situational Responsibility, etc.
-- Expected local path: `data/raw/crowd-enVent2023/` → processed to `data/processed/crowd_envent_{split}.parquet`.
+- **Actual layout (verified):** the zip extracts to `data/raw/corpus/crowd-enVent_generation.tsv`
+  (6600×61; the self-annotated experiencer data we use) and `crowd-enVent_validation.tsv` (reader
+  re-annotations, unused). `data/raw/predictions/` holds paper model outputs (unused).
+- **SPLIT CAVEAT:** the download does NOT ship separate train/val/test files. `src/data/crowd_envent.py`
+  derives a deterministic emotion-stratified split at the canonical sizes (4,320 / 1,080 / 1,200) with
+  a fixed seed. Reproducible, but not guaranteed identical to the paper's partition — report as a caveat.
 
 ## EMOTIC (images) — Stage B/C
 - Kosti, Alvarez, Recasens, Lapedriza; CVPR-W 2017 / TPAMI 2019.

@@ -14,15 +14,26 @@ EMOTION_LABELS: tuple[str, ...] = (
     "relief", "sadness", "shame", "surprise", "trust", "neutral",
 )
 
-# Six primary appraisal dimensions this experiment targets (crowd-enVENT names).
+# Six primary appraisal dimensions this experiment targets — keyed by the EXACT
+# crowd-enVENT generation.tsv column names (verified against the real file).
 APPRAISAL_TARGETS: tuple[str, ...] = (
     "pleasantness",
     "unpleasantness",
     "suddenness",
-    "event_predictability",
-    "own_responsibility",      # self-agency
-    "others_responsibility",   # other-agency
+    "predict_event",       # Event Predictability
+    "self_responsblt",     # Own Responsibility (self-agency)
+    "other_responsblt",    # Others' Responsibility (other-agency)
 )
+
+# Readable names for tables/plots (TSV column -> paper name).
+APPRAISAL_DISPLAY: dict[str, str] = {
+    "pleasantness": "Pleasantness",
+    "unpleasantness": "Unpleasantness",
+    "suddenness": "Suddenness",
+    "predict_event": "Event Predictability",
+    "self_responsblt": "Own Responsibility",
+    "other_responsblt": "Others' Responsibility",
+}
 
 # Shared ~7-emotion space for cross-modal alignment (Stage B).
 SHARED_EMOTIONS: tuple[str, ...] = (
