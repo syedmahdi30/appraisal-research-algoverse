@@ -101,10 +101,12 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
                 deltas[d][b].append(valence_score(logits[0, -1], tok_ids) - base_vals[i])
 
     mean_delta = {d: {b: float(np.mean(v)) for b, v in bs.items()} for d, bs in deltas.items()}
+    # Directionality: slope of mean Δvalence vs β. Predicted +pleasantness, −unpleasantness, ~0 random.
+    slope = {d: float(np.polyfit(betas, [bs[b] for b in betas], 1)[0]) for d, bs in mean_delta.items()}
     metrics = {"run": run_stamp(), "critical_layer": crit, "betas": betas,
                "n_prompts": len(prompts), "resid_norm_mean": resid_norm,
                "sigma_per_direction": sigma, "beta_units": "fraction of mean residual norm",
-               "mean_delta_valence": mean_delta,
+               "mean_delta_valence": mean_delta, "slope_vs_beta": slope,
                "valence_groups": {"positive": POSITIVE, "negative": NEGATIVE}}
 
     save_json(metrics, STAGE_A_DIR / "steering_metrics.json")
@@ -141,10 +143,11 @@ def main() -> None:
     print(f"\nSteering done (crit layer {m['critical_layer']}, {m['n_prompts']} prompts, "
           f"mean residual norm {m['resid_norm_mean']:.1f}).")
     print("β = fraction of the mean residual norm added along each direction.\n")
-    print(f"{'direction':22s} " + "  ".join(f"β={b:+.2f}" for b in m["betas"]))
+    print(f"{'direction':22s} " + "  ".join(f"β={b:+.2f}" for b in m["betas"]) + f"  {'slope':>8s}")
     for d, bs in m["mean_delta_valence"].items():
         name = d.replace("_random", "random (control)")
-        print(f"{name:22s} " + "  ".join(f"{bs[b]:+.3f}" for b in m["betas"]))
+        print(f"{name:22s} " + "  ".join(f"{bs[b]:+.3f}" for b in m["betas"])
+              + f"  {m['slope_vs_beta'][d]:+8.3f}")
     print(f"\nfigure -> {FIGURES_DIR/'stage_a_steering.png'}")
 
 
