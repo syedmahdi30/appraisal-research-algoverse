@@ -16,11 +16,24 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def _version(mod: str) -> str | None:
+def _probe(mod: str, dist: str | None = None) -> tuple[bool, str]:
+    """Return (importable, version_string). A package counts as present if it IMPORTS —
+    some packages (e.g. transformer-lens) don't expose `__version__`, so fall back to the
+    installed distribution metadata rather than declaring them missing.
+    """
     try:
-        return importlib.import_module(mod).__version__
-    except Exception:
-        return None
+        m = importlib.import_module(mod)
+    except Exception as e:
+        return False, f"NOT importable ({type(e).__name__}: {e})"
+    v = getattr(m, "__version__", None)
+    if v is None:
+        try:
+            from importlib.metadata import version
+
+            v = version(dist or mod)
+        except Exception:
+            v = "installed (version n/a)"
+    return True, v
 
 
 def main() -> int:
@@ -31,9 +44,9 @@ def main() -> int:
     if sys.version_info < (3, 11):
         blockers.append("Python >= 3.11 required")
 
-    torch_v = _version("torch")
+    torch_ok, torch_v = _probe("torch")
     print(f"torch            : {torch_v}")
-    if torch_v is None:
+    if not torch_ok:
         blockers.append("torch not installed (pip install -r requirements.txt)")
     else:
         import torch
@@ -44,17 +57,17 @@ def main() -> int:
         else:
             warnings.append("CUDA not available — Gemma smoke test / experiments need a GPU")
 
-    tf_v = _version("transformers")
-    tl_v = _version("transformer_lens")
+    tf_ok, tf_v = _probe("transformers")
+    tl_ok, tl_v = _probe("transformer_lens", dist="transformer-lens")
     print(f"transformers     : {tf_v}")
     print(f"transformer_lens : {tl_v}")
-    if tf_v is None:
+    if not tf_ok:
         blockers.append("transformers not installed")
-    if tl_v is None:
-        blockers.append("transformer-lens not installed")
+    if not tl_ok:
+        blockers.append("transformer-lens not importable")
 
     for mod in ("sklearn", "pandas", "numpy", "yaml", "PIL"):
-        if _version(mod) is None and importlib.util.find_spec(mod) is None:
+        if not _probe(mod)[0]:
             blockers.append(f"{mod} not installed")
 
     has_token = bool(os.environ.get("HF_TOKEN"))
