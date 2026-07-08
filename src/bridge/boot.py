@@ -20,8 +20,18 @@ def boot_gemma(
     Returns the `TransformerBridge`. Raises RuntimeError with an actionable message if
     HF_TOKEN is missing (Gemma is gated) or the multimodal adapter was not picked.
     """
+    import warnings
+
     import torch
     from transformer_lens.model_bridge import TransformerBridge
+
+    # The bridge tries to register LM-style hook aliases on the SigLIP vision tower, which
+    # don't resolve there. We only probe language-model blocks (blocks.{i}...), so these are
+    # expected and harmless — silence them to keep boot output readable.
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Hook alias .* on SiglipVisionEncoderLayerBridge.* did not resolve",
+    )
 
     if not os.environ.get("HF_TOKEN"):
         raise RuntimeError(
