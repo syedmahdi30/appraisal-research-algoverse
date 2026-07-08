@@ -9,5 +9,9 @@ tak_subset: true
 # Ridge regularization (tune on val, report on test).
 ridge_alpha: 1.0
 
-# Steering strengths to sweep.
+# Quick pipeline dry run: set to e.g. 40 to process only 40 train / 10 val examples and
+# confirm the whole pipeline runs before the full job. Leave null/absent for the full run.
+limit: null
+
+# Steering strengths to sweep (steering test is a later iteration).
 betas: [-4, -2, -1, 1, 2, 4]
