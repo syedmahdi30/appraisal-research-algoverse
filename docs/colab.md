@@ -17,19 +17,33 @@ token, and anything you want to KEEP (probes, metrics) must live on Google Drive
 2. **Accept the Gemma license** once on the Hub: https://huggingface.co/google/gemma-3-4b-it
 
 ## Each session
-Connect to an A100 runtime, then from the repo root:
 
+IMPORTANT: `drive.mount` and `userdata.get` (Colab Secrets) ONLY work in a notebook CELL —
+they crash inside a `!python` subprocess (`'NoneType' object has no attribute 'kernel'`).
+So mount Drive and load the token in a CELL first; every later `!python` inherits both.
+
+```python
+# Cell 1 — clone + enter the repo (%cd with %, so `import src` works)
+!git clone https://github.com/<your-username>/<your-repo>.git
+%cd <your-repo>
+
+# Cell 2 — mount Drive + load token (a CELL, needs the kernel)
+from google.colab import userdata, drive
+import os
+os.environ["HF_TOKEN"] = userdata.get("HF_TOKEN")   # token from the Colab key icon
+drive.mount("/content/drive")
+```
 ```bash
-# 1. rebuild the session (installs deps, loads HF_TOKEN from Secrets, checks the GPU)
-!python scripts/colab_bootstrap.py --drive        # --drive persists data/ + results/ to Drive
+# Cell 3 — deps + persist small dirs to Drive (inherits HF_TOKEN + the mounted drive)
+!python scripts/colab_bootstrap.py --drive
 
-# 2. prove the model path works (boots Gemma, one forward pass, hooks fire)
+# Cell 4 — prove the model path works (boots Gemma, one forward pass, hooks fire)
 !python scripts/smoke_test.py
 
-# 3. get data (crowd-enVENT is a free download; EMOTIC is gated — see docs/datasets.md)
+# Cell 5 — data (crowd-enVENT free; EMOTIC gated, from your Drive)
 !python scripts/download_data.py --dataset crowd-envent
 
-# 4. run a stage
+# Cell 6 — run a stage
 !python -m src.experiments.stage_a_text --config config/stage_a.yaml
 ```
 
