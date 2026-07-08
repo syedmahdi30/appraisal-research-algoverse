@@ -1,0 +1,9 @@
+# Stage C — cross-modal frozen-probe read-out. See docs/experiment-1.md.
+# Uses the FROZEN probes from results/stage_a/probes.npz — never re-fit here.
+model: google/gemma-3-4b-it
+device: cuda
+split: test
+
+# Critical layer/tap to read out at. Defaults to Stage A's saved critical_layer if omitted.
+# critical_layer: 20
+tap: hook_attn_out

@@ -1,0 +1,28 @@
+# Primary environment: Gemma 3 + TransformerBridge (text + multimodal read-out/steering)
+# Python >= 3.11. Install with:  pip install -r requirements.txt
+#
+# NOTE: The Qwen3-VL verification path needs transformers>=4.57 on the 4.57.x line,
+# which conflicts with the 5.x line the Gemma bridge path uses. Keep Qwen in a
+# SEPARATE virtualenv using requirements-qwen.txt.
+
+# --- Interpretability / models ---
+transformer-lens>=3.4.0        # >=3.2.1 required for the Gemma3 multimodal hotfix
+transformers>=5.4.0            # Gemma 3 bridge path (SigLIP shim differs <5.6 vs >=5.6)
+torch>=2.2
+pillow>=10.0                   # PIL image loading for the multimodal path
+accelerate>=0.30               # device_map / large-model loading helpers
+
+# --- Probes / data / analysis ---
+scikit-learn>=1.4              # Ridge probes
+pandas>=2.0
+numpy>=1.26
+scipy>=1.11                    # read EMOTIC Annotations.mat (scipy.io.loadmat)
+pyarrow>=14.0                  # parquet I/O for processed tables
+pyyaml>=6.0                    # experiment configs
+tqdm>=4.66
+
+# --- Plotting / reporting ---
+matplotlib>=3.8
+
+# --- Dev / testing ---
+pytest>=8.0
