@@ -4,6 +4,7 @@ from .train import (
     fit_appraisal_probes,
     fit_ridge,
     fit_ridge_cv,
+    fit_ridge_cv_multi,
     unique_effect_vector,
     unique_effect_vectors,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "fit_appraisal_probes",
     "fit_ridge",
     "fit_ridge_cv",
+    "fit_ridge_cv_multi",
     "unique_effect_vector",
     "unique_effect_vectors",
     "layerwise_r2",

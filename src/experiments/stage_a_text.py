@@ -28,8 +28,8 @@ from ..bridge.multimodal import TEXT_EMOTION_PROMPT
 from ..data import APPRAISAL_TARGETS, EMOTION_LABELS, verify_label_tokenization
 from ..data.crowd_envent import load_split, sample_tak_subset
 from ..paths import STAGE_A_DIR, ensure_dirs
-from ..probes.evaluate import best_layer, probe_r2
-from ..probes.train import DEFAULT_ALPHAS, fit_appraisal_probes, fit_ridge_cv
+from ..probes.evaluate import best_layer, r2
+from ..probes.train import DEFAULT_ALPHAS, fit_appraisal_probes, fit_ridge_cv_multi
 from .common import load_config, run_stamp, save_json, save_probes
 
 
@@ -76,28 +76,34 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     Xva = extract_all_taps(bridge, va_texts, n_layers, desc="val acts")
 
     rng = np.random.default_rng(seed)
+    names = list(Ytr)                                        # appraisal order
+    k = len(names)
+    Ytr_mat = np.column_stack([Ytr[a] for a in names])       # [n_train, k]
+    Yva_mat = np.column_stack([Yva[a] for a in names])       # [n_val, k]
+    Yperm = np.column_stack([rng.permutation(Ytr[a]) for a in names])
+    Ycomb = np.hstack([Ytr_mat, Yperm])                      # [n_train, 2k]: real | shuffled
+
     metrics = {"run": run_stamp(), "seed": seed, "alphas": list(alphas), "limit": limit,
                "n_train": len(tr_texts), "n_val": len(va_texts),
-               "tokenization": tok_report, "layerwise_val_r2": {},
-               "shuffled_baseline_val_r2": {}, "best_layer": {}}
-
+               "tokenization": tok_report, "layerwise_val_r2": {}, "shuffled_baseline_val_r2": {},
+               "best_layer": {}}
     for tap in TAP_SUFFIXES:
-        metrics["layerwise_val_r2"][tap] = {}
-        metrics["shuffled_baseline_val_r2"][tap] = {}
-        for appraisal in Ytr:
-            ytr, yva = Ytr[appraisal], Yva[appraisal]
-            yperm = rng.permutation(ytr)
-            lr2, base = {}, {}
-            for layer in range(n_layers):
-                coef, b, _ = fit_ridge_cv(Xtr[tap][layer], ytr, alphas=alphas)
-                lr2[layer] = probe_r2(Xva[tap][layer], yva, coef, b)
-                # shuffled-label baseline: same fit on permuted y, scored on val
-                sc, sb, _ = fit_ridge_cv(Xtr[tap][layer], yperm, alphas=alphas)
-                base[layer] = probe_r2(Xva[tap][layer], yva, sc, sb)
-            metrics["layerwise_val_r2"][tap][appraisal] = lr2
-            metrics["shuffled_baseline_val_r2"][tap][appraisal] = base
-            layer, score = best_layer(lr2)
-            metrics["best_layer"].setdefault(appraisal, {})[tap] = {"layer": layer, "val_r2": score}
+        metrics["layerwise_val_r2"][tap] = {a: {} for a in names}
+        metrics["shuffled_baseline_val_r2"][tap] = {a: {} for a in names}
+
+    # One decomposition per (tap, layer), reused for all appraisals + baselines.
+    jobs = [(tap, layer) for tap in TAP_SUFFIXES for layer in range(n_layers)]
+    for tap, layer in tqdm(jobs, desc="probe sweep"):
+        coef, inter, _ = fit_ridge_cv_multi(Xtr[tap][layer], Ycomb, alphas=alphas)  # [2k, d]
+        preds = Xva[tap][layer] @ coef.T + inter                                    # [n_val, 2k]
+        for j, a in enumerate(names):
+            metrics["layerwise_val_r2"][tap][a][layer] = r2(Yva_mat[:, j], preds[:, j])
+            metrics["shuffled_baseline_val_r2"][tap][a][layer] = r2(Yva_mat[:, j], preds[:, k + j])
+
+    for a in names:
+        for tap in TAP_SUFFIXES:
+            layer, score = best_layer(metrics["layerwise_val_r2"][tap][a])
+            metrics["best_layer"].setdefault(a, {})[tap] = {"layer": layer, "val_r2": score}
 
     # Critical layer: median over appraisals of the best MHSA-tap layer (selected on val).
     crit_layer = int(np.median([v["hook_attn_out"]["layer"] for v in metrics["best_layer"].values()]))
