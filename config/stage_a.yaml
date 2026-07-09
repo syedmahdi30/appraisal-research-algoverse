@@ -21,3 +21,11 @@ limit: null
 steering_betas: [-0.08, -0.04, -0.02, 0.02, 0.04, 0.08]
 steering_n_prompts: 120         # more prompts -> less noise in the mean valence shift
 steering_appraisals: [pleasantness, unpleasantness]   # cleanest valence predictions
+
+# --- Steering v2 (diff-of-means directions, natural scale) ---
+# beta = multiples of the low->high Δμ shift. Try a layer band (e.g. [14,16,18,20,22]) if a
+# single layer is still flat — multi-layer injection resists RMSNorm wash-out.
+steering_v2_layers: [18]
+steering_v2_betas: [-3, -2, -1, 1, 2, 3]
+steering_v2_n_dir: 1200         # train examples used to estimate Δμ directions
+steering_v2_n_prompts: 120
