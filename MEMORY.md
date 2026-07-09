@@ -39,16 +39,19 @@ Use the `/update-memory` skill to add entries.
 - This clears the LOCALIZATION half of the go/no-go gate.
 - Analyzer: `python -m src.experiments.analyze_stage_a` -> table + results/figures/stage_a_localization.png.
 
-## Stage A steering RESULT: INCONCLUSIVE (verified 2026-07)
-- Additive single-layer steering at resid_post L18 does NOT beat a norm-matched random control at any
-  beta. Explored fully: beta as fraction of residual norm — <0.02 swamped (~0.001 shifts), 0.02-0.08 the
-  RANDOM control moves as much as pleasantness/unpleasantness, >0.1 breaks coherence (chaotic, random
-  swings ±0.7). Mean residual norm ~37k; RMSNorm divides by it, so there's no clean signal window.
-- Verdict: read-out (probing) strongly replicates; single-layer additive steering is INCONCLUSIVE here.
-  Do NOT claim causal steering. Likely needs multi-layer injection / projection-clamp / sharper metric.
-- Decision: Stage C's PRIMARY test is READ-OUT transfer (frozen probes on image acts), which depends on
-  the strong probe result, NOT on steering. Proceed to Stage C read-out; cross-modal steering (Stage D)
-  is a lower-priority bonus. Avoid re-chasing text steering by brute-forcing beta.
+## Stage A steering RESULT: SUPPORTS (via diff-of-means, verified 2026-07)
+- KEY METHOD FINDING: the read-out direction is NOT the steering direction. v1 (probe/ridge
+  unique-effect vector, scaled as a fraction of residual norm) NEVER beat a random control at any
+  beta (swamped <0.02, control moves as much 0.02-0.08, chaos >0.1). v2 (difference-of-means
+  Δμ_a = mean(act|rating high) − mean(act|rating low), steered by beta*Δμ in natural units) gives a
+  CLEAN causal effect at a SINGLE layer (L18 resid_post): pleasantness slope +0.084 (monotonic, +sign),
+  unpleasantness -0.074 (monotonic, -sign), random control ~10x smaller and flat (slope -0.007).
+- Verdict: BOTH halves of the Stage A gate pass — read-out replicates AND diff-of-means steering is
+  causal (theory-predicted signs, control flat). Run: `python -m src.experiments.stage_a_steering_v2`.
+- Avoid: steering with probe weights or brute-forcing beta as a fraction of residual norm (v1 dead end).
+  Use diff-of-means at natural scale; optional multi-layer band strengthens but single layer already works.
+- Stage C: PRIMARY test is read-out transfer (frozen probes on image acts). Cross-modal steering (Stage D)
+  should reuse the diff-of-means recipe, NOT the probe-direction/residual-fraction approach.
 
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,

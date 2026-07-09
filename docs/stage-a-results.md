@@ -1,9 +1,10 @@
 # Stage A results — text-side appraisal replication (Gemma-3-4B)
 
-Paper-ready summary of the text-only replication gate. Two findings: appraisal **read-out
-replicates strongly** (mid-layer, MHSA-dominant, well above shuffled baselines), and
-single-layer additive **steering is inconclusive** (no clean effect above a norm-matched
-random control). Both are reported here with equal prominence.
+Paper-ready summary of the text-only replication gate. Both halves pass: appraisal
+**read-out replicates strongly** (mid-layer, MHSA-dominant, well above shuffled baselines),
+and **difference-of-means steering is causal** (theory-predicted valence shifts, flat random
+control). A key methodological finding: the read-out (probe) direction does *not* steer —
+the difference-of-means direction does.
 
 ## Setup
 - **Model:** `google/gemma-3-4b-it` via TransformerBridge (bf16), 34 layers, d_model 2560.
@@ -56,28 +57,31 @@ Event Predictability   & 17 & 0.238 & -0.030 & 0.268 \\
 \end{tabular}
 ```
 
-## Result 2 — Steering is INCONCLUSIVE
-Adding the frozen appraisal directions at the critical layer did **not** shift emotion
-valence in the theory-predicted direction above a norm-matched random control, at any β we
-tested (120 test prompts, mean residual norm ≈ 37,200). Mean Δ valence vs β:
+## Result 2 — Difference-of-means steering is causal (SUPPORTS)
+Steering by **β·Δμ_a** at layer 18 (Δμ_a = mean activation for high-rated minus low-rated
+examples; natural units, β = multiples of the low→high shift) produced monotonic,
+theory-predicted valence shifts, while a norm-matched random control stayed flat
+(120 test prompts, directions estimated from 1,200 train examples). Mean Δ valence vs β:
 
-| Direction | β=−0.08 | −0.04 | −0.02 | +0.02 | +0.04 | +0.08 | slope |
+| Direction | β=−3 | −2 | −1 | +1 | +2 | +3 | slope |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Pleasantness (predict +) | +0.096 | +0.024 | −0.024 | +0.049 | +0.076 | −0.073 | −0.60 |
-| Unpleasantness (predict −) | +0.109 | +0.047 | −0.059 | +0.118 | +0.290 | +0.424 | +2.29 |
-| Random (control) | +0.215 | +0.045 | +0.019 | −0.013 | −0.032 | −0.092 | −1.68 |
+| Pleasantness (predict +) | −0.191 | −0.116 | −0.059 | +0.104 | +0.208 | +0.324 | **+0.084** |
+| Unpleasantness (predict −) | +0.283 | +0.184 | +0.096 | −0.053 | −0.103 | −0.167 | **−0.074** |
+| Random (control) | +0.026 | +0.017 | +0.009 | −0.004 | −0.011 | −0.018 | −0.007 |
 
-The **random control moves as much as the appraisal directions** (|slope| 1.68 vs 0.60/2.29),
-so movement cannot be attributed to appraisal content. Pleasantness has the wrong-signed,
-non-monotonic slope; unpleasantness trends up (opposite the prediction) but not clearly above
-the control. Across the full range — β<0.02 swamped (shifts ~0.001), β∈[0.02,0.08] control
-moves as much as signal, β>0.1 breaks coherence — **no β window isolates a causal appraisal
-effect.** Figure: `results/figures/stage_a_steering.png`.
+Both appraisals move **monotonically in the theory-predicted direction** (+pleasantness raises
+valence, +unpleasantness lowers it), with slopes ~10× the random control's. This supports a
+**causal** role for the appraisal directions, not merely decodable ones.
 
-Interpretation (careful language): read-out **supports** an appraisal representation;
-single-layer additive steering is **inconclusive** — consistent with Gemma-3's
-massive-activation / RMSNorm regime (the residual norm ~3.7e4 swamps a single-direction nudge)
-and a blunt valence metric. We do **not** claim causal steering.
+### Methodological note (why v1 failed, v2 worked)
+An earlier attempt (v1) steered with the **probe/ridge unique-effect vector**, scaled as a
+fraction of the residual norm. It never beat the random control at any β: below ~0.02 the
+nudge was swamped (Gemma's residual norm ≈ 3.7e4, and RMSNorm divides by it), in [0.02, 0.08]
+the random control moved as much as the appraisals, and above ~0.1 coherence broke (chaotic,
+random swings ±0.7). The fix was to change the **direction**, not the magnitude: probe weights
+are optimized to *read* a feature, not *move* it, whereas the **difference-of-means** direction
+is the appraisal's actual activation footprint and steers cleanly at a single layer.
+Figures: `results/figures/stage_a_steering_v2.png` (v2, supports), `stage_a_steering.png` (v1, null).
 
 ## Threats to validity
 - **Split.** crowd-enVENT ships one corpus; our train/val/test is a seeded stratified split,
@@ -86,18 +90,23 @@ and a blunt valence metric. We do **not** claim causal steering.
 - **Correctness filtering not applied.** Probes are fit on all examples, not only those the
   model classifies correctly (a documented Tak-style filter) — a next-iteration refinement.
 - **Steering metric is blunt.** Pos/neg valence collapses 13 emotions into two groups and
-  excludes surprise/neutral; a per-emotion or per-appraisal readout could be more sensitive.
-- **Steering method is minimal.** Single-layer additive intervention only; multi-layer
-  injection or projection/clamping was not tried. The null is about *this* method, not a
-  general claim that appraisal directions are non-causal.
+  excludes surprise/neutral; a per-emotion readout could be more sensitive. The clean monotonic
+  signal survives this bluntness, but effect *sizes* are metric-dependent.
+- **Steering shown for two appraisals.** Causal steering is demonstrated for pleasantness /
+  unpleasantness (unambiguous valence predictions); the other four appraisals lack a clean
+  scalar readout and are not claimed. Single layer (18) only; a multi-layer band was not needed
+  but could strengthen effect size.
+- **Steering direction ≠ read-out direction.** Effects require the difference-of-means
+  direction; the probe direction does not steer (documented above), so "the probe is causal" is
+  *not* the claim — "the appraisal's mean-shift direction is causal" is.
 - **In-domain read-out.** r² is val-split text; cross-modal transfer is untested here (Stage C).
 
 ## Carried into Stage C
 - Frozen probes + unique-effect vectors at layer 18 (`results/stage_a/probes.npz`).
 - Stage C's primary test is **read-out transfer** (these frozen probes applied to
-  image-conditioned activations), which rests on the strong Result 1 — independent of the
-  steering null. Cross-modal steering (Stage D) is a lower-priority bonus and inherits the
-  open steering question above.
+  image-conditioned activations), which rests on Result 1.
+- Stage D (cross-modal steering) should reuse the **difference-of-means recipe** from Result 2
+  (`stage_a_steering_v2`), not the probe-direction / residual-fraction approach that failed on text.
 
 ## Reproduce
 ```bash
