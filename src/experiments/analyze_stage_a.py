@@ -91,6 +91,17 @@ def plot(metrics: dict, rows: list[dict]) -> str:
     return str(out)
 
 
+def latex_table(rows: list[dict]) -> str:
+    """LaTeX table of the localization result (probe r2 next to shuffled baseline)."""
+    lines = [r"\begin{tabular}{lrrrr}", r"\toprule",
+             r"Appraisal & Layer & val $r^2$ & shuffled & $\Delta$ \\", r"\midrule"]
+    for r in rows:
+        lines.append(f"{r['display']} & {r['layer']} & {r['val_r2']:.3f} & "
+                     f"{r['baseline_r2']:.3f} & {r['delta']:.3f} \\\\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    return "\n".join(lines)
+
+
 def main() -> None:
     metrics = load_metrics()
     rows = summarize(metrics)
@@ -106,11 +117,13 @@ def main() -> None:
     print(f"\nfigure -> {fig}")
     print(f"\nVERDICT: {verdict(rows)}")
 
-    # persist a compact, paper-friendly summary next to the metrics
+    # persist a compact, paper-friendly summary + a reproducible LaTeX table
     out = STAGE_A_DIR / "summary.json"
     with open(out, "w") as f:
         json.dump({"rows": rows, "verdict": verdict(rows)}, f, indent=2)
-    print(f"summary -> {out}")
+    tex = STAGE_A_DIR / "localization_table.tex"
+    tex.write_text(latex_table(rows))
+    print(f"summary -> {out}\nlatex   -> {tex}")
 
 
 if __name__ == "__main__":
