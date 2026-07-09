@@ -36,8 +36,19 @@ Use the `/update-memory` skill to add entries.
   pleasantness L18 r2=0.64, unpleasantness L18 0.60, self_responsblt L21 0.44, suddenness L17 0.32,
   other_responsblt L19 0.31, predict_event L17 0.24. critical_layer=18. n_train=4320 n_val=1080.
 - Frozen probes saved to results/stage_a/probes.npz (unique-effect steering vectors ready for Stage C).
-- This clears the LOCALIZATION half of the go/no-go gate. STEERING half (beta sweep, causal) still TODO.
+- This clears the LOCALIZATION half of the go/no-go gate.
 - Analyzer: `python -m src.experiments.analyze_stage_a` -> table + results/figures/stage_a_localization.png.
+
+## Stage A steering RESULT: INCONCLUSIVE (verified 2026-07)
+- Additive single-layer steering at resid_post L18 does NOT beat a norm-matched random control at any
+  beta. Explored fully: beta as fraction of residual norm — <0.02 swamped (~0.001 shifts), 0.02-0.08 the
+  RANDOM control moves as much as pleasantness/unpleasantness, >0.1 breaks coherence (chaotic, random
+  swings ±0.7). Mean residual norm ~37k; RMSNorm divides by it, so there's no clean signal window.
+- Verdict: read-out (probing) strongly replicates; single-layer additive steering is INCONCLUSIVE here.
+  Do NOT claim causal steering. Likely needs multi-layer injection / projection-clamp / sharper metric.
+- Decision: Stage C's PRIMARY test is READ-OUT transfer (frozen probes on image acts), which depends on
+  the strong probe result, NOT on steering. Proceed to Stage C read-out; cross-modal steering (Stage D)
+  is a lower-priority bonus. Avoid re-chasing text steering by brute-forcing beta.
 
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
