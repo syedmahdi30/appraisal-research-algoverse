@@ -30,3 +30,6 @@ results/**/cache/
 # Model / HF caches
 *.safetensors
 hf_cache/
+
+# Internal strategy doc — keep local, not in public repo
+compass_artifact_*.md
