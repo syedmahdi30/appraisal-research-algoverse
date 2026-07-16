@@ -92,8 +92,27 @@ Use the `/update-memory` skill to add entries.
   if not -> robustly non-verbal residual. LESSON: don't call the mechanism from the aggregate ratio;
   the semipartial flipped the read. Earlier "largely verbalization-mediated" memory was overturned.
 - Gemma greedy caption = "Here's a one-sentence description of the image:\n\n<caption>" — strip preamble.
-- NEXT (user's plan): #4 full-split image read-out (reported number) -> #3 richer-caption robustness
-  (the pivotal mechanism test, reuses parquet) -> Stage D cross-modal steering (causal capstone) -> writeup.
+
+## Stage C FULL-SPLIT read-out (reported number, verified 2026-07, EMOTIC test n=7280)
+- Pleasantness rho=+0.507 (Pearson +0.524), unpleasantness -0.448; polarity AUC 0.898 on n=440
+  single-label (vs thin n=58 on the 1k subset); beats the 100-draw null p=0.010 (null max 0.362).
+  This is the paper's reported read-out transfer number. `stage_c_transfer.py --full`.
+
+## Stage C RICH-caption robustness (#3) + mechanism result (verified 2026-07, n=1000)
+- `stage_c_caption.py --style rich` (prose, 96 tok): rich caption = "Describe this person's facial
+  expression, posture, and body language in two or three sentences of plain prose." (MUST be prose,
+  not markdown bullets — bullets are OOD for the prose-trained probe and inflate the residual.)
+- Result: neutral -> rich: caption rho 0.379->0.429, image<->caption r 0.653->0.697, unique(image)
+  0.310->0.256 (both p<0.001). A much richer perceptual caption absorbs only a MODEST part of the
+  residual, which stays large + highly significant. => transfer is NOT explained by verbalization at
+  either richness; the image carries valence-relevant appraisal signal beyond detailed perceptual
+  description. Robust to a strong verbalization manipulation (favorable to the shared-representation
+  thesis) BUT still correlational + an upper bound (a still-richer caption could absorb more).
+- CPU-only combined analysis: `python -m src.experiments.analyze_stage_c_mechanism` reads BOTH
+  parquets and computes unique(image | neutral), unique(image | rich), and the tightest bound
+  unique(image | neutral+rich). No GPU, seconds. Writes mechanism_summary.json.
+- NEXT: Stage D cross-modal STEERING (causal capstone — reuse Stage A diff-of-means recipe under image
+  input; the read-out residual is correlational and needs causal confirmation) -> then write up Stage C.
 
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
