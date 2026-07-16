@@ -69,15 +69,22 @@ def run(appraisals=("pleasantness", "unpleasantness")) -> dict:
     rich_path = STAGE_C_DIR / "caption_readout_rich.parquet"
     if not neu_path.exists():
         raise FileNotFoundError(f"{neu_path} missing — run the neutral caption baseline first.")
-    neu = pd.read_parquet(neu_path)
-    rich = pd.read_parquet(rich_path) if rich_path.exists() else None
+    neu = pd.read_parquet(neu_path).reset_index(drop=True)
+    rich = pd.read_parquet(rich_path).reset_index(drop=True) if rich_path.exists() else None
 
-    # Align on image_path so every read-out refers to the same image.
+    # EMOTIC rows are per-PERSON and image_path repeats (multi-person images), so merging on
+    # image_path would cross-join co-located persons and misalign valence. Both parquets come
+    # from the same deterministic subset/order with no skips, so align by ROW POSITION and
+    # verify the image_path columns match position-for-position.
     df = neu.rename(columns={c: f"{c}__neu" for c in neu.columns if c.startswith("pred_caption_")})
     if rich is not None:
-        rcols = ["image_path"] + [c for c in rich.columns if c.startswith("pred_caption_")]
-        r = rich[rcols].rename(columns={c: f"{c}__rich" for c in rcols if c != "image_path"})
-        df = df.merge(r, on="image_path", how="inner")
+        if len(rich) != len(neu) or not (neu["image_path"].to_numpy() == rich["image_path"].to_numpy()).all():
+            raise ValueError(
+                "neutral/rich parquets are not row-aligned (different subset/seed/skips). "
+                "Re-run both caption baselines with the same n_images and seed."
+            )
+        for c in [c for c in rich.columns if c.startswith("pred_caption_")]:
+            df[f"{c}__rich"] = rich[c].to_numpy()
 
     metrics = {"run": run_stamp(), "n": len(df), "has_rich": rich is not None, "appraisals": {}}
     for a in appraisals:
