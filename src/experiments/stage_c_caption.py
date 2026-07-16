@@ -48,8 +48,16 @@ from .stage_c_transfer import _corr
 #             unique valence signal, the residual is robustly non-perceptual-verbalizable.
 STYLE_INSTRUCTIONS = {
     "neutral": "Describe this image in one sentence.",
-    "rich": "Describe this person's facial expression, posture, and body language in detail.",
+    # Prose (not a bulleted analysis) so the text pipeline stays in-distribution for the
+    # prose-trained probe; "two or three sentences" keeps it richer than neutral but bounded.
+    "rich": ("Describe this person's facial expression, posture, and body language "
+             "in two or three sentences of plain prose."),
 }
+
+# Per-style generation budget — rich prose needs more room to finish; a truncated last
+# token gives the probe a syntactically odd read-out position. config caption_max_new_tokens
+# (if set) overrides; --max-new overrides both.
+STYLE_MAX_NEW = {"neutral": 64, "rich": 96}
 
 
 def caption_prompt(style: str) -> str:
@@ -73,10 +81,12 @@ def generate_caption(bridge, image, max_new_tokens, dev, prompt) -> str:
         gen = bridge.original_model.generate(**kw, max_new_tokens=max_new_tokens, do_sample=False)
     new = gen[0, prompt_len:]
     text = bridge.tokenizer.decode(new, skip_special_tokens=True).strip()
-    # Gemma prefixes a meta line ("Here's a one-sentence description...:\n\n<caption>").
-    # Drop it so the TEXT pipeline sees a natural description, not the boilerplate.
-    if "\n\n" in text:
-        text = text.split("\n\n", 1)[1].strip()
+    # Drop only a leading META line — the "Here's a ...:" preamble or a "**Header:**" — so
+    # the TEXT pipeline sees the description itself, not the boilerplate. A real first
+    # sentence (not ending ":" nor a markdown bullet/header) is kept.
+    head, sep, rest = text.partition("\n\n")
+    if sep and (head.rstrip().endswith(":") or head.lstrip().startswith(("**", "* ", "#", "- "))):
+        text = rest.strip()
     return text
 
 
@@ -139,7 +149,8 @@ def _semipartial(valence, cap_pred, img_pred) -> dict:
             "r_iv": r_iv, "r_cv": r_cv, "r_ic": r_ic}
 
 
-def run(config_path: str, preview: int | None = None, style: str = "neutral") -> dict:
+def run(config_path: str, preview: int | None = None, style: str = "neutral",
+        max_new_override: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
 
@@ -150,7 +161,7 @@ def run(config_path: str, preview: int | None = None, style: str = "neutral") ->
     seed = int(cfg.get("seed", 0))
     n_images = cfg.get("n_images")
     appraisals = [a for a in cfg.get("appraisals", ["pleasantness", "unpleasantness"]) if a in probes.names]
-    max_new = int(cfg.get("caption_max_new_tokens", 64))
+    max_new = int(max_new_override or cfg.get("caption_max_new_tokens") or STYLE_MAX_NEW.get(style, 64))
     prompt = caption_prompt(style)
     # neutral keeps the legacy filenames (already produced); other styles get a suffix.
     suf = "" if style == "neutral" else f"_{style}"
@@ -275,8 +286,9 @@ def main() -> None:
                     help="caption richness: 'neutral' (plain 1-liner) or 'rich' (expression/posture)")
     ap.add_argument("--preview", type=int, default=None,
                     help="caption only N images and print them (sanity check before the full run)")
+    ap.add_argument("--max-new", type=int, default=None, help="override generation token budget")
     args = ap.parse_args()
-    m = run(args.config, preview=args.preview, style=args.style)
+    m = run(args.config, preview=args.preview, style=args.style, max_new_override=args.max_new)
     if m.get("preview"):
         return
     print(f"\nStage C caption baseline [{m['caption_style']}] — L{m['layer']} {m['tap']}  "

@@ -35,5 +35,6 @@ n_text: 1000
 # Generate a NEUTRAL caption per image, run it through the text pipeline, apply the frozen
 # probe. |rho_cap| ~ |rho_img| => verbalization-mediated; |rho_cap| << |rho_img| => shared
 # geometry. Runs on the same n_images subset. Generation is slow — try `--preview 5` first.
-# Budget covers Gemma's ~15-token meta preamble (stripped) + the one-sentence description.
-caption_max_new_tokens: 64
+# --style {neutral,rich}; token budget defaults per style (neutral 64, rich 96). Set a number
+# here to force one budget for all styles, or use --max-new. null = per-style defaults.
+caption_max_new_tokens: null
