@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 
 import numpy as np
+import torch
 from PIL import Image
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import roc_auc_score
@@ -56,9 +57,10 @@ def image_activations(bridge, image_paths, layer, tap):
     for path in tqdm(image_paths, desc="image acts"):
         try:
             inputs = build_image_inputs(bridge, Image.open(path).convert("RGB"))
-            _, cache = bridge.run_with_cache(
-                inputs["input_ids"], pixel_values=inputs["pixel_values"], names_filter=keep,
-            )
+            with torch.no_grad():  # vision tower does 4096-patch eager attn; grad graph OOMs
+                _, cache = bridge.run_with_cache(
+                    inputs["input_ids"], pixel_values=inputs["pixel_values"], names_filter=keep,
+                )
             last = inputs["input_ids"].shape[-1] - 1
             rows.append(cache[name][0, last].float().cpu().numpy())
             valid.append(True)
@@ -75,7 +77,8 @@ def text_activations(bridge, texts, layer, tap):
     rows = []
     for text in tqdm(texts, desc="text acts"):
         ids = bridge.to_tokens(TEXT_EMOTION_PROMPT.format(text=text))
-        _, cache = bridge.run_with_cache(ids, names_filter=keep)
+        with torch.no_grad():
+            _, cache = bridge.run_with_cache(ids, names_filter=keep)
         last = ids.shape[-1] - 1
         rows.append(cache[name][0, last].float().cpu().numpy())
     return np.stack(rows)
