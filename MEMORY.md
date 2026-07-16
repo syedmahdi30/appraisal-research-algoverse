@@ -73,6 +73,28 @@ Use the `/update-memory` skill to add entries.
   -> pleasantness read-out vs valence); if caption rho >= image rho the signal is plausibly verbal.
 - Run: `python -m src.experiments.stage_c_transfer` (config/stage_c.yaml, n_images=1000, n_random=100).
 
+## Stage C caption baseline RESULT: transfer is LARGELY VERBALIZATION-MEDIATED (verified 2026-07, n=1000)
+- Test: generate a NEUTRAL caption per image ("Describe this image in one sentence.", greedy, meta
+  preamble stripped, 64 new tokens), run it through the TEXT pipeline, apply the SAME frozen probe,
+  correlate with valence. `python -m src.experiments.stage_c_caption` (--preview N first).
+- Result: pleasantness caption rho=+0.379 vs image rho=+0.482 (unpleasantness -0.356 vs -0.442). A
+  neutral caption alone reproduces ~79% of the correlation / ~62% of the explained variance of the
+  direct image read-out. Both appraisals mirror correctly in the caption pathway too.
+- INTERPRETATION (honest, per analysis-rules): the cross-modal read-out transfer is SUBSTANTIALLY
+  verbalization-mediated — most of the signal is available in a plain verbal description (Gemma
+  volunteers affect words like "stressed"/"gloomy" even from a neutral prompt). The image>caption gap
+  (~0.10 rho) is an UPPER BOUND on any non-verbal contribution and is CONFOUNDED by caption lossiness
+  (greedy one-sentence bottleneck) — so it is NOT clean evidence of shared non-verbal appraisal geometry.
+  Do NOT claim shared multimodal geometry from this.
+- LESSON: caption run cost 1h43m for 1000 images (~6 s/img: generate + text forward). PERSIST the
+  captions + per-image predictions (parquet) so refinements (semipartial correlation, richer-caption
+  robustness) don't require re-generating. Gemma greedy caption = "Here's a one-sentence description
+  of the image:\n\n<caption>" — strip the preamble (split first blank line).
+- NEXT options: (a) accept "largely verbalization-mediated" and write up Stage C; (b) semipartial corr
+  (image read-out vs valence controlling for caption read-out) to quantify the unique non-verbal residual
+  — needs persisted captions; (c) richer-caption robustness (does caption rho rise to meet image rho?);
+  (d) scale image read-out to full 7280 test split for the reported number.
+
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
   `n_layers=34`, one forward pass caches 102 tensors (3 taps × 34 layers), all three LM taps fire.

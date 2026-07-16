@@ -127,9 +127,11 @@ def run(config_path: str, preview: int | None = None) -> dict:
         "sample_captions": captions[:10],
         "caption_readout": {}, "compare_to_image": {},
     }
+    preds = {}  # per-image caption read-out, persisted so refinements never re-generate
     for a in appraisals:
         coef, inter = probes.coef[probes.index(a)], probes.intercept[probes.index(a)]
-        cap_corr = _corr(predict(X_cap, coef, inter), valence)
+        preds[a] = predict(X_cap, coef, inter)
+        cap_corr = _corr(preds[a], valence)
         metrics["caption_readout"][a] = cap_corr
         img_sp = img_metrics.get("image_readout", {}).get(a, {}).get("vs_valence", {}).get("spearman")
         if img_sp is not None and cap_corr["spearman"] is not None:
@@ -137,6 +139,13 @@ def run(config_path: str, preview: int | None = None) -> dict:
                 "caption_spearman": cap_corr["spearman"], "image_spearman": img_sp,
                 "caption_minus_image": cap_corr["spearman"] - img_sp,
             }
+
+    # Persist captions + per-image read-outs + valence (generation is the expensive step;
+    # a semipartial correlation / richer-caption re-analysis can reuse this without re-running).
+    import pandas as pd
+    out = pd.DataFrame({"image_path": dfv["image_path"].to_numpy(), "caption": captions,
+                        "valence": valence, **{f"pred_{a}": preds[a] for a in appraisals}})
+    out.to_parquet(STAGE_C_DIR / "caption_readout.parquet")
 
     metrics["verdict"] = _caption_verdict(metrics)
     save_json(metrics, STAGE_C_DIR / "caption_metrics.json")
