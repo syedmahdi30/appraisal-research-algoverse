@@ -1,0 +1,24 @@
+# Stage D — cross-modal steering (causal capstone). See docs/experiment-1.md.
+# Injects TEXT-derived difference-of-means appraisal directions (Stage A v2 recipe) at the
+# residual stream UNDER IMAGE INPUT, and measures the emotion-valence shift vs beta.
+model: google/gemma-3-4b-it
+device: cuda
+split: test
+seed: 0
+
+# Injection site(s): resid_post at the Stage A critical layer (18). If a single layer is
+# flat, try a band, e.g. [14, 16, 18, 20, 22] — multi-layer injection resists RMSNorm wash-out.
+steering_layers: [18]
+
+# beta = multiples of the low->high Δμ shift (natural units, same as Stage A steering v2).
+betas: [-3, -2, -1, 1, 2, 3]
+
+# crowd-enVENT train examples used to estimate the text-derived Δμ directions.
+n_dir: 1200
+
+# EMOTIC test images to steer (one forward per image x direction x beta; no generation).
+n_images: 150
+
+# pleasantness/unpleasantness = the valence-predicted directions; suddenness = a non-valence
+# SPECIFICITY control (should NOT move valence). Random null is added automatically.
+appraisals: [pleasantness, unpleasantness, suddenness]

@@ -18,10 +18,11 @@ PROCESSED_DIR = DATA_DIR / "processed"
 RESULTS_DIR = ROOT / "results"
 STAGE_A_DIR = RESULTS_DIR / "stage_a"
 STAGE_C_DIR = RESULTS_DIR / "stage_c"
+STAGE_D_DIR = RESULTS_DIR / "stage_d"
 FIGURES_DIR = RESULTS_DIR / "figures"
 
 
 def ensure_dirs() -> None:
     """Create the writable output trees if they do not already exist."""
-    for d in (RAW_DIR, PROCESSED_DIR, STAGE_A_DIR, STAGE_C_DIR, FIGURES_DIR):
+    for d in (RAW_DIR, PROCESSED_DIR, STAGE_A_DIR, STAGE_C_DIR, STAGE_D_DIR, FIGURES_DIR):
         d.mkdir(parents=True, exist_ok=True)
