@@ -40,22 +40,33 @@ from ..probes.evaluate import predict
 from .common import load_config, load_probes, run_stamp, save_json
 from .stage_c_transfer import _corr
 
-# Neutral, non-emotional caption prompt — the fair test is whether a plain description still
-# carries the appraisal signal. Emotion words are deliberately NOT invited (no leakage).
-CAPTION_PROMPT = (
-    "<start_of_turn>user\n<start_of_image>"
-    "Describe this image in one sentence.<end_of_turn>\n"
-    "<start_of_turn>model\n"
-)
+# Two caption styles bound the verbalization hypothesis:
+#   neutral — a plain one-line description (does a bare caption carry the appraisal?).
+#   rich    — a detailed PERCEPTUAL description of the person's expression/posture/body
+#             language (the strongest fair verbalization, stopping short of asking for the
+#             emotion label). If even the rich caption fails to absorb the image read-out's
+#             unique valence signal, the residual is robustly non-perceptual-verbalizable.
+STYLE_INSTRUCTIONS = {
+    "neutral": "Describe this image in one sentence.",
+    "rich": "Describe this person's facial expression, posture, and body language in detail.",
+}
 
 
-def generate_caption(bridge, image, max_new_tokens, dev) -> str:
+def caption_prompt(style: str) -> str:
+    """Gemma chat prompt with an image slot for the given caption style."""
+    if style not in STYLE_INSTRUCTIONS:
+        raise ValueError(f"unknown caption style {style!r}; expected {list(STYLE_INSTRUCTIONS)}")
+    return (f"<start_of_turn>user\n<start_of_image>{STYLE_INSTRUCTIONS[style]}"
+            f"<end_of_turn>\n<start_of_turn>model\n")
+
+
+def generate_caption(bridge, image, max_new_tokens, dev, prompt) -> str:
     """Greedy-decode a neutral caption for one image via the underlying HF model.
 
     Uses bridge.original_model.generate (the raw Gemma3 HF path — more robust than the TL
     generate wrapper). pixel_values is consumed on the first decode step (vision runs once).
     """
-    inputs = build_image_inputs(bridge, image, prompt=CAPTION_PROMPT)
+    inputs = build_image_inputs(bridge, image, prompt=prompt)
     kw = {k: v.to(dev) for k, v in inputs.items() if torch.is_tensor(v)}
     prompt_len = kw["input_ids"].shape[-1]
     with torch.no_grad():
@@ -128,7 +139,7 @@ def _semipartial(valence, cap_pred, img_pred) -> dict:
             "r_iv": r_iv, "r_cv": r_cv, "r_ic": r_ic}
 
 
-def run(config_path: str, preview: int | None = None) -> dict:
+def run(config_path: str, preview: int | None = None, style: str = "neutral") -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
 
@@ -140,6 +151,12 @@ def run(config_path: str, preview: int | None = None) -> dict:
     n_images = cfg.get("n_images")
     appraisals = [a for a in cfg.get("appraisals", ["pleasantness", "unpleasantness"]) if a in probes.names]
     max_new = int(cfg.get("caption_max_new_tokens", 64))
+    prompt = caption_prompt(style)
+    # neutral keeps the legacy filenames (already produced); other styles get a suffix.
+    suf = "" if style == "neutral" else f"_{style}"
+    metrics_path = STAGE_C_DIR / f"caption_metrics{suf}.json"
+    parquet_path = STAGE_C_DIR / f"caption_readout{suf}.parquet"
+    fig_path = FIGURES_DIR / f"stage_c_caption_baseline{suf}.png"
 
     df = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
     if n_images and n_images < len(df):
@@ -154,7 +171,7 @@ def run(config_path: str, preview: int | None = None) -> dict:
     for i, path in enumerate(tqdm(df["image_path"].tolist(), desc="caption+readout")):
         try:
             image = Image.open(path).convert("RGB")
-            cap = generate_caption(bridge, image, max_new, dev)
+            cap = generate_caption(bridge, image, max_new, dev, prompt)
             cap_acts.append(text_readout(bridge, cap, layer, tap))
             img_acts.append(image_readout(bridge, image, layer, tap))
             captions.append(cap)
@@ -176,9 +193,9 @@ def run(config_path: str, preview: int | None = None) -> dict:
 
     metrics = {
         "run": run_stamp(), "layer": layer, "tap": tap, "seed": seed,
+        "caption_style": style, "caption_prompt": STYLE_INSTRUCTIONS[style],
         "n_captioned": len(dfv), "n_skipped_unreadable": int((~valid).sum()),
-        "caption_prompt": CAPTION_PROMPT.strip(), "max_new_tokens": max_new,
-        "sample_captions": captions[:10], "readout": {},
+        "max_new_tokens": max_new, "sample_captions": captions[:10], "readout": {},
     }
     persist = {"image_path": dfv["image_path"].to_numpy(), "caption": captions, "valence": valence}
     for a in appraisals:
@@ -194,15 +211,16 @@ def run(config_path: str, preview: int | None = None) -> dict:
 
     # Persist per-image read-outs + captions so mechanism re-analyses skip re-generation.
     import pandas as pd
-    pd.DataFrame(persist).to_parquet(STAGE_C_DIR / "caption_readout.parquet")
+    pd.DataFrame(persist).to_parquet(parquet_path)
 
-    metrics["verdict"] = _mechanism_verdict(metrics["readout"].get("pleasantness"))
-    save_json(metrics, STAGE_C_DIR / "caption_metrics.json")
-    _plot(metrics)
+    metrics["verdict"] = _mechanism_verdict(metrics["readout"].get("pleasantness"), style)
+    save_json(metrics, metrics_path)
+    _plot(metrics, fig_path)
+    metrics["_paths"] = {"metrics": str(metrics_path), "parquet": str(parquet_path), "figure": str(fig_path)}
     return metrics
 
 
-def _mechanism_verdict(pleasantness) -> str:
+def _mechanism_verdict(pleasantness, style) -> str:
     """Provisional mechanism verdict (human confirms), keyed on pleasantness."""
     if not pleasantness:
         return "inconclusive (pleasantness not scored)"
@@ -211,17 +229,20 @@ def _mechanism_verdict(pleasantness) -> str:
     if pr is None or not r_iv:
         return "inconclusive (insufficient data for semipartial)"
     frac = abs(r_cv) / abs(r_iv)
-    base = (f"caption reproduces ~{frac * 100:.0f}% of the image read-out "
+    base = (f"[{style}] caption reproduces ~{frac * 100:.0f}% of the image read-out "
             f"(r_cap={r_cv:+.2f} vs r_img={r_iv:+.2f}); ")
     if p is not None and p < 0.05 and abs(pr) >= 0.10:
-        return (base + f"image retains a SIGNIFICANT unique contribution beyond a neutral "
-                f"caption (semipartial r={pr:+.2f}, p={p:.3f}) — but caption lossiness confounds "
-                f"this residual, so it is an upper bound, NOT proof of non-verbal shared geometry")
-    return (base + f"NO significant unique image contribution beyond the caption "
-            f"(semipartial r={pr:+.2f}, p={p:.3f}) — transfer is fully verbalization-mediated")
+        tail = ("caption lossiness still confounds this (upper bound)" if style == "neutral"
+                else "a detailed perceptual caption does NOT absorb it — residual is robust "
+                     "to richer verbalization")
+        return (base + f"image retains a SIGNIFICANT unique contribution beyond the {style} "
+                f"caption (semipartial r={pr:+.2f}, p={p:.3f}) — {tail}")
+    return (base + f"NO significant unique image contribution beyond the {style} caption "
+            f"(semipartial r={pr:+.2f}, p={p:.3f}) — transfer is verbalization-mediated at this "
+            f"caption richness")
 
 
-def _plot(metrics):
+def _plot(metrics, fig_path):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -243,20 +264,22 @@ def _plot(metrics):
     ax.legend(fontsize=8)
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    fig.savefig(FIGURES_DIR / "stage_c_caption_baseline.png", dpi=130)
+    fig.savefig(fig_path, dpi=130)
     plt.close(fig)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage C caption baseline + semipartial mechanism test")
     ap.add_argument("--config", default="config/stage_c.yaml")
+    ap.add_argument("--style", choices=list(STYLE_INSTRUCTIONS), default="neutral",
+                    help="caption richness: 'neutral' (plain 1-liner) or 'rich' (expression/posture)")
     ap.add_argument("--preview", type=int, default=None,
                     help="caption only N images and print them (sanity check before the full run)")
     args = ap.parse_args()
-    m = run(args.config, preview=args.preview)
+    m = run(args.config, preview=args.preview, style=args.style)
     if m.get("preview"):
         return
-    print(f"\nStage C caption baseline — L{m['layer']} {m['tap']}  "
+    print(f"\nStage C caption baseline [{m['caption_style']}] — L{m['layer']} {m['tap']}  "
           f"({m['n_captioned']} captioned, {m['n_skipped_unreadable']} skipped)\n")
     for a, r in m["readout"].items():
         sp = r["semipartial"]
@@ -264,9 +287,8 @@ def main() -> None:
               f"|  image-caption r={sp['r_ic']:+.3f}  |  unique(image) r={sp['part_r_image_unique']:+.3f} "
               f"(p={sp['p']:.3f})")
     print(f"\n  VERDICT: {m['verdict']}")
-    print(f"  metrics -> {STAGE_C_DIR/'caption_metrics.json'}   "
-          f"data -> {STAGE_C_DIR/'caption_readout.parquet'}   "
-          f"figure -> {FIGURES_DIR/'stage_c_caption_baseline.png'}")
+    print(f"  metrics -> {m['_paths']['metrics']}   data -> {m['_paths']['parquet']}   "
+          f"figure -> {m['_paths']['figure']}")
 
 
 if __name__ == "__main__":
