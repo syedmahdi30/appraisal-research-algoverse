@@ -57,7 +57,12 @@ def generate_caption(bridge, image, max_new_tokens, dev) -> str:
     with torch.no_grad():
         gen = bridge.original_model.generate(**kw, max_new_tokens=max_new_tokens, do_sample=False)
     new = gen[0, prompt_len:]
-    return bridge.tokenizer.decode(new, skip_special_tokens=True).strip()
+    text = bridge.tokenizer.decode(new, skip_special_tokens=True).strip()
+    # Gemma prefixes a meta line ("Here's a one-sentence description...:\n\n<caption>").
+    # Drop it so the TEXT pipeline sees a natural description, not the boilerplate.
+    if "\n\n" in text:
+        text = text.split("\n\n", 1)[1].strip()
+    return text
 
 
 def text_readout(bridge, caption, layer, tap) -> np.ndarray:
