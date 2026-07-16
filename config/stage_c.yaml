@@ -30,3 +30,9 @@ n_random: 100
 # pleasantness rating) at the same site. gap = text_spearman - image_spearman.
 text_reference: true
 n_text: 1000
+
+# --- Caption baseline (stage_c_caption.py) — verbalization vs shared geometry ---
+# Generate a NEUTRAL caption per image, run it through the text pipeline, apply the frozen
+# probe. |rho_cap| ~ |rho_img| => verbalization-mediated; |rho_cap| << |rho_img| => shared
+# geometry. Runs on the same n_images subset. Generation is slow — try `--preview 5` first.
+caption_max_new_tokens: 40
