@@ -161,7 +161,7 @@ def _random_controls(X, y, n_random, seed):
 
 
 # --------------------------------------------------------------------------- run
-def run(config_path: str) -> dict:
+def run(config_path: str, n_images_override: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
 
@@ -176,7 +176,10 @@ def run(config_path: str) -> dict:
     layer = int(cfg.get("critical_layer", stage_a.get("critical_layer", 18)))
     tap = cfg.get("tap", "hook_attn_out")
     seed = int(cfg.get("seed", 0))
-    n_images = cfg.get("n_images")
+    # override: 0 / negative -> full split (no subset); positive -> that many; None -> config.
+    n_images = n_images_override if n_images_override is not None else cfg.get("n_images")
+    if n_images is not None and n_images <= 0:
+        n_images = None
     appraisals = [a for a in cfg.get("appraisals", ["pleasantness", "unpleasantness"]) if a in probes.names]
     positive = cfg.get("positive_labels", ["joy"])
     negative = cfg.get("negative_labels", ["anger", "disgust", "fear", "sadness"])
@@ -321,8 +324,11 @@ def _plot(metrics, X_img, probes, appraisals, valence):
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage C — cross-modal frozen-probe read-out")
     ap.add_argument("--config", default="config/stage_c.yaml")
+    ap.add_argument("--n-images", type=int, default=None,
+                    help="override config n_images; 0 (or --full) = whole test split")
+    ap.add_argument("--full", action="store_true", help="score the entire test split (~7,280)")
     args = ap.parse_args()
-    m = run(args.config)
+    m = run(args.config, n_images_override=0 if args.full else args.n_images)
     print(f"\nStage C read-out — L{m['layer']} {m['tap']}  "
           f"(EMOTIC test: {m['n_images_scored']} scored, {m['n_skipped_unreadable']} skipped)\n")
     c = m["random_control"]

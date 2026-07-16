@@ -73,27 +73,27 @@ Use the `/update-memory` skill to add entries.
   -> pleasantness read-out vs valence); if caption rho >= image rho the signal is plausibly verbal.
 - Run: `python -m src.experiments.stage_c_transfer` (config/stage_c.yaml, n_images=1000, n_random=100).
 
-## Stage C caption baseline RESULT: transfer is LARGELY VERBALIZATION-MEDIATED (verified 2026-07, n=1000)
-- Test: generate a NEUTRAL caption per image ("Describe this image in one sentence.", greedy, meta
-  preamble stripped, 64 new tokens), run it through the TEXT pipeline, apply the SAME frozen probe,
-  correlate with valence. `python -m src.experiments.stage_c_caption` (--preview N first).
-- Result: pleasantness caption rho=+0.379 vs image rho=+0.482 (unpleasantness -0.356 vs -0.442). A
-  neutral caption alone reproduces ~79% of the correlation / ~62% of the explained variance of the
-  direct image read-out. Both appraisals mirror correctly in the caption pathway too.
-- INTERPRETATION (honest, per analysis-rules): the cross-modal read-out transfer is SUBSTANTIALLY
-  verbalization-mediated — most of the signal is available in a plain verbal description (Gemma
-  volunteers affect words like "stressed"/"gloomy" even from a neutral prompt). The image>caption gap
-  (~0.10 rho) is an UPPER BOUND on any non-verbal contribution and is CONFOUNDED by caption lossiness
-  (greedy one-sentence bottleneck) — so it is NOT clean evidence of shared non-verbal appraisal geometry.
-  Do NOT claim shared multimodal geometry from this.
-- LESSON: caption run cost 1h43m for 1000 images (~6 s/img: generate + text forward). PERSIST the
-  captions + per-image predictions (parquet) so refinements (semipartial correlation, richer-caption
-  robustness) don't require re-generating. Gemma greedy caption = "Here's a one-sentence description
-  of the image:\n\n<caption>" — strip the preamble (split first blank line).
-- NEXT options: (a) accept "largely verbalization-mediated" and write up Stage C; (b) semipartial corr
-  (image read-out vs valence controlling for caption read-out) to quantify the unique non-verbal residual
-  — needs persisted captions; (c) richer-caption robustness (does caption rho rise to meet image rho?);
-  (d) scale image read-out to full 7280 test split for the reported number.
+## Stage C caption baseline + SEMIPARTIAL RESULT: neutral verbalization is INSUFFICIENT (verified 2026-07, n=1000)
+- Test: neutral caption per image ("Describe this image in one sentence.", greedy, preamble stripped,
+  64 tok) -> TEXT pipeline -> frozen probe -> valence; vs the direct IMAGE read-out, same images/probe.
+  `python -m src.experiments.stage_c_caption` (--preview N first). Persists caption_readout.parquet
+  (per-image image+caption preds + captions) so re-analyses skip the 1h43m generation.
+- Aggregate: pleasantness image rho=+0.482, caption rho=+0.379 (unpleasantness -0.442 / -0.356). The
+  caption ratio (~79%) initially looked "largely verbalization-mediated" — but that was MISLEADING.
+- SEMIPARTIAL (the decisive test): image<->caption read-out corr rho_ic=+0.653 (they are NOT the same
+  signal). Controlling for the neutral caption, the IMAGE read-out keeps a LARGE unique contribution to
+  valence: semipartial r=+0.310 (unpleasantness -0.279), p<0.001. Caption's OWN unique contribution
+  beyond the image is tiny: +0.085. => most of the caption's valence signal is REDUNDANT with the image;
+  the image carries much the caption does not. NEUTRAL verbalization does NOT explain the transfer.
+- HONEST CLAIM (analysis-rules): (1) the mundane "it's just neutral captioning" explanation is
+  INSUFFICIENT (image-unique 0.31, p<0.001). (2) This is NOT yet proof of shared non-verbal geometry —
+  the neutral 1-sentence caption is lossy, so the 0.31 is an UPPER BOUND. The pivotal next test is a
+  RICHER caption (expression/body-language): if it absorbs the 0.31 -> richer-verbalization-mediated;
+  if not -> robustly non-verbal residual. LESSON: don't call the mechanism from the aggregate ratio;
+  the semipartial flipped the read. Earlier "largely verbalization-mediated" memory was overturned.
+- Gemma greedy caption = "Here's a one-sentence description of the image:\n\n<caption>" — strip preamble.
+- NEXT (user's plan): #4 full-split image read-out (reported number) -> #3 richer-caption robustness
+  (the pivotal mechanism test, reuses parquet) -> Stage D cross-modal steering (causal capstone) -> writeup.
 
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
