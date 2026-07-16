@@ -22,8 +22,9 @@ appraisals: [pleasantness, unpleasantness]
 positive_labels: [joy]
 negative_labels: [anger, disgust, fear, sadness]
 
-# Norm-matched random directions for the control (must sit at ~0 correlation).
-n_random: 5
+# Random-direction null: N draws give an empirical p-value for the probe's correlation
+# (Gemma activations are anisotropic, so 5 draws is too coarse a null — use ~100).
+n_random: 100
 
 # Transfer gap: recompute the same correlation on TEXT test activations (probe vs the 1-5
 # pleasantness rating) at the same site. gap = text_spearman - image_spearman.

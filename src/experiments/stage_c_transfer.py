@@ -135,21 +135,29 @@ def _auc(pred, polarity):
             "auc": float(roc_auc_score(y, pred[m]))}
 
 
-def _random_controls(X, y, ref_norm, n_random, seed):
-    """Norm-matched random directions; report each dir's |spearman| vs y and the mean/max."""
+def _random_controls(X, y, n_random, seed):
+    """Null distribution of |spearman| for random directions vs y (direction specificity).
+
+    A correlation is scale-invariant, so direction norm is irrelevant — we skip
+    norm-matching. Gemma's activations are anisotropic, so random directions have a
+    non-trivial |spearman| spread; this returns the whole spread so the caller can compute
+    an empirical p-value rather than eyeball a single max. `_abs` is the raw per-draw list.
+    """
     rng = np.random.default_rng(seed)
     d = X.shape[1]
     spears = []
     for _ in range(n_random):
         r = rng.standard_normal(d).astype(np.float32)
-        r = r / np.linalg.norm(r) * ref_norm
         c = _corr(X @ r, y)
         if c["spearman"] is not None:
             spears.append(abs(c["spearman"]))
-    if not spears:
-        return {"n_random": n_random, "mean_abs_spearman": None, "max_abs_spearman": None}
-    return {"n_random": n_random, "mean_abs_spearman": float(np.mean(spears)),
-            "max_abs_spearman": float(np.max(spears))}
+    a = np.asarray(spears, dtype=float)
+    if a.size == 0:
+        return {"n_random": n_random, "n_valid": 0, "mean": None, "std": None,
+                "max": None, "p95": None, "_abs": []}
+    return {"n_random": n_random, "n_valid": int(a.size), "mean": float(a.mean()),
+            "std": float(a.std()), "max": float(a.max()),
+            "p95": float(np.percentile(a, 95)), "_abs": a.tolist()}
 
 
 # --------------------------------------------------------------------------- run
@@ -172,7 +180,7 @@ def run(config_path: str) -> dict:
     appraisals = [a for a in cfg.get("appraisals", ["pleasantness", "unpleasantness"]) if a in probes.names]
     positive = cfg.get("positive_labels", ["joy"])
     negative = cfg.get("negative_labels", ["anger", "disgust", "fear", "sadness"])
-    n_random = int(cfg.get("n_random", 5))
+    n_random = int(cfg.get("n_random", 100))
 
     # --- EMOTIC test subset (deterministic) -------------------------------------------
     df = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
@@ -203,19 +211,27 @@ def run(config_path: str) -> dict:
             "Metrics are correlation/AUC (scale-invariant): raw r2 is NOT comparable across the "
             "1-5 (probe) vs 1-10 (valence) scales.",
         ],
-        "image_readout": {}, "random_control": {}, "text_reference": {}, "transfer_gap": {},
+        "image_readout": {}, "random_control": {}, "text_reference": {}, "transfer": {},
     }
+
+    # One random-direction null vs valence (same target for every appraisal). The probe's
+    # empirical p = fraction of random directions whose |spearman| matches or beats it.
+    ctrl = _random_controls(X_img, valence, n_random, seed)
+    ctrl_abs = np.asarray(ctrl.pop("_abs"), dtype=float)
+    metrics["random_control"] = ctrl
 
     for a in appraisals:
         coef, inter = probes.coef[probes.index(a)], probes.intercept[probes.index(a)]
         pred = predict(X_img, coef, inter)
+        vc = _corr(pred, valence)
+        pval = None
+        if vc["spearman"] is not None and ctrl_abs.size:
+            pval = float((1 + int(np.sum(ctrl_abs >= abs(vc["spearman"])))) / (ctrl_abs.size + 1))
         metrics["image_readout"][a] = {
-            "vs_valence": _corr(pred, valence),
+            "vs_valence": vc,
             "polarity_auc": _auc(pred, polarity),
+            "vs_control_p": pval,
         }
-        metrics["random_control"][a] = _random_controls(
-            X_img, valence, float(np.linalg.norm(coef)), n_random, seed
-        )
 
     # --- transfer gap: same correlation on TEXT test activations at the same site -------
     if cfg.get("text_reference", True):
@@ -231,10 +247,15 @@ def run(config_path: str) -> dict:
             txt_corr = _corr(predict(X_txt, coef, inter), tdf[a].to_numpy(dtype=np.float64))
             metrics["text_reference"][a] = txt_corr
             img_sp = metrics["image_readout"][a]["vs_valence"]["spearman"]
-            if txt_corr["spearman"] is not None and img_sp is not None:
-                metrics["transfer_gap"][a] = {
-                    "text_spearman": txt_corr["spearman"], "image_spearman": img_sp,
-                    "gap": txt_corr["spearman"] - img_sp,
+            # Sign-safe retention: the text probe reads its OWN 1-5 rating (unpleasantness
+            # correlates + there), the image probe reads valence (unpleasantness correlates
+            # - there). Subtracting the two mixes opposite-signed targets, so compare
+            # MAGNITUDES: retention = |image effect| / |text effect|.
+            if txt_corr["spearman"] and img_sp is not None:
+                metrics["transfer"][a] = {
+                    "text_abs_spearman": abs(txt_corr["spearman"]),
+                    "image_abs_spearman": abs(img_sp),
+                    "retention": abs(img_sp) / abs(txt_corr["spearman"]),
                 }
 
     metrics["verdict"] = _verdict(metrics, appraisals)
@@ -244,23 +265,33 @@ def run(config_path: str) -> dict:
 
 
 def _verdict(metrics, appraisals):
-    """Conservative provisional verdict (human confirms). Needs agreement across metrics."""
+    """Provisional READ-OUT verdict (human confirms). Requires agreement across three
+    independent signals — valence correlation, polarity AUC, and beating the random-
+    direction null — and a mirror sign from unpleasantness when scored. Note this is a
+    read-out verdict only; shared-geometry vs verbalization needs the caption baseline.
+    """
     if "pleasantness" not in appraisals:
         return "inconclusive (pleasantness not scored)"
     p = metrics["image_readout"]["pleasantness"]
     sp = p["vs_valence"]["spearman"]
     auc = p["polarity_auc"]["auc"]
-    ctrl = metrics["random_control"].get("pleasantness", {}).get("max_abs_spearman")
+    pval = p.get("vs_control_p")
     if sp is None:
         return "inconclusive (no valence signal computed)"
-    beats_ctrl = ctrl is not None and abs(sp) > 3 * ctrl
-    strong = sp >= 0.2 and beats_ctrl and (auc is not None and auc >= 0.60)
-    weak = sp >= 0.1 and beats_ctrl
-    if strong:
-        return "supports transfer (pleasantness read-out tracks valence + polarity, beats control)"
-    if weak:
-        return "inconclusive (weak but above control — scale up / add caption baseline)"
-    return "fails to support transfer (read-out ~ control; check caption-mediated hypothesis)"
+    beats = pval is not None and pval < 0.05          # beats the random-direction null
+    concord = auc is not None and auc >= 0.60          # polarity agrees
+    mirror = True
+    if "unpleasantness" in appraisals:
+        us = metrics["image_readout"]["unpleasantness"]["vs_valence"]["spearman"]
+        mirror = us is not None and us < 0             # opposite sign, as theory predicts
+    if abs(sp) >= 0.3 and beats and concord and mirror:
+        return (f"supports read-out transfer (pleasantness rho={sp:+.2f} vs valence, "
+                f"polarity AUC={auc:.2f}, beats random dirs p={pval:.3f}, unpleasantness "
+                f"mirrors) — NEXT: caption baseline to separate shared-geometry vs verbalization")
+    if abs(sp) >= 0.15 and beats:
+        return ("inconclusive (above the random null but modest/mixed — scale to full split "
+                "and add the caption baseline)")
+    return "fails to support transfer (read-out indistinguishable from random directions)"
 
 
 def _plot(metrics, X_img, probes, appraisals, valence):
@@ -294,13 +325,15 @@ def main() -> None:
     m = run(args.config)
     print(f"\nStage C read-out — L{m['layer']} {m['tap']}  "
           f"(EMOTIC test: {m['n_images_scored']} scored, {m['n_skipped_unreadable']} skipped)\n")
+    c = m["random_control"]
+    print(f"  random-direction null (n={c.get('n_valid')}): "
+          f"mean|rho|={_fmt(c.get('mean'))} p95={_fmt(c.get('p95'))} max={_fmt(c.get('max'))}\n")
     for a, r in m["image_readout"].items():
         v, auc = r["vs_valence"], r["polarity_auc"]
-        ctrl = m["random_control"].get(a, {}).get("max_abs_spearman")
-        gap = m["transfer_gap"].get(a, {}).get("gap")
+        ret = m["transfer"].get(a, {}).get("retention")
         print(f"  {a:16s} valence: spearman={_fmt(v['spearman'])} pearson={_fmt(v['pearson'])} "
               f"(n={v['n']})  |  polarity AUC={_fmt(auc['auc'])} (n={auc['n']})  |  "
-              f"ctrl|max|={_fmt(ctrl)}  |  transfer_gap={_fmt(gap)}")
+              f"p_vs_ctrl={_fmt(r.get('vs_control_p'))}  |  retention={_fmt(ret)}")
     print(f"\n  VERDICT: {m['verdict']}")
     print(f"  metrics -> {STAGE_C_DIR/'metrics.json'}   figure -> {FIGURES_DIR/'stage_c_readout.png'}")
 
