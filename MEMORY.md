@@ -121,8 +121,25 @@ Use the `/update-memory` skill to add entries.
 - CAVEAT for writeup: EMOTIC has per-person bounding boxes but we feed the WHOLE image and ask about
   "this person" WITHOUT passing the bbox; for multi-person images the model can't tell which person,
   yet we compare to one person's valence. Adds noise (signal came through anyway); disclose in threats.
-- NEXT: Stage D cross-modal STEERING (causal capstone — reuse Stage A diff-of-means recipe under image
-  input; the read-out residual is correlational and needs causal confirmation) -> then write up Stage C.
+- Stage C write-up DONE: docs/stage-c-results.md (paper-ready) + docs/stage-c-explainer.md (plain-language).
+
+## Stage D cross-modal STEERING RESULT: SUPPORTS causal transfer (verified 2026-07, EMOTIC test n=150)
+- Inject TEXT-derived diff-of-means Δμ (Stage A v2 recipe) at resid_post L18 UNDER IMAGE INPUT; measure
+  closed-vocab emotion valence shift vs beta. `python -m src.experiments.stage_d_steering` (--limit N dry
+  run first). One forward per (image,dir,beta) under no_grad, no generation (~8.5 s/image, 150 img ~21min).
+- Result (slopes of mean Δvalence vs beta): pleasantness +0.329 (monotonic, +sign, ±1.0 at β=±3),
+  unpleasantness -0.309 (monotonic mirror), suddenness -0.073 (specificity control ~flat), random null
+  -0.027. Appraisal effects ~12x the random null and ~4.5x suddenness. THEORY-PREDICTED SIGNS, controls
+  small. => the text-learned appraisal direction CAUSALLY steers image-conditioned emotion output.
+- HONEST notes: (1) suddenness leaks a small valence effect (-0.073, ~2.7x random) — expected, appraisals
+  aren't orthogonal (sudden events skew unpleasant in crowd-enVENT); still ~4.5x smaller than pleasantness.
+  (2) random null slightly asymmetric (β=+3 hit -0.127) but slope tiny. Neither undermines the result.
+- SIGNIFICANCE: this is the capstone the read-out arm could not provide — a causal effect cannot be
+  explained by the "model is just captioning" critique (Stage C's correlational bound). Full arc done:
+  Stage A (text read-out + causal steering) -> Stage C (cross-modal read-out, not merely verbalization)
+  -> Stage D (cross-modal causal steering). Single layer 18 was enough (multi-layer band not needed).
+- NEXT: write up Stage D (results + explainer) to finish documentation; optional robustness (more images,
+  seeds, layer band, second VLM via qwen_verify).
 
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
