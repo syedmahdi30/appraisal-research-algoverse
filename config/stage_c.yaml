@@ -1,9 +1,31 @@
 # Stage C — cross-modal frozen-probe read-out. See docs/experiment-1.md.
-# Uses the FROZEN probes from results/stage_a/probes.npz — never re-fit here.
+# Uses the FROZEN probes from results/stage_a/probes.npz — NEVER re-fit here.
 model: google/gemma-3-4b-it
 device: cuda
 split: test
+seed: 0
 
-# Critical layer/tap to read out at. Defaults to Stage A's saved critical_layer if omitted.
-# critical_layer: 20
+# Read-out site. Defaults to Stage A's saved critical_layer (18) / MHSA tap if omitted.
+# critical_layer: 18
 tap: hook_attn_out
+
+# First pass runs a deterministic subset (correlation is stable at ~1000; scale to full
+# once the signal is worth locking in). Set to null for the whole test split (~7,280).
+n_images: 1000
+
+# Appraisals with an EMOTIC-side ground-truth anchor. pleasantness/unpleasantness map to
+# valence; the other four appraisals have NO image ground truth (validate via Stage D).
+appraisals: [pleasantness, unpleasantness]
+
+# Secondary polarity AUC: shared-7 emotion -> valence sign. surprise/neutral excluded
+# (ambiguous valence). Lossy mapping is a first-class caveat (data-rules.md).
+positive_labels: [joy]
+negative_labels: [anger, disgust, fear, sadness]
+
+# Norm-matched random directions for the control (must sit at ~0 correlation).
+n_random: 5
+
+# Transfer gap: recompute the same correlation on TEXT test activations (probe vs the 1-5
+# pleasantness rating) at the same site. gap = text_spearman - image_spearman.
+text_reference: true
+n_text: 1000
