@@ -53,6 +53,26 @@ Use the `/update-memory` skill to add entries.
 - Stage C: PRIMARY test is read-out transfer (frozen probes on image acts). Cross-modal steering (Stage D)
   should reuse the diff-of-means recipe, NOT the probe-direction/residual-fraction approach.
 
+## Stage C read-out RESULT: SUPPORTS transfer (verified 2026-07, EMOTIC test n=1000, seed 0)
+- Frozen text pleasantness probe (L18 hook_attn_out) applied UNCHANGED to image-conditioned last-token
+  activations tracks EMOTIC continuous valence: Spearman +0.482 (Pearson +0.499, n=1000); unpleasantness
+  MIRRORS at -0.442. Polarity AUC (shared-7 pos vs neg) 0.936 / 0.080 — but only n=58 single-label images.
+  Retention = |image rho| / |text rho| ~0.60-0.63 (keeps ~60% of the text effect crossing to images).
+- Beats a 100-draw random-direction null at p=0.010 (empirical floor). BUT the null is WIDE: mean|rho|=0.131,
+  p95=0.319, max=0.372 — Gemma activations are strongly ANISOTROPIC, so random dirs correlate ~0.37 with
+  valence. Probe (0.48) clears all 100 but the margin over the best random dir is modest. Report the null
+  distribution, never a single control number.
+- METRIC LESSON: probe is 1-5, EMOTIC valence is 1-10 → raw r2 is scale-confounded and reads as false null.
+  Use SCALE-INVARIANT metrics (Spearman/Pearson + polarity AUC). data.emotic has NO appraisal columns;
+  only pleasantness/unpleasantness have an image-side anchor (valence) — the other 4 appraisals can only be
+  tested via Stage D steering.
+- CODE LESSON: image forwards MUST be wrapped in torch.no_grad() — SigLIP does 4096-patch eager attention
+  ([1,16,4096,4096] fp32 ~4GB/layer); without no_grad the retained graph OOMs a 40GB A100 on image 1.
+- OPEN QUESTION (mechanism): read-out transfer alone cannot separate SHARED-GEOMETRY from VERBALIZATION-
+  MEDIATED (model internally captions the image). NEXT = caption baseline (neutral caption -> text pipeline
+  -> pleasantness read-out vs valence); if caption rho >= image rho the signal is plausibly verbal.
+- Run: `python -m src.experiments.stage_c_transfer` (config/stage_c.yaml, n_images=1000, n_random=100).
+
 ## Smoke test (verified 2026-07 on A100)
 - Verified: `scripts/smoke_test.py` passes — Gemma 3 boots via bridge, `cfg.is_multimodal=True`,
   `n_layers=34`, one forward pass caches 102 tensors (3 taps × 34 layers), all three LM taps fire.
