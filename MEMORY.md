@@ -110,7 +110,17 @@ Use the `/update-memory` skill to add entries.
   thesis) BUT still correlational + an upper bound (a still-richer caption could absorb more).
 - CPU-only combined analysis: `python -m src.experiments.analyze_stage_c_mechanism` reads BOTH
   parquets and computes unique(image | neutral), unique(image | rich), and the tightest bound
-  unique(image | neutral+rich). No GPU, seconds. Writes mechanism_summary.json.
+  unique(image | neutral+rich). No GPU, seconds. Writes mechanism_summary.json. NOTE: align the two
+  parquets by ROW POSITION not image_path — EMOTIC is per-person and image_path repeats (multi-person
+  images), so an image_path merge cross-joins co-located persons (bug: inflated n 1000->1206).
+- COMBINED RESULT (n=1000): unique(image | neutral+rich) pleasantness +0.201, unpleasantness -0.153,
+  both p<0.001. Progression 0.310 -> 0.256 -> 0.201 (|neutral -> |rich -> |both): richer/joint caption
+  controls absorb some, but a substantial significant residual SURVIVES controlling for a plain AND a
+  detailed perceptual caption jointly. Stage C read-out arm DONE: transfer real (rho=0.51 full split),
+  NOT merely verbalization-mediated (still correlational + upper bound -> Stage D causal test).
+- CAVEAT for writeup: EMOTIC has per-person bounding boxes but we feed the WHOLE image and ask about
+  "this person" WITHOUT passing the bbox; for multi-person images the model can't tell which person,
+  yet we compare to one person's valence. Adds noise (signal came through anyway); disclose in threats.
 - NEXT: Stage D cross-modal STEERING (causal capstone — reuse Stage A diff-of-means recipe under image
   input; the read-out residual is correlational and needs causal confirmation) -> then write up Stage C.
 
