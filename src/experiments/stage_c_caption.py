@@ -1,22 +1,26 @@
-"""Stage C caption baseline — shared appraisal geometry vs verbalization (experiment-1.md).
+"""Stage C caption baseline + mechanism test — verbalization vs shared geometry (experiment-1.md).
 
 The read-out transfer (stage_c_transfer.py) shows the frozen text pleasantness direction
-tracks EMOTIC valence under image conditioning (rho~0.48). That alone cannot say WHY:
-  (A) shared geometry — the model represents pleasantness the same way for text and images; or
-  (B) verbalization — the model internally describes the image, and the pleasantness direction
-      just reads that implicit caption.
+tracks EMOTIC valence under image conditioning (rho~0.48). This script asks WHY, by
+generating a NEUTRAL caption per image ("Describe this image in one sentence." — no emotion
+words invited), and comparing two read-outs of the SAME frozen probe on the SAME images:
 
-This baseline separates them. For each image we GENERATE a NEUTRAL caption ("Describe this
-image in one sentence." — no emotion words invited), then run the caption through the TEXT
-pipeline and apply the SAME frozen probe, correlating with EMOTIC valence (rho_cap):
-  - rho_cap >= rho_img  -> the appraisal signal is fully in a neutral verbal description
-                           => transfer is VERBALIZATION-MEDIATED (the mundane explanation).
-  - rho_cap << rho_img  -> image activations carry appraisal info the caption does not
-                           => SHARED GEOMETRY (the non-verbal claim).
+  - IMAGE read-out:   probe applied to image-conditioned activations (the direct path).
+  - CAPTION read-out: probe applied to the caption run through the TEXT pipeline (verbal path).
 
-Preconditions: results/stage_a/probes.npz and results/stage_c/metrics.json (for rho_img).
-Generation is autoregressive and slow — run `--preview 5` first to eyeball the captions.
-Run on the A100 with HF_TOKEN set and EMOTIC downloaded. Never re-fit probes (data-rules.md).
+Aggregate: |rho_cap| ~ |rho_img| => verbalization-mediated; |rho_cap| << |rho_img| => the
+image path carries more. Mechanism (the rigorous version): the SEMIPARTIAL correlation — the
+UNIQUE contribution of the image read-out to valence AFTER controlling for the caption
+read-out. If it is ~0, transfer is fully verbalization-mediated; if it survives, the image
+path adds signal beyond a neutral caption (but note: a lossy caption confounds this residual,
+so a surviving semipartial is an UPPER BOUND on any non-verbal contribution, not proof of
+shared geometry — analysis-rules).
+
+Both read-outs are computed in ONE pass per image and persisted (caption_readout.parquet) so
+richer-caption / Stage D re-analyses never re-run the expensive generation step.
+
+Preconditions: results/stage_a/probes.npz. Generation is autoregressive and slow — run
+`--preview 5` first. Run on the A100 with HF_TOKEN set and EMOTIC downloaded. Never re-fit.
 """
 from __future__ import annotations
 
@@ -75,6 +79,55 @@ def text_readout(bridge, caption, layer, tap) -> np.ndarray:
     return cache[name][0, ids.shape[-1] - 1].float().cpu().numpy()
 
 
+def image_readout(bridge, image, layer, tap) -> np.ndarray:
+    """Last-token activation at the frozen probe site under IMAGE conditioning (direct path)."""
+    keep = keep_language_taps((tap,))
+    name = f"blocks.{layer}.{tap}"
+    inputs = build_image_inputs(bridge, image)  # default IMAGE_EMOTION_PROMPT
+    with torch.no_grad():
+        _, cache = bridge.run_with_cache(
+            inputs["input_ids"], pixel_values=inputs["pixel_values"], names_filter=keep,
+        )
+    return cache[name][0, inputs["input_ids"].shape[-1] - 1].float().cpu().numpy()
+
+
+def _semipartial(valence, cap_pred, img_pred) -> dict:
+    """Unique (semipartial) contribution of the IMAGE read-out to valence beyond the CAPTION.
+
+    Rank-based. part_r = (r_iv - r_cv*r_ic) / sqrt(1 - r_ic^2); the p-value is the t-test on
+    adding the image rank to an OLS of valence rank on caption rank (same hypothesis). r_iv,
+    r_cv, r_ic are Spearman correlations image/caption/inter-readout.
+    """
+    from scipy.stats import rankdata, spearmanr
+    from scipy.stats import t as tdist
+
+    v0, c0, i0 = (np.asarray(x, dtype=float) for x in (valence, cap_pred, img_pred))
+    m = np.isfinite(v0) & np.isfinite(c0) & np.isfinite(i0)
+    n = int(m.sum())
+    if n < 10:
+        return {"n": n, "part_r_image_unique": None, "p": None,
+                "r_iv": None, "r_cv": None, "r_ic": None}
+    r_iv = float(spearmanr(i0[m], v0[m])[0])
+    r_cv = float(spearmanr(c0[m], v0[m])[0])
+    r_ic = float(spearmanr(i0[m], c0[m])[0])
+    part_r = (r_iv - r_cv * r_ic) / np.sqrt(max(1 - r_ic**2, 1e-9))
+
+    def z(x):
+        r = rankdata(x)
+        return (r - r.mean()) / r.std()
+
+    X = np.column_stack([np.ones(n), z(c0[m]), z(i0[m])])
+    beta, *_ = np.linalg.lstsq(X, z(v0[m]), rcond=None)
+    resid = z(v0[m]) - X @ beta
+    dof = n - 3
+    sigma2 = float(resid @ resid) / dof
+    se_i = float(np.sqrt(sigma2 * np.linalg.inv(X.T @ X)[2, 2]))
+    t_i = beta[2] / se_i if se_i > 0 else 0.0
+    p = float(2 * tdist.sf(abs(t_i), dof))
+    return {"n": n, "part_r_image_unique": float(part_r), "p": p,
+            "r_iv": r_iv, "r_cv": r_cv, "r_ic": r_ic}
+
+
 def run(config_path: str, preview: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
@@ -86,7 +139,7 @@ def run(config_path: str, preview: int | None = None) -> dict:
     seed = int(cfg.get("seed", 0))
     n_images = cfg.get("n_images")
     appraisals = [a for a in cfg.get("appraisals", ["pleasantness", "unpleasantness"]) if a in probes.names]
-    max_new = int(cfg.get("caption_max_new_tokens", 40))
+    max_new = int(cfg.get("caption_max_new_tokens", 64))
 
     df = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
     if n_images and n_images < len(df):
@@ -97,11 +150,13 @@ def run(config_path: str, preview: int | None = None) -> dict:
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))
     dev = next(bridge.parameters()).device
 
-    captions, acts, valid = [], [], []
+    captions, cap_acts, img_acts, valid = [], [], [], []
     for i, path in enumerate(tqdm(df["image_path"].tolist(), desc="caption+readout")):
         try:
-            cap = generate_caption(bridge, Image.open(path).convert("RGB"), max_new, dev)
-            acts.append(text_readout(bridge, cap, layer, tap))
+            image = Image.open(path).convert("RGB")
+            cap = generate_caption(bridge, image, max_new, dev)
+            cap_acts.append(text_readout(bridge, cap, layer, tap))
+            img_acts.append(image_readout(bridge, image, layer, tap))
             captions.append(cap)
             valid.append(True)
             if i < 5:
@@ -115,63 +170,55 @@ def run(config_path: str, preview: int | None = None) -> dict:
         return {"preview": True, "captions": captions}
 
     valid = np.array(valid, dtype=bool)
-    X_cap = np.stack(acts)
+    X_cap, X_img = np.stack(cap_acts), np.stack(img_acts)
     dfv = df.loc[valid].reset_index(drop=True)
     valence = dfv["valence"].to_numpy(dtype=np.float64) if "valence" in dfv.columns else np.full(len(dfv), np.nan)
 
-    img_metrics = load_config(STAGE_C_DIR / "metrics.json") if (STAGE_C_DIR / "metrics.json").exists() else {}
     metrics = {
         "run": run_stamp(), "layer": layer, "tap": tap, "seed": seed,
         "n_captioned": len(dfv), "n_skipped_unreadable": int((~valid).sum()),
         "caption_prompt": CAPTION_PROMPT.strip(), "max_new_tokens": max_new,
-        "sample_captions": captions[:10],
-        "caption_readout": {}, "compare_to_image": {},
+        "sample_captions": captions[:10], "readout": {},
     }
-    preds = {}  # per-image caption read-out, persisted so refinements never re-generate
+    persist = {"image_path": dfv["image_path"].to_numpy(), "caption": captions, "valence": valence}
     for a in appraisals:
         coef, inter = probes.coef[probes.index(a)], probes.intercept[probes.index(a)]
-        preds[a] = predict(X_cap, coef, inter)
-        cap_corr = _corr(preds[a], valence)
-        metrics["caption_readout"][a] = cap_corr
-        img_sp = img_metrics.get("image_readout", {}).get(a, {}).get("vs_valence", {}).get("spearman")
-        if img_sp is not None and cap_corr["spearman"] is not None:
-            metrics["compare_to_image"][a] = {
-                "caption_spearman": cap_corr["spearman"], "image_spearman": img_sp,
-                "caption_minus_image": cap_corr["spearman"] - img_sp,
-            }
+        cap_pred, img_pred = predict(X_cap, coef, inter), predict(X_img, coef, inter)
+        persist[f"pred_caption_{a}"] = cap_pred
+        persist[f"pred_image_{a}"] = img_pred
+        metrics["readout"][a] = {
+            "image": _corr(img_pred, valence),
+            "caption": _corr(cap_pred, valence),
+            "semipartial": _semipartial(valence, cap_pred, img_pred),
+        }
 
-    # Persist captions + per-image read-outs + valence (generation is the expensive step;
-    # a semipartial correlation / richer-caption re-analysis can reuse this without re-running).
+    # Persist per-image read-outs + captions so mechanism re-analyses skip re-generation.
     import pandas as pd
-    out = pd.DataFrame({"image_path": dfv["image_path"].to_numpy(), "caption": captions,
-                        "valence": valence, **{f"pred_{a}": preds[a] for a in appraisals}})
-    out.to_parquet(STAGE_C_DIR / "caption_readout.parquet")
+    pd.DataFrame(persist).to_parquet(STAGE_C_DIR / "caption_readout.parquet")
 
-    metrics["verdict"] = _caption_verdict(metrics)
+    metrics["verdict"] = _mechanism_verdict(metrics["readout"].get("pleasantness"))
     save_json(metrics, STAGE_C_DIR / "caption_metrics.json")
     _plot(metrics)
     return metrics
 
 
-def _caption_verdict(metrics) -> str:
-    """Provisional mechanism verdict (human confirms). Compares |rho_cap| vs |rho_img| for
-    pleasantness — same magnitude means a neutral caption already carries the signal."""
-    c = metrics["compare_to_image"].get("pleasantness")
-    if not c:
-        return "inconclusive (no image-side comparison — run stage_c_transfer first)"
-    cap, img = abs(c["caption_spearman"]), abs(c["image_spearman"])
-    if img < 0.05:
-        return "inconclusive (image read-out itself is ~0)"
-    if cap >= img - 0.05:
-        return (f"verbalization-mediated: caption read-out matches/exceeds image "
-                f"(|cap|={cap:.2f} >= |img|={img:.2f}) — a neutral description already carries the "
-                f"appraisal, so direct transfer is NOT evidence of non-verbal shared geometry")
-    if cap <= 0.5 * img:
-        return (f"supports shared geometry: caption read-out is much weaker "
-                f"(|cap|={cap:.2f} vs |img|={img:.2f}) — image activations carry appraisal info a "
-                f"neutral caption does not")
-    return (f"partial: caption explains some but not all (|cap|={cap:.2f} vs |img|={img:.2f}) — "
-            f"the image path adds appraisal signal beyond a neutral caption")
+def _mechanism_verdict(pleasantness) -> str:
+    """Provisional mechanism verdict (human confirms), keyed on pleasantness."""
+    if not pleasantness:
+        return "inconclusive (pleasantness not scored)"
+    sp = pleasantness["semipartial"]
+    pr, p, r_iv, r_cv = sp["part_r_image_unique"], sp["p"], sp["r_iv"], sp["r_cv"]
+    if pr is None or not r_iv:
+        return "inconclusive (insufficient data for semipartial)"
+    frac = abs(r_cv) / abs(r_iv)
+    base = (f"caption reproduces ~{frac * 100:.0f}% of the image read-out "
+            f"(r_cap={r_cv:+.2f} vs r_img={r_iv:+.2f}); ")
+    if p is not None and p < 0.05 and abs(pr) >= 0.10:
+        return (base + f"image retains a SIGNIFICANT unique contribution beyond a neutral "
+                f"caption (semipartial r={pr:+.2f}, p={p:.3f}) — but caption lossiness confounds "
+                f"this residual, so it is an upper bound, NOT proof of non-verbal shared geometry")
+    return (base + f"NO significant unique image contribution beyond the caption "
+            f"(semipartial r={pr:+.2f}, p={p:.3f}) — transfer is fully verbalization-mediated")
 
 
 def _plot(metrics):
@@ -179,19 +226,20 @@ def _plot(metrics):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    comp = metrics["compare_to_image"]
-    if not comp:
-        return
-    appraisals = list(comp)
-    x = np.arange(len(appraisals))
-    fig, ax = plt.subplots(figsize=(1.6 * len(appraisals) + 3, 4.2))
-    ax.bar(x - 0.2, [abs(comp[a]["image_spearman"]) for a in appraisals], 0.4, label="image read-out")
-    ax.bar(x + 0.2, [abs(comp[a]["caption_spearman"]) for a in appraisals], 0.4, label="caption read-out")
+    ap = list(metrics["readout"])
+    x = np.arange(len(ap))
+    fig, ax = plt.subplots(figsize=(1.7 * len(ap) + 3, 4.3))
+    ax.bar(x - 0.2, [abs(metrics["readout"][a]["image"]["spearman"]) for a in ap], 0.4, label="image read-out")
+    ax.bar(x + 0.2, [abs(metrics["readout"][a]["caption"]["spearman"]) for a in ap], 0.4, label="neutral-caption read-out")
+    for j, a in enumerate(ap):
+        pr = metrics["readout"][a]["semipartial"]["part_r_image_unique"]
+        if pr is not None:
+            ax.annotate(f"unique={pr:+.2f}", (j, 0.02), ha="center", fontsize=8)
     ax.set_xticks(x)
-    ax.set_xticklabels(appraisals)
+    ax.set_xticklabels(ap)
     ax.set_ylabel("|Spearman| vs EMOTIC valence")
-    ax.set_title(f"Stage C caption baseline (n={metrics['n_captioned']})\n"
-                 "image >> caption -> shared geometry; image ~ caption -> verbalization")
+    ax.set_title(f"Stage C caption baseline + semipartial (n={metrics['n_captioned']})\n"
+                 "image ~ caption -> verbalization; 'unique' = image contribution beyond caption")
     ax.legend(fontsize=8)
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
@@ -200,7 +248,7 @@ def _plot(metrics):
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Stage C caption baseline — verbalization vs shared geometry")
+    ap = argparse.ArgumentParser(description="Stage C caption baseline + semipartial mechanism test")
     ap.add_argument("--config", default="config/stage_c.yaml")
     ap.add_argument("--preview", type=int, default=None,
                     help="caption only N images and print them (sanity check before the full run)")
@@ -210,11 +258,14 @@ def main() -> None:
         return
     print(f"\nStage C caption baseline — L{m['layer']} {m['tap']}  "
           f"({m['n_captioned']} captioned, {m['n_skipped_unreadable']} skipped)\n")
-    for a, c in m["compare_to_image"].items():
-        print(f"  {a:16s} caption rho={c['caption_spearman']:+.3f}  vs  image rho={c['image_spearman']:+.3f}  "
-              f"(caption−image={c['caption_minus_image']:+.3f})")
+    for a, r in m["readout"].items():
+        sp = r["semipartial"]
+        print(f"  {a:16s} image rho={r['image']['spearman']:+.3f}  caption rho={r['caption']['spearman']:+.3f}  "
+              f"|  image-caption r={sp['r_ic']:+.3f}  |  unique(image) r={sp['part_r_image_unique']:+.3f} "
+              f"(p={sp['p']:.3f})")
     print(f"\n  VERDICT: {m['verdict']}")
     print(f"  metrics -> {STAGE_C_DIR/'caption_metrics.json'}   "
+          f"data -> {STAGE_C_DIR/'caption_readout.parquet'}   "
           f"figure -> {FIGURES_DIR/'stage_c_caption_baseline.png'}")
 
 
