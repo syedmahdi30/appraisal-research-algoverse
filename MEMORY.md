@@ -186,3 +186,30 @@ Use the `/update-memory` skill to add entries.
   fall back to `annotations_continuous` (train). Scale 1-10. See `_person_continuous`.
 - Canonical command: `python scripts/download_data.py --dataset emotic --archive emotic.zip
   --annotations Annotations.mat` → writes `data/processed/emotic_{split}.parquet`.
+
+## Project status + team + next directions (2026-07)
+- STATUS: Stage A→D COMPLETE and written up (docs/stage-{a,c,d}-{results,explainer}.md). Headline:
+  a text-learned appraisal direction READS (rho=0.51, survives neutral+rich caption controls) and
+  CAUSALLY STEERS (pleasantness +0.33 / unpleasantness -0.31 slopes) image-conditioned emotion output.
+- Teammate notebook compare: `docs/comparison-charlotte-notebook.md`. Charlotte (charlotte9) got a NULL
+  cross-modal transfer (rho=0.04) where this repo gets 0.51. ROOT CAUSE = prompt/position mismatch: her
+  text probe is trained on BARE sentences (no emotion question) but applied at the image's questioned
+  position; this repo asks the emotion question on BOTH sides (aligned subspace). Compounding: she uses
+  resid_post, this repo uses attn_out L18. Both AGREE images encode valence (her image-fit probe R2~0.2
+  @ L17 ~= this repo's L18) — so it's a methodology diff, not data. C. Li is fixing her probes to the Q&A
+  format. Reconciliation test: re-run her transfer with the emotion-question prompt + attn_out L18.
+- Next-experiment ideation: `docs/next-experiments.md`. OPINION: models add credibility not novelty
+  (lead Sneheel wants a QUESTION not a model). Do a thin credibility layer overnight (>=3 seeds — the
+  caveat in every stage; + Qwen verify via qwen_verify), and make the CONTRIBUTION a novel question.
+  TOP PICK = "Stage E" appraisal-SPECIFIC emotion steering: steer non-valence appraisals to produce
+  theory-predicted specific emotions cross-modally (other-responsibility+unpleasant->anger, self-resp
+  ->guilt, suddenness->fear) = causally validates appraisal THEORY, not just valence. Runners-up:
+  behavioral consequence of steering (steering-to-safety), modality conflict (pleasant image + unpleasant
+  text — tests the "shared" claim). Models: Qwen(different) > Gemma-12B(bigger); 12B fits A100-40GB bf16,
+  27B does not.
+- TEAM (Algoverse): Sneheel (lead), Syed (this work), Charlotte/C.Li (probe-confound fix + newer models
+  Gemma4/Qwen3.5 + video ToM/MOMENTS), Arnav (emotion source attribution: 4/6 face-body vs 2/6 scenery,
+  Azure rerun), Abdul (status unclear). ~3-4 weeks to writeup start. Monday check-in Mon Jul 20 3pm ET.
+  Experiment framing: Exp 1 = appraisal geometry (this work), Exp 2 = recognition vs adoption (attribution).
+- Syed open TODOs: bigger/more models overnight; ideation -> Slack (next-experiments.md); ADD the Stage D
+  cross-modal steering writeup to the SHARED team doc (repo docs done, shared doc pending).
