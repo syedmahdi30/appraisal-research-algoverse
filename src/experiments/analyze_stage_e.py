@@ -36,10 +36,17 @@ VALENCE_PROXY = {"A1": "sadness", "A2": "sadness", "A3": "sadness",
 
 
 def _delta_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Per (image, arm, beta) Δ log-prob vs that image's β=0 baseline (long-form, one row each)."""
-    base = df[df["arm"] == "_base"].set_index("image_path")[LP]
+    """Per (image, arm, beta) Δ log-prob vs that image's β=0 baseline (long-form, one row each).
+
+    Aligns to the baseline by IMAGE CELL, not image_path: EMOTIC is per-person, so the same
+    image_path recurs and cannot key the baseline. Rows are written per image as [_base, then the
+    arm×β grid], so `(arm=="_base").cumsum()` labels each image's block uniquely.
+    """
+    df = df.copy()
+    df["_img"] = (df["arm"] == "_base").cumsum()
+    base = df[df["arm"] == "_base"].set_index("_img")[LP]
     steered = df[df["arm"] != "_base"].copy()
-    d = steered[LP].to_numpy() - base.loc[steered["image_path"]][LP].to_numpy()
+    d = steered[LP].to_numpy() - base.loc[steered["_img"]][LP].to_numpy()
     out = steered[["image_path", "arm", "beta"]].reset_index(drop=True)
     return pd.concat([out, pd.DataFrame(d, columns=LP)], axis=1)
 
