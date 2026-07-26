@@ -64,13 +64,20 @@ def _cell_means(df, value):
 
 
 def _arbitration(df, betas):
-    """Mean Δ (valence, probe) vs β on incongruent cells, relative to each cell's β=0 baseline."""
-    base = df[df["beta"] == 0].set_index("image_path")
+    """Mean Δ (valence, probe) vs β on incongruent cells, relative to each cell's β=0 baseline.
+
+    Aligns each steered row to its own baseline by CELL, not image_path: EMOTIC is per-person, so
+    the same image_path recurs and cannot key the baseline. Rows are written per cell as
+    [β=0, then the betas], so `(beta==0).cumsum()` labels each cell uniquely.
+    """
+    df = df.copy()
+    df["_cell"] = (df["beta"] == 0).cumsum()
+    base = df[df["beta"] == 0].set_index("_cell")
     res = {"valence": {}, "probe": {}}
     for b in betas:
         sub = df[df["beta"] == b]
-        dv = sub["valence"].to_numpy() - base.loc[sub["image_path"], "valence"].to_numpy()
-        dp = sub["probe_readout"].to_numpy() - base.loc[sub["image_path"], "probe_readout"].to_numpy()
+        dv = sub["valence"].to_numpy() - base.loc[sub["_cell"], "valence"].to_numpy()
+        dp = sub["probe_readout"].to_numpy() - base.loc[sub["_cell"], "probe_readout"].to_numpy()
         res["valence"][int(b)] = float(np.mean(dv))
         res["probe"][int(b)] = float(np.mean(dp))
     xs = sorted(res["valence"])
