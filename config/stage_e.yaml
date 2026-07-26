@@ -1,0 +1,33 @@
+# Stage E — appraisal-SPECIFIC emotion steering (pilot). See pilot-plan-stage-e-f.md.
+# Combines two TEXT-derived difference-of-means appraisal directions (Stage A v2 recipe) and
+# injects the combination at resid_post L18 UNDER IMAGE INPUT, asking whether appraisal
+# theory's predicted SPECIFIC emotion (anger/guilt/fear/pride/surprise) gains probability —
+# not just a valence shift. Directions/probes stay frozen from Stage A; layer 18 only.
+model: google/gemma-3-4b-it
+device: cuda
+split: test
+seed: 0
+
+# Injection site: resid_post at the Stage A critical layer (18), last prompt token.
+steering_layers: [18]
+
+# beta = multiples of the low->high Δμ shift (natural units, same as Stage D).
+betas: [-3, -2, -1, 1, 2, 3]
+
+# crowd-enVENT train examples used to estimate the six text-derived Δμ directions.
+n_dir: 1200
+
+# EMOTIC test images to steer (pilot: first 30 of the Stage D 150, seed 0).
+n_images: 30
+
+# All six appraisals get a Δμ direction (E1). Combos/arms are defined in stage_e_combo.py.
+appraisals:
+  - pleasantness
+  - unpleasantness
+  - suddenness
+  - predict_event
+  - self_responsblt
+  - other_responsblt
+
+# Entanglement threshold: pairs with |cos| > this use the Gram-Schmidt fallback (E3).
+cos_flag_threshold: 0.6
