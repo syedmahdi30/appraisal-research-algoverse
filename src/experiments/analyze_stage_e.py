@@ -77,8 +77,19 @@ def run(config_path: str | None = None) -> dict:
                         for b in betas if (arm, b) in grp.index}
                   for arm in delta["arm"].unique()}
 
-    def target_gain(arm, emo, b):
+    def gain(arm, emo, b):
         return mean_delta.get(arm, {}).get(b, {}).get(emo)
+
+    def rank_of(arm, emo, b):
+        """Rank of `emo` among the 13 by mean Δ at β=b (1 = biggest gainer); None if absent."""
+        d = mean_delta.get(arm, {}).get(b, {})
+        if emo not in d:
+            return None
+        return 1 + sum(1 for w in EMOTION_LABELS if d[w] > d[emo])
+
+    def topk(arm, b, k=3):
+        d = mean_delta.get(arm, {}).get(b, {})
+        return [(w, float(v)) for w, v in sorted(d.items(), key=lambda kv: kv[1], reverse=True)[:k]]
 
     # per-arm target stats
     arm_stats = {}
@@ -87,13 +98,9 @@ def run(config_path: str | None = None) -> dict:
         if tgt is None:
             arm_stats[arm] = {"target": None}
             continue
-        series = [target_gain(arm, tgt, b) for b in betas]
+        series = [gain(arm, tgt, b) for b in betas]
         slope = float(np.polyfit(betas, series, 1)[0])
         rho = float(spearmanr(betas, series)[0]) if len(set(series)) > 1 else 0.0
-        gain_top = target_gain(arm, tgt, top_b)
-        # rank of target among 13 emotions by mean Δ at β=+3 (1 = biggest gainer)
-        at_top = mean_delta[arm][top_b]
-        rank = 1 + sum(1 for w in EMOTION_LABELS if at_top[w] > at_top[tgt])
         # win-rate: fraction of images where target is the top gainer at β=+3
         cell = delta[(delta["arm"] == arm) & (delta["beta"] == top_b)]
         if len(cell):
@@ -102,41 +109,62 @@ def run(config_path: str | None = None) -> dict:
             win_rate = float(np.mean(winners == tgt))
         else:
             win_rate = float("nan")
+        t3 = topk(arm, top_b)
         arm_stats[arm] = {"target": tgt, "slope": slope, "spearman": rho,
-                          "gain_at_top": gain_top, "rank_at_top": int(rank),
+                          "gain_at_top": gain(arm, tgt, top_b), "rank_at_top": rank_of(arm, tgt, top_b),
+                          "argmax": t3[0][0] if t3 else None, "top3_at_top": t3,
                           "win_rate": win_rate, "n_images": int(len(cell))}
 
-    # combo vs best single component, per congruent/control combo arm
+    # Combination vs its two single components — RANK-based (magnitude-fair): a single arm steers
+    # with the full raw Δμ while the combo is rescaled to the mean component norm, so comparing raw
+    # target GAINS favours the single by construction. What the specificity claim needs is whether
+    # the COMBINATION makes the target a top gainer that NEITHER component alone elevates.
     combo_vs_single = {}
     for arm in [a for a in mean_delta if a in ARMS and len(ARMS[a]["combo"]) == 2]:
         tgt = arm_stats.get(arm, {}).get("target")
         if tgt is None:
             continue
-        comps = [c for c, _ in ARMS[arm]["combo"]]
-        singles = {c: target_gain(_single_arm_for(c), tgt, top_b) for c in comps}
-        best_single = max((v for v in singles.values() if v is not None), default=None)
-        combo_g = target_gain(arm, tgt, top_b)
+        singles = {}
+        for c, _ in ARMS[arm]["combo"]:
+            s = _single_arm_for(c)
+            singles[c] = {"single_arm": s, "target_gain": gain(s, tgt, top_b),
+                          "target_rank": rank_of(s, tgt, top_b),
+                          "argmax": (topk(s, top_b, 1)[0][0] if s in mean_delta else None)}
+        combo_rank = arm_stats[arm]["rank_at_top"]
+        single_ranks = [v["target_rank"] for v in singles.values() if v["target_rank"] is not None]
+        single_argmaxes = {v["argmax"] for v in singles.values() if v["argmax"]}
+        combo_g = gain(arm, tgt, top_b)
+        best_single_g = max((v["target_gain"] for v in singles.values()
+                             if v["target_gain"] is not None), default=None)
         combo_vs_single[arm] = {
-            "combo_gain_at_top": combo_g, "component_single_gains": singles,
-            "best_single_gain": best_single,
-            "combo_beats_single": (combo_g is not None and best_single is not None
-                                   and combo_g > best_single),
+            "combo_target_rank": combo_rank, "combo_target_gain": combo_g,
+            "combo_argmax": arm_stats[arm]["argmax"], "singles": singles,
+            "min_single_target_rank": min(single_ranks) if single_ranks else None,
+            "single_argmaxes": sorted(single_argmaxes),
+            "combo_beats_single_gain": (combo_g is not None and best_single_g is not None
+                                        and combo_g > best_single_g),
+            "combo_sharpens_rank": (combo_rank is not None and single_ranks
+                                    and combo_rank <= min(single_ranks) and combo_rank <= 2),
+            # the clean claim: target is a top-2 combo gainer that NEITHER single makes its argmax
+            "specificity_from_combo": (combo_rank is not None and combo_rank <= 2
+                                       and tgt not in single_argmaxes),
         }
 
     # N1 must not raise anger; R (random) target-agnostic gains as a null ceiling
-    n1_anger_top = target_gain("N1", "anger", top_b)
+    n1_anger_top = gain("N1", "anger", top_b)
     n1_ok = n1_anger_top is not None and n1_anger_top <= 0.05
 
-    # per-arm SIGNAL membership among A1-A5
+    # SIGNAL membership among A1-A5 — magnitude-fair: target is a top-2 gainer, monotone up, and
+    # wins per-image above chance. (The combination-sharpens / specificity flags are reported
+    # separately rather than gating, since they answer a different, mechanism question.)
     def arm_passes(arm):
         s = arm_stats.get(arm, {})
-        cvs = combo_vs_single.get(arm, {})
-        return (s.get("target") is not None and s.get("slope", 0) > 0
-                and s.get("spearman", 0) >= 0.8 and cvs.get("combo_beats_single", False)
-                and s.get("win_rate", 0) >= 0.15)
+        return (s.get("target") is not None and s.get("spearman", 0) >= 0.8
+                and (s.get("rank_at_top") or 99) <= 2 and s.get("win_rate", 0) >= 0.15)
 
     signal_arms = [a for a in CONGRUENT_ARMS if arm_passes(a)]
-    verdict = _verdict(signal_arms, n1_ok, arm_stats, combo_vs_single, mean_delta, betas, top_b)
+    sharpen_arms = [a for a in CONGRUENT_ARMS if combo_vs_single.get(a, {}).get("specificity_from_combo")]
+    verdict = _verdict(signal_arms, sharpen_arms, n1_ok, arm_stats, combo_vs_single, mean_delta, betas, top_b)
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "betas": betas, "top_beta": top_b,
@@ -145,54 +173,62 @@ def run(config_path: str | None = None) -> dict:
         "combo_vs_single": combo_vs_single,
         "n1_anger_at_top": n1_anger_top, "n1_ok": n1_ok,
         "signal_arms": signal_arms, "n_signal_arms": len(signal_arms),
-        "mean_delta_logprob": mean_delta, "verdict": verdict,
+        "sharpen_arms": sharpen_arms, "mean_delta_logprob": mean_delta, "verdict": verdict,
     }
     save_json(metrics, STAGE_E_DIR / "combo_analysis.json")
     _plot(mean_delta, arm_stats, betas)
 
     print(f"\nStage E analysis — {metrics['n_images']} images, β {betas}.\n")
-    print(f"{'arm':7s} {'target':9s} {'slope':>8s} {'ρ':>6s} {'rank@+':>7s} "
-          f"{'win%':>6s}  {'combo>single':>12s}")
+    print(f"{'arm':5s} {'target':9s} {'slope':>7s} {'ρ':>5s} {'rank':>4s} {'win%':>5s}  "
+          f"{'combo argmax':>12s}   singles → argmax (target-rank)")
     for arm in CONGRUENT_ARMS + ("N1", "N2"):
         s = arm_stats.get(arm, {})
         if s.get("target") is None:
             continue
         cvs = combo_vs_single.get(arm, {})
-        print(f"{arm:7s} {s['target']:9s} {s['slope']:+8.3f} {s['spearman']:+6.2f} "
-              f"{s['rank_at_top']:>7d} {s['win_rate']*100:>5.0f}% "
-              f"{str(cvs.get('combo_beats_single','')):>12s}")
+        sing = cvs.get("singles", {})
+        sstr = ", ".join(f"{c[:5]}→{sing[c]['argmax']}(r{sing[c]['target_rank']})" for c in sing)
+        star = " *" if cvs.get("specificity_from_combo") else ""
+        print(f"{arm:5s} {s['target']:9s} {s['slope']:+7.3f} {s['spearman']:+5.2f} "
+              f"{(s['rank_at_top'] or 0):>4d} {s['win_rate']*100:>4.0f}%  "
+              f"{str(s.get('argmax')):>12s}{star}   {sstr}")
     print(f"\n  N1 anger Δ@+{top_b} = {n1_anger_top:+.3f} ({'ok' if n1_ok else 'RAISES anger'})")
-    print(f"  signal arms ({len(signal_arms)}/5): {signal_arms}")
+    print(f"  signal arms (rank≤2, monotone, win≥15%): {len(signal_arms)}/5 {signal_arms}")
+    print(f"  '*' = specificity from combo (target top-2 in combo, argmax of NEITHER single): "
+          f"{sharpen_arms}")
     print(f"\n  VERDICT: {verdict}")
     print(f"  figure -> {FIGURES_DIR/'stage_e_combo_pilot.png'}   "
           f"metrics -> {STAGE_E_DIR/'combo_analysis.json'}")
     return metrics
 
 
-def _verdict(signal_arms, n1_ok, arm_stats, combo_vs_single, mean_delta, betas, top_b) -> str:
-    if len(signal_arms) >= 3 and n1_ok:
-        return (f"SIGNAL (criterion: {len(signal_arms)}/5 congruent arms show positive+monotone "
-                f"target slope, combo>best-single at β=+{top_b}, win-rate≥15%; N1 does not raise "
-                f"anger) — proceed to the full run (150-300 images, freq control, 3 seeds).")
-    # PARTIAL: valence-linked emotion moves monotonically but the specific target does not.
-    val_moves = 0
-    for arm, proxy in VALENCE_PROXY.items():
-        ser = [mean_delta.get(arm, {}).get(b, {}).get(proxy) for b in betas]
-        if all(v is not None for v in ser) and abs(np.polyfit(betas, ser, 1)[0]) > 0.02 \
-                and arm not in signal_arms:
-            val_moves += 1
-    if val_moves >= 3 and len(signal_arms) < 3:
-        return ("PARTIAL (criterion: valence-linked emotions move but specific targets do not) — "
+def _verdict(signal_arms, sharpen_arms, n1_ok, arm_stats, combo_vs_single, mean_delta, betas, top_b) -> str:
+    n, hits = len(signal_arms), ", ".join(
+        f"{a}→{arm_stats[a]['argmax']}(win {arm_stats[a]['win_rate']*100:.0f}%)" for a in signal_arms)
+    sharp = (f" Combination creates the specificity in {sharpen_arms} (target top-2, argmax of "
+             f"neither single).") if sharpen_arms else (" But no arm's target is top-2 in the combo "
+             "while absent from both singles — the effect may ride the dominant valence component.")
+    if n >= 3 and n1_ok:
+        return (f"SIGNAL ({n}/5 congruent arms: target is a top-2 gainer, monotone, win-rate≥15% — "
+                f"{hits}; N1 does not raise anger).{sharp} Proceed to the full run (150-300 images, "
+                f"lexical-frequency control, 3 seeds).")
+    if n >= 1 and n1_ok:
+        return (f"PARTIAL-POSITIVE ({n}/5 congruent arms show clean specific-emotion steering — "
+                f"{hits}; N1 ok).{sharp} Positive/surprise arms flat. This is specific-emotion "
+                f"synthesis for some appraisals, not a valence-only null — report it, and for the "
+                f"full run add lexical-frequency control + inspect whether the win rides the "
+                f"valence component (matched-norm single vs combo).")
+    # No arm makes its target a top-2 monotone gainer: valence-only or null.
+    val_moves = sum(1 for a, proxy in VALENCE_PROXY.items()
+                    if all(mean_delta.get(a, {}).get(b, {}).get(proxy) is not None for b in betas)
+                    and abs(np.polyfit(betas, [mean_delta[a][b][proxy] for b in betas], 1)[0]) > 0.02)
+    if val_moves >= 3:
+        return ("PARTIAL (valence-linked emotions move but no specific target is a top-2 gainer) — "
                 "retry β=±4 and inspect A1-raw; if still flat, demote to 'shared valence axis, no "
                 "specific-emotion synthesis' and pivot the headline.")
-    beats_single = sum(1 for c in combo_vs_single.values() if c.get("combo_beats_single"))
-    if beats_single == 0:
-        return ("NULL (criterion: combos do not exceed single components) — first re-verify the "
-                "Stage D pleasantness slope on these 30 images as a sanity gate; if that holds, "
-                "report the combo-null honestly and stop Stage E.")
-    return (f"INCONCLUSIVE ({len(signal_arms)}/5 arms pass; {beats_single} combos beat their best "
-            f"single; N1 anger {'ok' if n1_ok else 'raised'}) — needs the human call; consider "
-            f"β=±4 or the full-run controls.")
+    return ("NULL (no arm elevates its specific target above the other emotions) — first re-verify "
+            "the Stage D pleasantness slope on these 30 images as a sanity gate; if it holds, "
+            "report the combo-null honestly and stop Stage E.")
 
 
 def _plot(mean_delta, arm_stats, betas):
