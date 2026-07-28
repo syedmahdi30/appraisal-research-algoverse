@@ -41,6 +41,34 @@ def _unit(v):
     return v / n if n > 0 else v
 
 
+VALENCE_APPRAISALS = ("pleasantness", "unpleasantness")
+
+
+def _cosmat(dmu: dict, appraisals) -> dict:
+    """Nested pairwise cosine matrix of the unit directions."""
+    U = {a: _unit(dmu[a]) for a in appraisals}
+    return {a: {b: float(U[a] @ U[b]) for b in appraisals} for a in appraisals}
+
+
+def decorrelate_valence(dmu: dict):
+    """Residualize every NON-valence appraisal Δμ against the bipolar valence axis.
+
+    Every Stage E combo is (valence axis) + (a non-valence appraisal); `self_responsblt` etc. are so
+    entangled with valence (|cos|~0.8) that their raw Δμ is effectively a valence direction, so the
+    pilot could not tell composition from "a bigger valence nudge". Here the valence axis is
+    v = unit(unit(Δμ_pleasant) − unit(Δμ_unpleasant)); each non-valence appraisal keeps only its
+    component ORTHOGONAL to v. The valence appraisals themselves are left raw (they ARE the axis).
+    Returns (new_dmu, v).
+    """
+    p, u = _unit(dmu["pleasantness"]), _unit(dmu["unpleasantness"])
+    v = _unit(p - u)
+    out = {}
+    for a, vec in dmu.items():
+        out[a] = vec.astype(np.float32) if a in VALENCE_APPRAISALS \
+            else (vec - float(vec @ v) * v).astype(np.float32)
+    return out, v
+
+
 def build_arm_vectors(dmu: dict, norms: dict, cos: dict, thr: float, seed: int,
                       matched_norm: bool = True):
     """Return {arm: np.float32[d]} steering vectors and per-arm metadata (E3 rule).
@@ -112,7 +140,8 @@ def _readout(bridge, ids, pv, hooks, tok_ids):
     return valence_score(last, tok_ids), emotion_logprobs(last, tok_ids)
 
 
-def run(config_path: str, limit_override: int | None = None) -> dict:
+def run(config_path: str, limit_override: int | None = None,
+        decorrelate_override: str | None = None) -> dict:
     import pandas as pd
 
     cfg = load_config(config_path)
@@ -123,6 +152,7 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     seed = int(cfg.get("seed", 0))
     thr = float(cfg.get("cos_flag_threshold", 0.6))
     matched_norm = bool(cfg.get("matched_norm_control", True))
+    decorrelate = decorrelate_override or str(cfg.get("decorrelate", "none"))
 
     dpath = STAGE_E_DIR / "directions.npz"
     if not dpath.exists():
@@ -130,9 +160,20 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     dz = np.load(dpath, allow_pickle=True)
     ap = [str(a) for a in dz["appraisals"]]
     dmu = {a: dz["dmu"][i].astype(np.float32) for i, a in enumerate(ap)}
-    norms = {a: float(dz["norms"][i]) for i, a in enumerate(ap)}
-    cosm = dz["cos"]
-    cos = {a: {b: float(cosm[i][j]) for j, b in enumerate(ap)} for i, a in enumerate(ap)}
+    val_cos_before = {a: float(_unit(dmu[a]) @ _unit(_unit(dmu["pleasantness"]) - _unit(dmu["unpleasantness"])))
+                      for a in ap if a not in VALENCE_APPRAISALS}
+    if decorrelate == "valence":
+        dmu, _vax = decorrelate_valence(dmu)
+        val_cos_after = {a: float(_unit(dmu[a]) @ _unit(_unit(dmu["pleasantness"]) - _unit(dmu["unpleasantness"])))
+                         for a in ap if a not in VALENCE_APPRAISALS}
+        print(f"  decorrelate=valence: |cos with valence axis| non-valence appraisals "
+              f"max {max(abs(v) for v in val_cos_before.values()):.2f} -> "
+              f"{max(abs(v) for v in val_cos_after.values()):.2f}")
+    elif decorrelate != "none":
+        raise ValueError(f"unknown decorrelate={decorrelate!r}; expected 'none' or 'valence'")
+    # (re)compute norms + cosine from the (possibly residualized) directions
+    norms = {a: float(np.linalg.norm(dmu[a])) for a in ap}
+    cos = _cosmat(dmu, ap)
 
     # Final target per arm: empirical (E2) if present, else theory (stage_e_arms).
     prof_path = STAGE_E_DIR / "appraisal_profiles.json"
@@ -182,28 +223,31 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
                              **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
         n_ok += 1
 
+    # suffix outputs by variant so the de-correlated run sits beside the raw one (not clobber it).
+    suf = "" if decorrelate == "none" else f"_{decorrelate}"
     df = pd.DataFrame(rows)
-    df.to_parquet(STAGE_E_DIR / "combo_pilot.parquet")
+    df.to_parquet(STAGE_E_DIR / f"combo_pilot{suf}.parquet")
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "method": "appraisal_specific_combo_steering",
         "layer": layer, "betas": betas, "n_images": n_ok, "n_skipped": n_skip,
         "seed": seed, "base_valence_mean": float(np.mean(base_vals)) if base_vals else None,
         "logprob_readout": "log_softmax over the 13 closed-vocab emotion labels",
-        "arm_targets": targets,
+        "decorrelate": decorrelate, "arm_targets": targets,
         "arm_meta": arm_meta,
         "arm_norms": {name: float(np.linalg.norm(v)) for name, v in vecs.items()},
         "cos_matrix": {a: cos[a] for a in ap}, "cos_flag_threshold": thr,
         "tokenization_multi_token": multi,
         "emotion_labels": list(EMOTION_LABELS),
     }
-    save_json(metrics, STAGE_E_DIR / "combo_pilot_metrics.json")
-    print(f"\nStage E combo pilot — L{layer}, {n_ok} images ({n_skip} skipped), "
-          f"{len(scaled)} arms x {len(betas)} betas + baseline.")
+    save_json(metrics, STAGE_E_DIR / f"combo_pilot_metrics{suf}.json")
+    print(f"\nStage E combo pilot [decorrelate={decorrelate}] — L{layer}, {n_ok} images "
+          f"({n_skip} skipped), {len(scaled)} arms x {len(betas)} betas + baseline.")
     print(f"  targets: " + ", ".join(f"{k}->{v}" for k, v in targets.items()))
-    print(f"  data -> {STAGE_E_DIR/'combo_pilot.parquet'}   "
-          f"metrics -> {STAGE_E_DIR/'combo_pilot_metrics.json'}")
-    print("  NEXT: python -m src.experiments.analyze_stage_e")
+    print(f"  data -> {STAGE_E_DIR/f'combo_pilot{suf}.parquet'}   "
+          f"metrics -> {STAGE_E_DIR/f'combo_pilot_metrics{suf}.json'}")
+    print(f"  NEXT: python -m src.experiments.analyze_stage_e"
+          + (f" --decorrelate {decorrelate}" if suf else ""))
     return metrics
 
 
@@ -211,8 +255,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Stage E step 3 — appraisal-specific combo steering")
     ap.add_argument("--config", default="config/stage_e.yaml")
     ap.add_argument("--limit", type=int, default=None, help="use only the first N images (dry run)")
+    ap.add_argument("--decorrelate", choices=["none", "valence"], default=None,
+                    help="residualize non-valence appraisals against the valence axis (overrides config)")
     args = ap.parse_args()
-    run(args.config, limit_override=args.limit)
+    run(args.config, limit_override=args.limit, decorrelate_override=args.decorrelate)
 
 
 if __name__ == "__main__":
