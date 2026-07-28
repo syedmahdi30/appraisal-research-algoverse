@@ -31,3 +31,9 @@ appraisals:
 
 # Entanglement threshold: pairs with |cos| > this use the Gram-Schmidt fallback (E3).
 cos_flag_threshold: 0.6
+
+# Matched-norm single-vs-combo control: for each congruent arm (A1-A5), also steer each of its
+# two component directions rescaled to THAT combo's norm, so combo-vs-single differs only in
+# direction, not magnitude — the clean test that the COMBINATION (not a bigger nudge) creates the
+# specific emotion. Adds 10 arms (5 x 2); ~+67% forwards. Set false to skip.
+matched_norm_control: true

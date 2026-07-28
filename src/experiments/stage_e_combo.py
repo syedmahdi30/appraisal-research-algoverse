@@ -41,16 +41,19 @@ def _unit(v):
     return v / n if n > 0 else v
 
 
-def build_arm_vectors(dmu: dict, norms: dict, cos: dict, thr: float, seed: int):
+def build_arm_vectors(dmu: dict, norms: dict, cos: dict, thr: float, seed: int,
+                      matched_norm: bool = True):
     """Return {arm: np.float32[d]} steering vectors and per-arm metadata (E3 rule).
 
     Combo arms: sum the two SIGNED unit Δμ, rescale so the sum's norm equals the mean of the two
     component ‖Δμ‖. Entangled pairs (|cos|>thr) Gram-Schmidt the 2nd unit against the 1st first.
     Singles: the raw Δμ (natural scale, as Stage D). R: two orthogonal random units, scaled to the
-    mean congruent-combo norm. A1-raw: raw signed Δμ sum, unrescaled.
+    mean congruent-combo norm. A1-raw: raw signed Δμ sum, unrescaled. With `matched_norm`, also
+    emit per-congruent-arm single directions rescaled to that combo's norm (`{ARM}~{appraisal}`) —
+    the magnitude-controlled combo-vs-single specificity control.
     """
     vecs, meta = {}, {}
-    congruent_norms = []
+    congruent_norms, combo_norm = [], {}
     for name, spec in ((n, ARMS[n]) for n in arm_order() if n in ARMS):
         combo = spec["combo"]
         if len(combo) == 1:  # single appraisal -> raw Δμ (natural units)
@@ -68,8 +71,22 @@ def build_arm_vectors(dmu: dict, norms: dict, cos: dict, thr: float, seed: int):
         vecs[name] = (_unit(summed) * target_norm).astype(np.float32)
         meta[name] = {"rule": "sum_units_rescaled", "gram_schmidt": bool(gs),
                       "target_norm": float(target_norm)}
+        combo_norm[name] = float(target_norm)
         if name in CONGRUENT_ARMS:
             congruent_norms.append(target_norm)
+
+    # Matched-norm single controls: each congruent arm's two component directions, scaled to THAT
+    # combo's norm. combo-vs-matched-single then differs ONLY in direction, not magnitude — the
+    # clean test of whether the COMBINATION (not just a bigger nudge) creates the specific emotion.
+    if matched_norm:
+        for arm in CONGRUENT_ARMS:
+            if arm not in combo_norm:
+                continue
+            for a, s in ARMS[arm]["combo"]:
+                nm = f"{arm}~{a}"
+                vecs[nm] = (s * _unit(dmu[a]) * combo_norm[arm]).astype(np.float32)
+                meta[nm] = {"rule": "matched_norm_single", "parent": arm, "appraisal": a,
+                            "sign": int(s), "target_norm": combo_norm[arm], "gram_schmidt": False}
 
     ref_norm = float(np.mean(congruent_norms)) if congruent_norms else 1.0
     # R — two orthogonal random unit vectors, scaled to the mean congruent-combo norm.
@@ -105,6 +122,7 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
     n_images = limit_override or int(cfg.get("n_images", 30))
     seed = int(cfg.get("seed", 0))
     thr = float(cfg.get("cos_flag_threshold", 0.6))
+    matched_norm = bool(cfg.get("matched_norm_control", True))
 
     dpath = STAGE_E_DIR / "directions.npz"
     if not dpath.exists():
@@ -136,7 +154,7 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
               f"(scored by first sub-token): {list(multi)}")
     dev = next(bridge.parameters()).device
 
-    vecs, arm_meta = build_arm_vectors(dmu, norms, cos, thr, seed)
+    vecs, arm_meta = build_arm_vectors(dmu, norms, cos, thr, seed, matched_norm=matched_norm)
     scaled = {name: torch.tensor(v, dtype=torch.float32, device=dev) for name, v in vecs.items()}
 
     # Images: reproduce the Stage D selection (sample 150, seed 0) then take the first n_images,
