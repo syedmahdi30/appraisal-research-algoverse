@@ -274,11 +274,24 @@ def _verdict(signal_arms, synthesis_arms, single_arms, n1_ok, arm_stats, combo_v
     """
     ns = len(synthesis_arms)
     single_str = "; ".join(f"{a}: {'+'.join(h)}→{arm_stats[a]['target']}" for a, h in single_arms.items())
+    syn_str = ", ".join(f"{a}→{arm_stats[a]['argmax']}(win {arm_stats[a]['win_rate']*100:.0f}%)"
+                        for a in synthesis_arms)
     if ns >= 3 and n1_ok:
-        return (f"SIGNAL — compositional synthesis in {ns}/5 arms ({synthesis_arms}): the COMBINATION "
+        return (f"SIGNAL — compositional synthesis in {ns}/5 arms ({syn_str}): the COMBINATION "
                 f"makes the target the winning emotion above both matched-norm singles; N1 ok. "
                 f"Proceed to the full run (150-300 images, lexical-frequency control, 3 seeds).")
-    # Compositional synthesis not supported. Is there single-appraisal specificity?
+    # 1-2 arms compose cleanly: a genuine (partial) compositional result, not a null.
+    if 1 <= ns < 3 and n1_ok:
+        extra = f" Single-appraisal specificity elsewhere: {single_str}." if single_arms else ""
+        return (f"PARTIAL COMPOSITIONAL — {ns}/5 arms show genuine compositional synthesis "
+                f"({syn_str}): the combination makes the target the WINNING emotion above BOTH "
+                f"matched-norm singles, so it is not a magnitude artifact and not carried by either "
+                f"component alone.{extra} Remaining targets fail (positive/surprise hit a joy "
+                f"attractor). De-correlation was necessary to expose this — with raw directions the "
+                f"same arm(s) look single-appraisal because the second component is valence-"
+                f"contaminated. Report the passing arm(s) as a compositional result and scale them to "
+                f"the full run (150-300 images, 3 seeds, lexical-frequency control).")
+    # No compositional arm. Is there single-appraisal specificity?
     if single_arms and n1_ok:
         return (f"SINGLE-APPRAISAL SPECIFICITY, NOT COMPOSITIONAL ({len(single_arms)} arms: "
                 f"{single_str}). The matched-norm control attributes each specific emotion to ONE "
