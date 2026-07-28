@@ -29,10 +29,6 @@ from .common import git_hash, load_config, run_stamp, save_json
 from .stage_e_arms import APPRAISALS, ARMS, CONGRUENT_ARMS
 
 LP = [f"lp_{w}" for w in EMOTION_LABELS]
-# valence-linked emotion each congruent arm would move if only a valence axis (not specificity)
-# were active: +pleasant arms -> joy up, +unpleasant arms -> sadness up.
-VALENCE_PROXY = {"A1": "sadness", "A2": "sadness", "A3": "sadness",
-                 "A4": "joy", "A5": "joy"}
 
 
 def _delta_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -160,22 +156,35 @@ def run(config_path: str | None = None) -> dict:
                 combo_rank is not None and matched_ranks and combo_rank <= min(matched_ranks)
                 and combo_rank <= 2 and tgt not in matched_argmaxes)
 
-        # specificity: prefer the matched-norm basis; else fall back to the raw-single argmax test.
-        raw_spec = combo_rank is not None and combo_rank <= 2 and tgt not in single_argmaxes
-        spec = combo_beats_matched if combo_beats_matched is not None else raw_spec
+        # Compositional specificity (STRICT): the combination makes the target the WINNING emotion
+        # (argmax, not merely top-2 — a rank-2 target while a different emotion wins is not the
+        # combination "producing" the target, and would let control arms pass), AND the target
+        # beats both matched-norm singles. Falls back to the raw-single argmax test if no matched
+        # arms are present.
+        combo_argmax_is_target = arm_stats[arm]["argmax"] == tgt
+        if combo_beats_matched is not None:
+            spec = bool(combo_argmax_is_target and combo_beats_matched)
+            basis = "matched_norm"
+        else:
+            spec = bool(combo_argmax_is_target and tgt not in single_argmaxes)
+            basis = "raw_single_argmax"
+        # Single-appraisal specificity (the real positive here): a COMPONENT alone (matched norm if
+        # available) already makes the target its argmax — i.e. the target emotion is carried by one
+        # appraisal direction, not the combination.
+        src = matched if matched else singles
+        single_hit = sorted({c for c, _ in ARMS[arm]["combo"] if src.get(c, {}).get("argmax") == tgt})
         combo_vs_single[arm] = {
             "combo_target_rank": combo_rank, "combo_target_gain": combo_g,
-            "combo_argmax": arm_stats[arm]["argmax"], "singles": singles,
+            "combo_argmax": arm_stats[arm]["argmax"], "combo_argmax_is_target": combo_argmax_is_target,
+            "singles": singles,
             "min_single_target_rank": min(single_ranks) if single_ranks else None,
             "single_argmaxes": sorted(single_argmaxes),
             "combo_beats_single_gain": (combo_g is not None and best_single_g is not None
                                         and combo_g > best_single_g),
-            "combo_sharpens_rank": (combo_rank is not None and single_ranks
-                                    and combo_rank <= min(single_ranks) and combo_rank <= 2),
             "matched_norm_singles": matched or None,
             "combo_beats_matched_norm": combo_beats_matched,
-            "specificity_from_combo": spec,
-            "specificity_basis": "matched_norm" if combo_beats_matched is not None else "raw_single_argmax",
+            "specificity_from_combo": spec, "specificity_basis": basis,
+            "single_appraisal_hit": single_hit or None,
         }
 
     # N1 must not raise anger; R (random) target-agnostic gains as a null ceiling
@@ -191,8 +200,10 @@ def run(config_path: str | None = None) -> dict:
                 and (s.get("rank_at_top") or 99) <= 2 and s.get("win_rate", 0) >= 0.15)
 
     signal_arms = [a for a in CONGRUENT_ARMS if arm_passes(a)]
-    sharpen_arms = [a for a in CONGRUENT_ARMS if combo_vs_single.get(a, {}).get("specificity_from_combo")]
-    verdict = _verdict(signal_arms, sharpen_arms, n1_ok, arm_stats, combo_vs_single, mean_delta, betas, top_b)
+    synthesis_arms = [a for a in CONGRUENT_ARMS if combo_vs_single.get(a, {}).get("specificity_from_combo")]
+    single_arms = {a: combo_vs_single[a]["single_appraisal_hit"] for a in CONGRUENT_ARMS
+                   if combo_vs_single.get(a, {}).get("single_appraisal_hit")}
+    verdict = _verdict(signal_arms, synthesis_arms, single_arms, n1_ok, arm_stats, combo_vs_single, top_b)
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "betas": betas, "top_beta": top_b,
@@ -201,7 +212,8 @@ def run(config_path: str | None = None) -> dict:
         "combo_vs_single": combo_vs_single,
         "n1_anger_at_top": n1_anger_top, "n1_ok": n1_ok,
         "signal_arms": signal_arms, "n_signal_arms": len(signal_arms),
-        "sharpen_arms": sharpen_arms, "mean_delta_logprob": mean_delta, "verdict": verdict,
+        "synthesis_arms": synthesis_arms, "single_appraisal_arms": single_arms,
+        "mean_delta_logprob": mean_delta, "verdict": verdict,
     }
     save_json(metrics, STAGE_E_DIR / "combo_analysis.json")
     _plot(mean_delta, arm_stats, betas)
@@ -235,45 +247,52 @@ def run(config_path: str | None = None) -> dict:
 
     basis = "matched-norm" if has_matched else "raw-single argmax (magnitude-confounded — add "\
             "matched_norm_control for the clean test)"
+    single_str = ", ".join(f"{a}:{'+'.join(h)}→{arm_stats[a]['target']}" for a, h in single_arms.items())
     print(f"\n  N1 anger Δ@+{top_b} = {n1_anger_top:+.3f} ({'ok' if n1_ok else 'RAISES anger'})")
-    print(f"  signal arms (rank≤2, monotone, win≥15%): {len(signal_arms)}/5 {signal_arms}")
-    print(f"  '*' = combination creates the specificity [basis: {basis}]: {sharpen_arms}")
+    print(f"  signal arms (target rank≤2, monotone, win≥15%): {len(signal_arms)}/5 {signal_arms}")
+    print(f"  COMPOSITIONAL synthesis (target is combo argmax AND beats matched singles) "
+          f"[basis: {basis}]: {synthesis_arms or 'NONE'}")
+    print(f"  SINGLE-APPRAISAL specificity (one component alone yields the target): "
+          f"{single_str or 'none'}")
     print(f"\n  VERDICT: {verdict}")
     print(f"  figure -> {FIGURES_DIR/'stage_e_combo_pilot.png'}   "
           f"metrics -> {STAGE_E_DIR/'combo_analysis.json'}")
     return metrics
 
 
-def _verdict(signal_arms, sharpen_arms, n1_ok, arm_stats, combo_vs_single, mean_delta, betas, top_b) -> str:
-    n, hits = len(signal_arms), ", ".join(
-        f"{a}→{arm_stats[a]['argmax']}(win {arm_stats[a]['win_rate']*100:.0f}%)" for a in signal_arms)
-    basis = "matched-norm" if any(combo_vs_single.get(a, {}).get("specificity_basis") == "matched_norm"
-                                  for a in sharpen_arms) else "raw-single argmax"
-    sharp = (f" Combination creates the specificity in {sharpen_arms} (target top-2, argmax of "
-             f"neither single; basis: {basis}).") if sharpen_arms else (
-             " But no arm's target is top-2 in the combo while absent from both singles — the effect "
-             "may ride the dominant valence component (add matched_norm_control to settle it).")
-    if n >= 3 and n1_ok:
-        return (f"SIGNAL ({n}/5 congruent arms: target is a top-2 gainer, monotone, win-rate≥15% — "
-                f"{hits}; N1 does not raise anger).{sharp} Proceed to the full run (150-300 images, "
-                f"lexical-frequency control, 3 seeds).")
-    if n >= 1 and n1_ok:
-        return (f"PARTIAL-POSITIVE ({n}/5 congruent arms show clean specific-emotion steering — "
-                f"{hits}; N1 ok).{sharp} Positive/surprise arms flat. This is specific-emotion "
-                f"synthesis for some appraisals, not a valence-only null — report it, and for the "
-                f"full run add lexical-frequency control + inspect whether the win rides the "
-                f"valence component (matched-norm single vs combo).")
-    # No arm makes its target a top-2 monotone gainer: valence-only or null.
-    val_moves = sum(1 for a, proxy in VALENCE_PROXY.items()
-                    if all(mean_delta.get(a, {}).get(b, {}).get(proxy) is not None for b in betas)
-                    and abs(np.polyfit(betas, [mean_delta[a][b][proxy] for b in betas], 1)[0]) > 0.02)
-    if val_moves >= 3:
-        return ("PARTIAL (valence-linked emotions move but no specific target is a top-2 gainer) — "
-                "retry β=±4 and inspect A1-raw; if still flat, demote to 'shared valence axis, no "
-                "specific-emotion synthesis' and pivot the headline.")
-    return ("NULL (no arm elevates its specific target above the other emotions) — first re-verify "
-            "the Stage D pleasantness slope on these 30 images as a sanity gate; if it holds, "
-            "report the combo-null honestly and stop Stage E.")
+def _verdict(signal_arms, synthesis_arms, single_arms, n1_ok, arm_stats, combo_vs_single, top_b) -> str:
+    """Three-way, matched-norm-aware verdict.
+
+    COMPOSITIONAL = the combination makes the target the winning emotion above both matched-norm
+    singles (the strong claim). SINGLE-APPRAISAL = the target is produced by one component alone
+    (matched-norm control attributes it there) — a real but weaker specificity claim that extends
+    Stage D's valence result to specific emotions without supporting compositional synthesis.
+    """
+    ns = len(synthesis_arms)
+    single_str = "; ".join(f"{a}: {'+'.join(h)}→{arm_stats[a]['target']}" for a, h in single_arms.items())
+    if ns >= 3 and n1_ok:
+        return (f"SIGNAL — compositional synthesis in {ns}/5 arms ({synthesis_arms}): the COMBINATION "
+                f"makes the target the winning emotion above both matched-norm singles; N1 ok. "
+                f"Proceed to the full run (150-300 images, lexical-frequency control, 3 seeds).")
+    # Compositional synthesis not supported. Is there single-appraisal specificity?
+    if single_arms and n1_ok:
+        return (f"SINGLE-APPRAISAL SPECIFICITY, NOT COMPOSITIONAL ({len(single_arms)} arms: "
+                f"{single_str}). The matched-norm control attributes each specific emotion to ONE "
+                f"appraisal direction, not the combination (combo beats matched singles in "
+                f"{ns}/5). This extends Stage D from valence to specific NEGATIVE emotions "
+                f"(a real positive) but does NOT support compositional emotion synthesis — likely "
+                f"bottlenecked by appraisal entanglement (self_responsblt≈valence; 7/15 |cos|>0.6). "
+                f"Honest headline: individual appraisals carry cross-modal emotion specificity; "
+                f"combining them does not compose into finer emotions (guilt/pride/surprise fail). "
+                f"Next: build de-correlated directions (partial-out valence / orthogonalized probes) "
+                f"before claiming any compositionality.")
+    if signal_arms and n1_ok:
+        return (f"WEAK/AMBIGUOUS — {len(signal_arms)} arms move a specific emotion monotonically "
+                f"({signal_arms}) but neither the combination nor a clean single component owns the "
+                f"target under the matched-norm control. Treat as inconclusive; de-entangle directions.")
+    return ("NULL — no arm elevates its specific target above the other emotions. Re-verify the "
+            "Stage D pleasantness slope on these 30 images as a sanity gate; if it holds, report "
+            "the combo-null honestly.")
 
 
 def _plot(mean_delta, arm_stats, betas):
