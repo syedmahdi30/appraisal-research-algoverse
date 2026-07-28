@@ -37,3 +37,11 @@ cos_flag_threshold: 0.6
 # direction, not magnitude — the clean test that the COMBINATION (not a bigger nudge) creates the
 # specific emotion. Adds 10 arms (5 x 2); ~+67% forwards. Set false to skip.
 matched_norm_control: true
+
+# De-correlation of the appraisal directions before building combos:
+#   none    — raw Δμ (the pilot default; appraisals are entangled, self_responsblt ~ valence).
+#   valence — residualize every NON-valence appraisal against the bipolar valence axis
+#             unit(pleasant) - unit(unpleasant), so a combo = valence + a valence-FREE appraisal.
+#             This is the fair test of compositional emotion synthesis. Outputs are written with a
+#             `_valence` suffix so they sit beside the raw run. CLI --decorrelate overrides this.
+decorrelate: none

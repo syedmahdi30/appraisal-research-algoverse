@@ -55,13 +55,15 @@ def _single_arm_for(appraisal: str) -> str:
     raise KeyError(appraisal)
 
 
-def run(config_path: str | None = None) -> dict:
+def run(config_path: str | None = None, decorrelate: str = "none") -> dict:
     ensure_dirs()
-    pq = STAGE_E_DIR / "combo_pilot.parquet"
+    suf = "" if decorrelate == "none" else f"_{decorrelate}"
+    pq = STAGE_E_DIR / f"combo_pilot{suf}.parquet"
     if not pq.exists():
-        raise FileNotFoundError(f"{pq} missing — run stage_e_combo first.")
+        raise FileNotFoundError(f"{pq} missing — run stage_e_combo"
+                                + (f" --decorrelate {decorrelate}" if suf else "") + " first.")
     df = pd.read_parquet(pq)
-    meta = load_config(STAGE_E_DIR / "combo_pilot_metrics.json")
+    meta = load_config(STAGE_E_DIR / f"combo_pilot_metrics{suf}.json")
     targets = meta.get("arm_targets", {})
     arm_meta = meta.get("arm_meta", {})
     # matched-norm single controls, if the run produced them: {parent_arm: {appraisal: arm_name}}
@@ -211,14 +213,16 @@ def run(config_path: str | None = None) -> dict:
         "arm_targets": targets, "arm_stats": arm_stats,
         "combo_vs_single": combo_vs_single,
         "n1_anger_at_top": n1_anger_top, "n1_ok": n1_ok,
+        "decorrelate": meta.get("decorrelate", decorrelate),
         "signal_arms": signal_arms, "n_signal_arms": len(signal_arms),
         "synthesis_arms": synthesis_arms, "single_appraisal_arms": single_arms,
         "mean_delta_logprob": mean_delta, "verdict": verdict,
     }
-    save_json(metrics, STAGE_E_DIR / "combo_analysis.json")
-    _plot(mean_delta, arm_stats, betas)
+    save_json(metrics, STAGE_E_DIR / f"combo_analysis{suf}.json")
+    _plot(mean_delta, arm_stats, betas, suf)
 
-    print(f"\nStage E analysis — {metrics['n_images']} images, β {betas}.\n")
+    print(f"\nStage E analysis [decorrelate={metrics['decorrelate']}] — "
+          f"{metrics['n_images']} images, β {betas}.\n")
     print(f"{'arm':5s} {'target':9s} {'slope':>7s} {'ρ':>5s} {'rank':>4s} {'win%':>5s}  "
           f"{'combo argmax':>12s}   singles → argmax (target-rank)")
     for arm in CONGRUENT_ARMS + ("N1", "N2"):
@@ -255,8 +259,8 @@ def run(config_path: str | None = None) -> dict:
     print(f"  SINGLE-APPRAISAL specificity (one component alone yields the target): "
           f"{single_str or 'none'}")
     print(f"\n  VERDICT: {verdict}")
-    print(f"  figure -> {FIGURES_DIR/'stage_e_combo_pilot.png'}   "
-          f"metrics -> {STAGE_E_DIR/'combo_analysis.json'}")
+    print(f"  figure -> {FIGURES_DIR/f'stage_e_combo_pilot{suf}.png'}   "
+          f"metrics -> {STAGE_E_DIR/f'combo_analysis{suf}.json'}")
     return metrics
 
 
@@ -295,7 +299,7 @@ def _verdict(signal_arms, synthesis_arms, single_arms, n1_ok, arm_stats, combo_v
             "the combo-null honestly.")
 
 
-def _plot(mean_delta, arm_stats, betas):
+def _plot(mean_delta, arm_stats, betas, suf=""):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -320,18 +324,21 @@ def _plot(mean_delta, arm_stats, betas):
         ax.set_title(f"{arm}: →{tgt}\nslope {arm_stats[arm]['slope']:+.3f}")
         ax.set_xlabel("β"); ax.legend(fontsize=6)
     axes[0][0].set_ylabel("Δ log-prob(target) vs β=0")
-    fig.suptitle("Stage E — appraisal-specific emotion steering (combo vs components vs random)")
+    fig.suptitle(f"Stage E — appraisal-specific emotion steering (combo vs components vs random)"
+                 f"{'  [decorrelated]' if suf else ''}")
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    fig.savefig(FIGURES_DIR / "stage_e_combo_pilot.png", dpi=130)
+    fig.savefig(FIGURES_DIR / f"stage_e_combo_pilot{suf}.png", dpi=130)
     plt.close(fig)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage E step 4 — analysis + decision D1")
     ap.add_argument("--config", default="config/stage_e.yaml")
-    ap.parse_args()
-    run()
+    ap.add_argument("--decorrelate", choices=["none", "valence"], default="none",
+                    help="analyze the matching variant produced by stage_e_combo --decorrelate")
+    args = ap.parse_args()
+    run(decorrelate=args.decorrelate)
 
 
 if __name__ == "__main__":
