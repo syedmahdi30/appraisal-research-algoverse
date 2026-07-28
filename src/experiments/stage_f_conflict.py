@@ -31,8 +31,8 @@ from tqdm import tqdm
 from ..bridge.boot import boot_gemma
 from ..bridge.hooks import make_steer_hook, resid_post_name
 from ..bridge.multimodal import build_image_inputs
-from ..data.conflict_contexts import (STRONG_CONTEXT, TEXT_CODE, context_prompt,
-                                      sample_contexts)
+from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
+                                      STRONG_CONTEXT, TEXT_CODE, context_prompt, sample_contexts)
 from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_E_DIR, STAGE_F_DIR, ensure_dirs
@@ -108,14 +108,23 @@ def run_base(config_path: str, limit_override: int | None = None) -> dict:
     tap = cfg.get("tap", "hook_attn_out")
     seed = int(cfg.get("seed", 0))
     n_images = limit_override or int(cfg.get("n_images", 40))
+    full_bank = bool(cfg.get("full_context_bank", False))
 
     probes = load_probes(STAGE_A_DIR_probes())
     pi = probes.index("pleasantness")
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
+    # conditions: (polarity, ctx_id, sentence). Full run sweeps the whole bank (averaged in analysis);
+    # pilot uses one sampled context per polarity.
     ctx = sample_contexts(seed)
-    conditions = [("none", None), ("positive", ctx["positive"]),
-                  ("negative", ctx["negative"]), ("neutral", ctx["neutral"])]
+    if full_bank:
+        conditions = [("none", "none", None)]
+        conditions += [("positive", f"p{i}", c) for i, c in enumerate(POSITIVE_CONTEXTS)]
+        conditions += [("negative", f"n{i}", c) for i, c in enumerate(NEGATIVE_CONTEXTS)]
+        conditions += [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
+    else:
+        conditions = [("none", "none", None), ("positive", "p", ctx["positive"]),
+                      ("negative", "n", ctx["negative"]), ("neutral", "z", ctx["neutral"])]
 
     sel = select_extreme_images(cfg.get("split", "test"), n_images)
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))
@@ -130,12 +139,12 @@ def run_base(config_path: str, limit_override: int | None = None) -> dict:
         except (FileNotFoundError, OSError):
             n_skip += 1
             continue
-        for cond, sentence in conditions:
+        for cond, ctx_id, sentence in conditions:
             inputs = build_image_inputs(bridge, img, prompt=context_prompt(sentence))
             probe, val, lp = _probe_and_logits(
                 bridge, inputs["input_ids"], inputs["pixel_values"], name, coef, inter, tok_ids)
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
-                         "image_group": r["image_group"], "condition": cond,
+                         "image_group": r["image_group"], "condition": cond, "context_id": ctx_id,
                          "context": sentence or "", "text_code": TEXT_CODE[cond],
                          "probe_readout": probe, "valence": val,
                          **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
@@ -145,15 +154,17 @@ def run_base(config_path: str, limit_override: int | None = None) -> dict:
     metrics = {
         "run": run_stamp(), "git": git_hash(), "layer": layer, "tap": tap, "seed": seed,
         "n_images": int(sel.shape[0] - n_skip), "n_skipped": n_skip,
-        "n_forwards": int(len(rows)), "contexts": ctx,
+        "n_forwards": int(len(rows)), "full_context_bank": full_bank, "contexts": ctx,
+        "n_conditions": len(conditions),
         "text_code": TEXT_CODE, "tokenization_multi_token": multi,
         "image_ids": [{"image_path": r["image_path"], "valence": float(r["valence"]),
                        "group": r["image_group"]} for _, r in sel.iterrows()],
     }
     save_json(metrics, STAGE_F_DIR / "conflict_metrics.json")
-    print(f"\nStage F base — {metrics['n_images']} images x {len(conditions)} conditions "
-          f"= {len(rows)} forwards ({n_skip} skipped).")
-    print(f"  contexts: +[{ctx['positive']}]  -[{ctx['negative']}]  0[{ctx['neutral']}]")
+    print(f"\nStage F base [full_bank={full_bank}] — {metrics['n_images']} images x "
+          f"{len(conditions)} conditions = {len(rows)} forwards ({n_skip} skipped).")
+    if not full_bank:
+        print(f"  contexts: +[{ctx['positive']}]  -[{ctx['negative']}]  0[{ctx['neutral']}]")
     if multi:
         print(f"  WARNING multi-token labels (first sub-token scored): {list(multi)}")
     print(f"  data -> {STAGE_F_DIR/'conflict_pilot.parquet'}")

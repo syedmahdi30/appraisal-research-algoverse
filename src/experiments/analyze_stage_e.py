@@ -95,6 +95,29 @@ def run(config_path: str | None = None, decorrelate: str = "none") -> dict:
         d = mean_delta.get(arm, {}).get(b, {})
         return [(w, float(v)) for w, v in sorted(d.items(), key=lambda kv: kv[1], reverse=True)[:k]]
 
+    # Lexical-frequency control: a more frequent / higher-prior emotion token can gain more Δ
+    # log-prob under ANY perturbation. Baseline (β=0) mean log-prob per emotion is the frequency
+    # proxy; we regress the 13 Δ log-probs on it and keep the RESIDUAL, so a target that still ranks
+    # high after removing the frequency trend is not a frequency artifact. (The random arm R is the
+    # backup null.)
+    base_lp = {w: float(df[df["arm"] == "_base"][f"lp_{w}"].mean()) for w in EMOTION_LABELS}
+    base_vec = np.array([base_lp[w] for w in EMOTION_LABELS])
+
+    def resid_map(arm, b):
+        d = mean_delta.get(arm, {}).get(b, {})
+        if not d:
+            return {}
+        y = np.array([d[w] for w in EMOTION_LABELS])
+        s, i = np.polyfit(base_vec, y, 1)
+        r = y - (s * base_vec + i)
+        return {w: float(r[k]) for k, w in enumerate(EMOTION_LABELS)}
+
+    def resid_rank(arm, emo, b):
+        r = resid_map(arm, b)
+        if emo not in r:
+            return None
+        return 1 + sum(1 for w in EMOTION_LABELS if r[w] > r[emo])
+
     # per-arm target stats
     arm_stats = {}
     for arm in delta["arm"].unique():
@@ -117,7 +140,9 @@ def run(config_path: str | None = None, decorrelate: str = "none") -> dict:
         arm_stats[arm] = {"target": tgt, "slope": slope, "spearman": rho,
                           "gain_at_top": gain(arm, tgt, top_b), "rank_at_top": rank_of(arm, tgt, top_b),
                           "argmax": t3[0][0] if t3 else None, "top3_at_top": t3,
-                          "win_rate": win_rate, "n_images": int(len(cell))}
+                          "win_rate": win_rate, "n_images": int(len(cell)),
+                          "freq_resid_at_top": resid_map(arm, top_b).get(tgt),
+                          "freq_resid_rank_at_top": resid_rank(arm, tgt, top_b)}
 
     # Combination vs its two single components — RANK-based (magnitude-fair): a single arm steers
     # with the full raw Δμ while the combo is rescaled to the mean component norm, so comparing raw
@@ -223,7 +248,7 @@ def run(config_path: str | None = None, decorrelate: str = "none") -> dict:
 
     print(f"\nStage E analysis [decorrelate={metrics['decorrelate']}] — "
           f"{metrics['n_images']} images, β {betas}.\n")
-    print(f"{'arm':5s} {'target':9s} {'slope':>7s} {'ρ':>5s} {'rank':>4s} {'win%':>5s}  "
+    print(f"{'arm':5s} {'target':9s} {'slope':>7s} {'ρ':>5s} {'rank':>4s} {'fr':>3s} {'win%':>5s}  "
           f"{'combo argmax':>12s}   singles → argmax (target-rank)")
     for arm in CONGRUENT_ARMS + ("N1", "N2"):
         s = arm_stats.get(arm, {})
@@ -234,8 +259,10 @@ def run(config_path: str | None = None, decorrelate: str = "none") -> dict:
         sstr = ", ".join(f"{c[:5]}→{sing[c]['argmax']}(r{sing[c]['target_rank']})" for c in sing)
         star = " *" if cvs.get("specificity_from_combo") else ""
         print(f"{arm:5s} {s['target']:9s} {s['slope']:+7.3f} {s['spearman']:+5.2f} "
-              f"{(s['rank_at_top'] or 0):>4d} {s['win_rate']*100:>4.0f}%  "
-              f"{str(s.get('argmax')):>12s}{star}   {sstr}")
+              f"{(s['rank_at_top'] or 0):>4d} {(s.get('freq_resid_rank_at_top') or 0):>3d} "
+              f"{s['win_rate']*100:>4.0f}%  {str(s.get('argmax')):>12s}{star}   {sstr}")
+    print("  (rank = target rank among 13 by Δlogprob@+β; fr = same after removing the baseline-"
+          "frequency trend)")
 
     has_matched = any(combo_vs_single.get(a, {}).get("matched_norm_singles") for a in CONGRUENT_ARMS)
     if has_matched:

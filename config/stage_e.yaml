@@ -17,8 +17,8 @@ betas: [-3, -2, -1, 1, 2, 3]
 # crowd-enVENT train examples used to estimate the six text-derived Δμ directions.
 n_dir: 1200
 
-# EMOTIC test images to steer (pilot: first 30 of the Stage D 150, seed 0).
-n_images: 30
+# EMOTIC test images to steer. Full run: 150 (matches Stage D); pilot used --limit 30.
+n_images: 150
 
 # All six appraisals get a Δμ direction (E1). Combos/arms are defined in stage_e_combo.py.
 appraisals:
