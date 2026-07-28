@@ -67,6 +67,12 @@ def run(config_path: str | None = None) -> dict:
     df = pd.read_parquet(pq)
     meta = load_config(STAGE_E_DIR / "combo_pilot_metrics.json")
     targets = meta.get("arm_targets", {})
+    arm_meta = meta.get("arm_meta", {})
+    # matched-norm single controls, if the run produced them: {parent_arm: {appraisal: arm_name}}
+    matched_map: dict = {}
+    for nm, mm in arm_meta.items():
+        if mm.get("rule") == "matched_norm_single":
+            matched_map.setdefault(mm["parent"], {})[mm["appraisal"]] = nm
     betas = sorted(int(b) for b in df.loc[df["arm"] != "_base", "beta"].unique())
     top_b = max(betas)
 
@@ -136,6 +142,27 @@ def run(config_path: str | None = None) -> dict:
         combo_g = gain(arm, tgt, top_b)
         best_single_g = max((v["target_gain"] for v in singles.values()
                              if v["target_gain"] is not None), default=None)
+
+        # matched-norm control (same norm as the combo, direction only differs): the definitive
+        # magnitude-controlled test when the run produced the matched arms.
+        matched = {}
+        for c, _ in ARMS[arm]["combo"]:
+            mnm = matched_map.get(arm, {}).get(c)
+            if mnm and mnm in mean_delta:
+                matched[c] = {"matched_arm": mnm, "target_gain": gain(mnm, tgt, top_b),
+                              "target_rank": rank_of(mnm, tgt, top_b),
+                              "argmax": (topk(mnm, top_b, 1)[0][0] if mnm in mean_delta else None)}
+        matched_ranks = [v["target_rank"] for v in matched.values() if v["target_rank"] is not None]
+        matched_argmaxes = {v["argmax"] for v in matched.values() if v["argmax"]}
+        combo_beats_matched = None
+        if matched:
+            combo_beats_matched = bool(
+                combo_rank is not None and matched_ranks and combo_rank <= min(matched_ranks)
+                and combo_rank <= 2 and tgt not in matched_argmaxes)
+
+        # specificity: prefer the matched-norm basis; else fall back to the raw-single argmax test.
+        raw_spec = combo_rank is not None and combo_rank <= 2 and tgt not in single_argmaxes
+        spec = combo_beats_matched if combo_beats_matched is not None else raw_spec
         combo_vs_single[arm] = {
             "combo_target_rank": combo_rank, "combo_target_gain": combo_g,
             "combo_argmax": arm_stats[arm]["argmax"], "singles": singles,
@@ -145,9 +172,10 @@ def run(config_path: str | None = None) -> dict:
                                         and combo_g > best_single_g),
             "combo_sharpens_rank": (combo_rank is not None and single_ranks
                                     and combo_rank <= min(single_ranks) and combo_rank <= 2),
-            # the clean claim: target is a top-2 combo gainer that NEITHER single makes its argmax
-            "specificity_from_combo": (combo_rank is not None and combo_rank <= 2
-                                       and tgt not in single_argmaxes),
+            "matched_norm_singles": matched or None,
+            "combo_beats_matched_norm": combo_beats_matched,
+            "specificity_from_combo": spec,
+            "specificity_basis": "matched_norm" if combo_beats_matched is not None else "raw_single_argmax",
         }
 
     # N1 must not raise anger; R (random) target-agnostic gains as a null ceiling
@@ -192,10 +220,24 @@ def run(config_path: str | None = None) -> dict:
         print(f"{arm:5s} {s['target']:9s} {s['slope']:+7.3f} {s['spearman']:+5.2f} "
               f"{(s['rank_at_top'] or 0):>4d} {s['win_rate']*100:>4.0f}%  "
               f"{str(s.get('argmax')):>12s}{star}   {sstr}")
+
+    has_matched = any(combo_vs_single.get(a, {}).get("matched_norm_singles") for a in CONGRUENT_ARMS)
+    if has_matched:
+        print("\n  matched-norm control (single at the COMBO's norm — direction-only difference):")
+        for arm in CONGRUENT_ARMS:
+            cvs = combo_vs_single.get(arm, {})
+            mm = cvs.get("matched_norm_singles")
+            if not mm:
+                continue
+            mstr = ", ".join(f"{c[:5]}→{v['argmax']}(r{v['target_rank']})" for c, v in mm.items())
+            print(f"    {arm}: combo→{cvs['combo_argmax']}(r{cvs['combo_target_rank']}) vs "
+                  f"matched {mstr}  -> combo beats matched: {cvs['combo_beats_matched_norm']}")
+
+    basis = "matched-norm" if has_matched else "raw-single argmax (magnitude-confounded — add "\
+            "matched_norm_control for the clean test)"
     print(f"\n  N1 anger Δ@+{top_b} = {n1_anger_top:+.3f} ({'ok' if n1_ok else 'RAISES anger'})")
     print(f"  signal arms (rank≤2, monotone, win≥15%): {len(signal_arms)}/5 {signal_arms}")
-    print(f"  '*' = specificity from combo (target top-2 in combo, argmax of NEITHER single): "
-          f"{sharpen_arms}")
+    print(f"  '*' = combination creates the specificity [basis: {basis}]: {sharpen_arms}")
     print(f"\n  VERDICT: {verdict}")
     print(f"  figure -> {FIGURES_DIR/'stage_e_combo_pilot.png'}   "
           f"metrics -> {STAGE_E_DIR/'combo_analysis.json'}")
@@ -205,9 +247,12 @@ def run(config_path: str | None = None) -> dict:
 def _verdict(signal_arms, sharpen_arms, n1_ok, arm_stats, combo_vs_single, mean_delta, betas, top_b) -> str:
     n, hits = len(signal_arms), ", ".join(
         f"{a}→{arm_stats[a]['argmax']}(win {arm_stats[a]['win_rate']*100:.0f}%)" for a in signal_arms)
+    basis = "matched-norm" if any(combo_vs_single.get(a, {}).get("specificity_basis") == "matched_norm"
+                                  for a in sharpen_arms) else "raw-single argmax"
     sharp = (f" Combination creates the specificity in {sharpen_arms} (target top-2, argmax of "
-             f"neither single).") if sharpen_arms else (" But no arm's target is top-2 in the combo "
-             "while absent from both singles — the effect may ride the dominant valence component.")
+             f"neither single; basis: {basis}).") if sharpen_arms else (
+             " But no arm's target is top-2 in the combo while absent from both singles — the effect "
+             "may ride the dominant valence component (add matched_norm_control to settle it).")
     if n >= 3 and n1_ok:
         return (f"SIGNAL ({n}/5 congruent arms: target is a top-2 gainer, monotone, win-rate≥15% — "
                 f"{hits}; N1 does not raise anger).{sharp} Proceed to the full run (150-300 images, "
