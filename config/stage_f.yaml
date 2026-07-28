@@ -13,7 +13,12 @@ tap: hook_attn_out
 
 # Base pass: pick the N/2 highest- and N/2 lowest-EMOTIC-valence test images (true extremes,
 # derived directly from the EMOTIC test parquet — self-contained, no Stage C artifact needed).
-n_images: 40
+# Full run: 150 (75 high + 75 low); pilot used --limit 40.
+n_images: 150
+
+# Full run: sweep the whole 6+6+2 context bank per image (averaged over the bank in analysis) so
+# the negativity-asymmetry claim is robust to context wording. Pilot used one context per polarity.
+full_context_bank: true
 
 # Arbitration pass (--arbitrate): steer pleasantness Δμ at resid_post L18 on the incongruent
 # cells and read BEHAVIORAL valence (the probe read-out at attn_out L18 is UPSTREAM of the
