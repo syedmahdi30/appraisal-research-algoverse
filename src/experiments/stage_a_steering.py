@@ -48,6 +48,20 @@ def valence_score(logits_last, tok_ids) -> float:
     return sum(p[w] for w in POSITIVE) - sum(p[w] for w in NEGATIVE)
 
 
+def emotion_logprobs(logits_last, tok_ids) -> dict[str, float]:
+    """Closed-vocab log-probs for all 13 emotion labels at the last token.
+
+    log-softmax over the SAME restricted 13-label set that `valence_score` softmaxes over,
+    so the per-emotion read-out and the valence read-out are the same distribution viewed two
+    ways (Stage E). Δ log-prob vs the β=0 baseline is thus measured within the closed set;
+    "target is the top gainer among the 13" is well-posed. (A full-vocab normalizer would
+    mix in the ~256k non-label vocabulary and is not comparable to the project's valence.)
+    """
+    idx = torch.tensor([tok_ids[w] for w in EMOTION_LABELS], device=logits_last.device)
+    logp = torch.log_softmax(logits_last[idx].float(), dim=-1)
+    return {w: float(logp[i]) for i, w in enumerate(EMOTION_LABELS)}
+
+
 def run(config_path: str, limit_override: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()

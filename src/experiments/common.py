@@ -56,6 +56,26 @@ def run_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def git_hash() -> str | None:
+    """Short git commit hash of the working tree, or None if unavailable.
+
+    Persisted into each stage's metrics.json so a run's numbers are pinned to a commit
+    (analysis-rules: record the git state used for each run).
+    """
+    import subprocess
+
+    try:
+        from ..paths import ROOT
+
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return out.stdout.strip() or None if out.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def _json_default(o):
     if isinstance(o, (np.floating, np.integer)):
         return o.item()
