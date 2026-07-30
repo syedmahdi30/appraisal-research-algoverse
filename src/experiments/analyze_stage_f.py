@@ -48,8 +48,37 @@ def _std_ols(y, cols: dict) -> dict:
 def _dominance(y, df) -> dict:
     b = _std_ols(y, {"image": df["image_valence"].to_numpy(), "text": df["text_code"].to_numpy()})
     ratio = abs(b["text"]) / abs(b["image"]) if b["image"] != 0 else float("inf")
-    lead = "text-led" if ratio > 1.25 else "image-led" if ratio < 0.8 else "mixed"
+    # 0.8-1.25 = the two cues contribute comparably (the shared-representation reading);
+    # outside that band one modality clearly leads.
+    lead = "text-led" if ratio > 1.25 else "image-led" if ratio < 0.8 else "balanced/integrated"
     return {"beta_img": b["image"], "beta_txt": b["text"], "dominance_ratio": ratio, "lead": lead}
+
+
+def _condition_breakdown(df) -> dict:
+    """RAW per-(image group × condition) means for both read-outs, with per-context_id detail.
+
+    Diagnoses the 'vs no-context' anomaly (e.g. a neutral context appearing to raise valence): shows
+    whether it is the `none` baseline that is odd vs `neutral`, whether it appears in the internal
+    probe read-out or only behavioral valence, and whether one specific context drives it.
+    """
+    out = {"by_condition": {}, "by_context_id": {}}
+    for grp in ("positive", "negative"):
+        g = df[df["image_group"] == grp]
+        for cond in ("none", "neutral", "positive", "negative"):
+            cell = g[g["condition"] == cond]
+            if len(cell):
+                out["by_condition"][f"{grp}/{cond}"] = {
+                    "n": int(len(cell)), "valence": float(cell["valence"].mean()),
+                    "probe": float(cell["probe_readout"].mean())}
+    if "context_id" in df.columns:
+        for grp in ("positive", "negative"):
+            g = df[df["image_group"] == grp]
+            for cid, cell in g.groupby("context_id"):
+                out["by_context_id"][f"{grp}/{cid}"] = {
+                    "n": int(len(cell)), "valence": float(cell["valence"].mean()),
+                    "probe": float(cell["probe_readout"].mean()),
+                    "context": str(cell["context"].iloc[0])}
+    return out
 
 
 def _cell_means(df, value):
@@ -106,10 +135,13 @@ def run(config_path: str | None = None) -> dict:
         ctx_effect[grp] = {c: float(g[g["condition"] == c]["valence"].mean() - base)
                            for c in ("positive", "negative", "neutral")}
 
+    breakdown = _condition_breakdown(df)
+
     metrics = {
         "run": run_stamp(), "git": git_hash(), "n_rows": int(len(df)),
         "n_images": int(df["image_path"].nunique()),
         "dominance": dom, "cell_means": cells, "context_effect_vs_none": ctx_effect,
+        "condition_breakdown": breakdown,
     }
 
     arb_pq = STAGE_F_DIR / "arbitration_pilot.parquet"
@@ -135,6 +167,14 @@ def run(config_path: str | None = None) -> dict:
     for grp, e in ctx_effect.items():
         print(f"    {grp:8s} img: +ctx {e['positive']:+.3f}  -ctx {e['negative']:+.3f}  "
               f"0ctx {e['neutral']:+.3f}")
+    print("\n  RAW per-condition means (diagnose the vs-none anomaly; is `none` or `neutral` odd?):")
+    print(f"    {'cell':18s} {'n':>4s} {'valence':>9s} {'probe':>9s}")
+    for k, v in breakdown["by_condition"].items():
+        print(f"    {k:18s} {v['n']:>4d} {v['valence']:>+9.3f} {v['probe']:>+9.3f}")
+    if breakdown["by_context_id"]:
+        print("\n  per-context detail (spot a single outlier context):")
+        for k, v in sorted(breakdown["by_context_id"].items()):
+            print(f"    {k:14s} val {v['valence']:+.3f}  probe {v['probe']:+.3f}  \"{v['context'][:44]}\"")
     if arb:
         print(f"\n  arbitration: behavioral valence slope {arb['valence_slope']:+.3f} "
               f"(Stage D ~{STAGE_D_SLOPE}; within±50%: {arb['within_50pct_of_stage_d']})  |  "
@@ -156,16 +196,19 @@ def _verdict(dom, ctx_effect, arb) -> str:
                 "context ignored at L18). Re-run one STRONG person-naming context (conflict_contexts."
                 "STRONG_CONTEXT); if still flat, that image-dominance is itself the reportable finding.")
     if img_ok and txt_ok:
-        base = (f"SIGNAL (criterion: both cues sign-correct — β_img={b['beta_img']:+.2f}, "
-                f"β_txt={b['beta_txt']:+.2f}, pattern is {b['lead']}). ")
+        base = (f"SIGNAL — both cues sign-correct (β_img={b['beta_img']:+.2f}, "
+                f"β_txt={b['beta_txt']:+.2f}; {b['lead']}, ratio {b['dominance_ratio']:.2f}). "
+                f"Image and text both write valence into the shared read-out"
+                + ("; the two are comparable (shared-representation reading). " if b['lead'].startswith('balanced')
+                   else f"; {b['lead']}. "))
         if arb is not None:
             if arb["within_50pct_of_stage_d"]:
-                return base + (f"Arbitration works: behavioral-valence steering slope "
-                               f"{arb['valence_slope']:+.2f} is within ±50% of Stage D — proceed to "
-                               f"the full run.")
+                return base + (f"Steering arbitrates the conflict: behavioral-valence slope "
+                               f"{arb['valence_slope']:+.2f} (~{abs(arb['valence_slope'])/STAGE_D_SLOPE:.0%} "
+                               f"of Stage D's {STAGE_D_SLOPE}).")
             return base + (f"But arbitration is weak (steering slope {arb['valence_slope']:+.2f} vs "
-                           f"Stage D ~{STAGE_D_SLOPE}); inspect before the full run.")
-        return base + "Run --arbitrate next to test whether steering arbitrates the conflict."
+                           f"Stage D ~{STAGE_D_SLOPE}).")
+        return base + "Run --arbitrate to test whether steering arbitrates the conflict."
     return (f"INCONCLUSIVE (β_img={b['beta_img']:+.2f}, β_txt={b['beta_txt']:+.2f}; signs mixed) — "
             f"human call; consider stronger contexts or more images.")
 
