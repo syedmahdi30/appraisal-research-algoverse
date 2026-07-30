@@ -122,25 +122,31 @@ def run(config_path: str | None = None) -> dict:
         raise FileNotFoundError(f"{base_pq} missing — run stage_f_conflict (base pass) first.")
     df = pd.read_parquet(base_pq)
 
-    dom = {"probe_readout": _dominance(df["probe_readout"], df),
-           "valence": _dominance(df["valence"], df)}
+    # The no-context prompt is structurally non-comparable: adding ANY framing sentence (even a
+    # neutral one) raises both the probe read-out and behavioral valence (see _condition_breakdown).
+    # So dominance and the context effect use only the SENTENCE-BEARING conditions, with NEUTRAL as
+    # the within-structure baseline; no-context is retained in the breakdown for transparency.
+    df_ctx = df[df["condition"] != "none"].copy()
+    dom = {"probe_readout": _dominance(df_ctx["probe_readout"], df_ctx),
+           "valence": _dominance(df_ctx["valence"], df_ctx)}
     cells = {"probe_readout": _cell_means(df, "probe_readout"),
              "valence": _cell_means(df, "valence")}
 
-    # context effect vs no-context, per image group (does context pull the read-out?)
+    # context effect vs the NEUTRAL context (within-structure baseline), per image group.
     ctx_effect = {}
     for grp in ("positive", "negative"):
         g = df[df["image_group"] == grp]
-        base = g[g["condition"] == "none"]["valence"].mean()
+        base = g[g["condition"] == "neutral"]["valence"].mean()
         ctx_effect[grp] = {c: float(g[g["condition"] == c]["valence"].mean() - base)
-                           for c in ("positive", "negative", "neutral")}
+                           for c in ("positive", "negative")}
 
     breakdown = _condition_breakdown(df)
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "n_rows": int(len(df)),
         "n_images": int(df["image_path"].nunique()),
-        "dominance": dom, "cell_means": cells, "context_effect_vs_none": ctx_effect,
+        "dominance": dom, "dominance_excludes_no_context": True,
+        "cell_means": cells, "context_effect_vs_neutral": ctx_effect,
         "condition_breakdown": breakdown,
     }
 
@@ -158,15 +164,15 @@ def run(config_path: str | None = None) -> dict:
     save_json(metrics, STAGE_F_DIR / "conflict_analysis.json")
     _plot(cells, arb)
 
-    print(f"\nStage F analysis — {metrics['n_images']} images, {metrics['n_rows']} base rows.\n")
+    print(f"\nStage F analysis — {metrics['n_images']} images, {metrics['n_rows']} base rows "
+          f"(dominance on sentence-bearing conditions only; no-context excluded).\n")
     for ro in ("probe_readout", "valence"):
         d = dom[ro]
         print(f"  {ro:14s} β_img={d['beta_img']:+.3f}  β_txt={d['beta_txt']:+.3f}  "
               f"|txt|/|img|={d['dominance_ratio']:.2f}  -> {d['lead']}")
-    print("\n  context effect on behavioral valence (vs no-context):")
+    print("\n  context effect on behavioral valence (vs the NEUTRAL context):")
     for grp, e in ctx_effect.items():
-        print(f"    {grp:8s} img: +ctx {e['positive']:+.3f}  -ctx {e['negative']:+.3f}  "
-              f"0ctx {e['neutral']:+.3f}")
+        print(f"    {grp:8s} img: +ctx {e['positive']:+.3f}  -ctx {e['negative']:+.3f}")
     print("\n  RAW per-condition means (diagnose the vs-none anomaly; is `none` or `neutral` odd?):")
     print(f"    {'cell':18s} {'n':>4s} {'valence':>9s} {'probe':>9s}")
     for k, v in breakdown["by_condition"].items():
