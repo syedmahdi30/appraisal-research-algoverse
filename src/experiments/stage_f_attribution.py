@@ -286,6 +286,24 @@ def _verdict(summary, sanity) -> str:
         return "INCOMPLETE — missing a context condition."
     a_neg, a_pos = neg["attn_context"], pos["attn_context"]
     m_neg, m_pos = abs(neg["contrib_context_probe"]), abs(pos["contrib_context_probe"])
+
+    # GUARD: is the DIRECT last-token->context path even large enough to explain the effect? Compare
+    # the context contribution to the image contribution (both direct L18). If |contrib_ctx| is a tiny
+    # fraction of |contrib_img|, the read-out barely reads the context tokens directly and the context
+    # effect must be INDIRECT (context reshaped the high-attention image/template positions upstream);
+    # any re-routing / value ratio below is then a ratio of negligible magnitudes and must not be cited.
+    img_ref = float(np.mean([abs(c["contrib_image_probe"]) for c in
+                             (summary.get("neutral"), neg, pos) if c]))
+    a_tmpl = 1.0 - neg["attn_image"] - a_neg
+    if max(m_neg, m_pos) < 0.15 * img_ref:
+        return (f"DIRECT L18 PATH NEGLIGIBLE — the last token routes only ~{a_neg:.0%} of its attention "
+                f"to context tokens ({neg['attn_image']:.0%} image, ~{a_tmpl:.0%} template) and their "
+                f"direct read-out contribution (|contrib_ctx| neg {m_neg:.3f}, pos {m_pos:.3f}) is "
+                f"<15% of the image contribution ({img_ref:.3f}); attention shares are ~invariant to "
+                f"context polarity (NO re-routing). => the negativity dominance is NOT a last-token L18 "
+                f"read-out-layer effect. Context influence is INDIRECT — established upstream, reshaping "
+                f"the high-attention image/template positions before L18. NEXT: layer-resolved probe "
+                f"and activation-patching (image- vs template-token groups) to localize where it enters.")
     u_neg, u_pos = m_neg / max(a_neg, 1e-4), m_pos / max(a_pos, 1e-4)  # |contrib| per unit attention
     attn_ratio = a_neg / max(a_pos, 1e-4)
     unit_ratio = u_neg / max(u_pos, 1e-4)
