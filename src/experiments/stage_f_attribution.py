@@ -75,22 +75,25 @@ def segment_positions(bridge, input_ids) -> dict:
     image_idx = list(range(img_start, img_end))
 
     # question anchor: find the token subsequence of the question (try with/without leading space).
-    q_start = None
+    q_start, q_len = None, 0
     for anchor in (" " + QUESTION, QUESTION):
         toks = bridge.tokenizer.encode(anchor, add_special_tokens=False)
         q_start = _find_subseq(ids, toks)
         if q_start is not None:
+            q_len = len(toks)
             break
     if q_start is None or q_start <= img_end:
         # fall back: context = everything between image block and end-of-user turn is unknown;
         # be conservative and treat all post-image, pre-final-8 tokens as context.
-        q_start = max(img_end, n - 12)
+        q_start, q_len = max(img_end, n - 12), 0
     context_idx = list(range(img_end, q_start))
+    question_idx = list(range(q_start, min(q_start + q_len, n))) if q_len else []
     template_idx = [k for k in range(n) if k not in set(image_idx) | set(context_idx)]
 
     dec = bridge.tokenizer.decode
     return {
         "image": np.array(image_idx), "context": np.array(context_idx),
+        "question": np.array(question_idx), "question_ok": bool(q_len),
         "template": np.array(template_idx), "n": n, "img_len": int(img_len),
         "image_ok": img_len == 256,
         "context_text": dec([ids[k] for k in context_idx]) if context_idx else "",
