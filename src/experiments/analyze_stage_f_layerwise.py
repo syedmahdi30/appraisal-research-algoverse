@@ -38,6 +38,7 @@ def run(config_path: str | None = None) -> dict:
         raise FileNotFoundError(f"{pq} missing — run stage_f_layerwise first.")
     df = pd.read_parquet(pq)
     layers = sorted(int(x) for x in df["layer"].unique())
+    crit = 18  # Stage A critical / read-out layer (sign anchor for the divergence)
 
     raw_sep, eff_d, ns = {}, {}, {}
     for L in layers:
@@ -45,34 +46,43 @@ def run(config_path: str | None = None) -> dict:
         raw_sep[L], eff_d[L], ns[L] = m, d, n
 
     dvals = np.array([eff_d[L] for L in layers], dtype=float)
-    absd = np.abs(np.nan_to_num(dvals))
-    peak_i = int(np.argmax(absd))
-    peak_layer, peak_d = layers[peak_i], float(dvals[peak_i])
-    thr = 0.5 * absd[peak_i]
-    onset_layer = layers[peak_i]
-    for i, L in enumerate(layers):
-        if absd[i] >= thr and np.sign(dvals[i]) == np.sign(peak_d):
-            onset_layer = L
-            break
-    # late amplification? compare |d| at the read-out layer (18) vs the peak
-    d18 = eff_d.get(18, float("nan"))
-    amp = (abs(peak_d) / abs(d18)) if d18 and not np.isnan(d18) and d18 != 0 else float("nan")
+    absraw = np.abs(np.array([raw_sep[L] for L in layers], dtype=float))
+    # Early layers can have a large effect size from near-ZERO variance (a tiny mean over a tiny std),
+    # which is a degenerate artifact, not signal — the L0 |d| blow-up. Gate candidate layers on BOTH
+    # (a) a raw-separation noise floor (3x the median |raw| over the first 8, pre-mixing, layers) and
+    # (b) sign-consistency with the read-out band (mean d over layers >= critical), so a wrong-sign
+    # low-variance spike cannot become the peak.
+    floor = 3.0 * float(np.median(absraw[:8])) if len(absraw) >= 8 else 0.0
+    late_sign = np.sign(np.nanmean([eff_d[L] for L in layers if L >= crit]) or -1.0)
+    cand = [L for L in layers if absraw[layers.index(L)] >= floor
+            and np.sign(dvals[layers.index(L)]) == late_sign]
+    if not cand:
+        cand = layers
+    peak_layer = max(cand, key=lambda L: abs(eff_d[L]))
+    peak_d = float(eff_d[peak_layer])
+    entry_layer = min(cand)                                   # first layer clearing the noise floor
+    d_entry, d18 = float(eff_d[entry_layer]), eff_d.get(18, float("nan"))
+    amp = (abs(peak_d) / abs(d_entry)) if d_entry else float("nan")   # scale-free late amplification
 
-    band = ("early" if onset_layer < len(layers) // 3 else
-            "mid" if onset_layer < 2 * len(layers) // 3 else "late")
-    summary = (f"onset (|d|≥50% of peak) at layer {onset_layer}; effect-size PEAK |d|={abs(peak_d):.2f} "
-               f"at layer {peak_layer}; |d| at read-out L18 = {abs(d18):.2f} "
-               f"(peak/L18 = {amp:.2f}× ⇒ {'genuine late amplification' if amp > 1.3 else 'no real late amplification — raw growth was mostly residual-norm scale'}). "
-               f"Context enters the read-out in the {band} band. Patch target = layer {onset_layer}.")
+    band = ("early" if entry_layer < len(layers) // 3 else
+            "mid" if entry_layer < 2 * len(layers) // 3 else "late")
+    summary = (f"ENTRY (first layer clearing the raw noise floor {floor:.3f}, read-out sign) at layer "
+               f"{entry_layer} (d={d_entry:+.2f}); effect-size PEAK |d|={abs(peak_d):.2f} at layer "
+               f"{peak_layer}; |d| at read-out L18 = {abs(d18):.2f}. The divergence ENTERS in the "
+               f"{band} band (~L{entry_layer}) and {'AMPLIFIES through the late layers' if amp > 1.5 else 'stays roughly flat'} "
+               f"(peak/entry = {amp:.1f}× effect size, scale-free). Probe patch target = L{entry_layer}; "
+               f"behavioral-valence carrier extends through ~L{peak_layer} (patch band must reach it).")
 
     metrics = {
         "run": run_stamp(), "n_layers": len(layers), "n_images_paired": ns.get(peak_layer),
         "effect_size_d": {int(L): eff_d[L] for L in layers},
         "raw_mean_sep": {int(L): raw_sep[L] for L in layers},
-        "onset_layer": int(onset_layer), "peak_layer": int(peak_layer), "peak_d": peak_d,
-        "d_at_L18": float(d18) if not np.isnan(d18) else None,
-        "peak_over_L18": float(amp) if not np.isnan(amp) else None, "summary": summary,
+        "noise_floor": floor, "read_out_sign": float(late_sign),
+        "entry_layer": int(entry_layer), "peak_layer": int(peak_layer), "peak_d": peak_d,
+        "d_at_entry": float(d_entry), "d_at_L18": float(d18) if not np.isnan(d18) else None,
+        "peak_over_entry": float(amp) if not np.isnan(amp) else None, "summary": summary,
     }
+    onset_layer = entry_layer  # back-compat name used in the print loop
     save_json(metrics, STAGE_F_DIR / "layerwise_normalized.json")
 
     print(f"\nStage F layerwise (scale-free) — {len(layers)} layers, paired over "
