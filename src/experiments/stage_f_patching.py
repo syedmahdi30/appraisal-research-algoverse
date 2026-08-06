@@ -38,7 +38,7 @@ from .stage_a_steering import emotion_token_ids, valence_score
 from .stage_f_attribution import _stash_hook, segment_positions
 from .stage_f_conflict import select_extreme_images
 
-GROUPS = ("image", "question", "both")
+GROUPS = ("image", "question", "structure", "text_all")
 
 
 def _patch_hook(recip_idx, donor_vals):
@@ -61,23 +61,46 @@ def _readout(bridge, ids, pv, name, tok_ids, coef, inter, extra_hooks=None):
 
 
 def _aligned_groups(seg_d, seg_r):
-    """Map donor→recipient positions for image & question (must be equal-length & aligned)."""
+    """Map donor→recipient positions for each patchable token group (equal-length, position-aligned).
+
+    Alignable groups (identical tokens across the two runs, so their resid can be swapped 1:1):
+      image     — the 256-token block before the context (same indices in both runs)
+      question  — the identical question string (shifted by the context-length difference)
+      structure — prefix turn/BOS tokens (before the image, same indices) + suffix turn tokens (after
+                  the question), EXCLUDING the last token (the read-out query position — patching it
+                  would import the donor's read-out state instead of attributing to source tokens)
+      text_all  — question ∪ structure (every alignable non-image text position); 1 − recovery(text_all)
+                  is the share left in the UNPATCHABLE context tokens (the differing sentence).
+    The context tokens themselves differ in length and are never patched.
+    """
     out, ok = {}, {}
-    for g in ("image", "question"):
-        di, ri = seg_d[g], seg_r[g]
-        if len(di) and len(di) == len(ri):
-            out[g] = (di, ri)
-            ok[g] = True
-        else:
-            ok[g] = False
-    if "image" in out and "question" in out:
-        out["both"] = (np.concatenate([out["image"][0], out["question"][0]]),
-                       np.concatenate([out["image"][1], out["question"][1]]))
+    di, ri = seg_d["image"], seg_r["image"]
+    ok["image"] = bool(len(di) and len(di) == len(ri) and int(di[0]) == int(ri[0]))
+    if ok["image"]:
+        out["image"] = (di, ri)
+    qd, qr = seg_d["question"], seg_r["question"]
+    ok["question"] = bool(len(qd) and len(qd) == len(qr))
+    if ok["question"]:
+        out["question"] = (qd, qr)
+    # structure: prefix (aligned indices) + suffix (aligned, last token dropped)
+    ok["structure"] = False
+    if ok["image"] and ok["question"]:
+        pre = np.arange(0, int(seg_d["image"][0]))                       # same indices both runs
+        qe_d, qe_r = int(qd[-1]) + 1, int(qr[-1]) + 1
+        suf_d, suf_r = np.arange(qe_d, seg_d["n"] - 1), np.arange(qe_r, seg_r["n"] - 1)  # drop last tok
+        if len(suf_d) == len(suf_r):
+            out["structure"] = (np.concatenate([pre, suf_d]), np.concatenate([pre, suf_r]))
+            ok["structure"] = True
+    if ok["question"] and ok["structure"]:
+        out["text_all"] = (np.concatenate([out["question"][0], out["structure"][0]]),
+                           np.concatenate([out["question"][1], out["structure"][1]]))
+        ok["text_all"] = True
     return out, ok
 
 
 def run(config_path: str, limit_override: int | None = None,
-        layers_override: str | None = None) -> dict:
+        layers_override: str | None = None, pos_idx: int | None = None,
+        neg_idx: int | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     crit = int(cfg.get("critical_layer", 18))
@@ -88,8 +111,10 @@ def run(config_path: str, limit_override: int | None = None,
     else:
         patch_layers = list(range(onset, crit))   # [onset .. L18)
     n_images = limit_override or int(cfg.get("patch_n_images", 60))
-    neg_ctx = NEGATIVE_CONTEXTS[int(cfg.get("patch_neg_idx", 2))]   # default "funeral of a close friend"
-    pos_ctx = POSITIVE_CONTEXTS[int(cfg.get("patch_pos_idx", 0))]   # default "won the championship"
+    ni = neg_idx if neg_idx is not None else int(cfg.get("patch_neg_idx", 2))
+    pj = pos_idx if pos_idx is not None else int(cfg.get("patch_pos_idx", 0))
+    neg_ctx = NEGATIVE_CONTEXTS[ni]   # default "funeral of a close friend"
+    pos_ctx = POSITIVE_CONTEXTS[pj]   # default "won the championship"
 
     from ..paths import STAGE_A_DIR
     ppath = STAGE_A_DIR / "probes.npz"
@@ -118,7 +143,7 @@ def run(config_path: str, limit_override: int | None = None,
         rin = build_image_inputs(bridge, img, prompt=context_prompt(neg_ctx))
         seg_d, seg_r = segment_positions(bridge, din["input_ids"]), segment_positions(bridge, rin["input_ids"])
         groups, ok = _aligned_groups(seg_d, seg_r)
-        if not (ok.get("image") and ok.get("question")):
+        if not (ok.get("image") and ok.get("question") and ok.get("structure")):
             seg_bad += 1
             continue
 
@@ -155,6 +180,7 @@ def run(config_path: str, limit_override: int | None = None,
         "run": run_stamp(), "git": git_hash(), "critical_layer": crit, "patch_layers": patch_layers,
         "n_images": n_ok, "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
         "donor_pos_context": pos_ctx, "recipient_neg_context": neg_ctx,
+        "pos_idx": pj, "neg_idx": ni,
         "recovery": rec, "verdict": _verdict(rec),
         "note": ("recovery = (patched-neg)/(pos-neg) at L{c} read-out; resid_post patched over band "
                  "{b} so the group's pathway is pinned to the donor through the read-out (lower bound: "
@@ -190,23 +216,22 @@ def _recovery(df) -> dict:
 
 def _verdict(rec) -> str:
     ri, rq = rec["image"]["probe"], rec["question"]["probe"]
-    rb = rec["both"]["probe"]
-    if max(ri, rq, rb) < 0.15:
-        return (f"BAND INSUFFICIENT — patching the band recovers <15% (image {ri:.0%}, question "
-                f"{rq:.0%}, both {rb:.0%}); the carrier isn't pinned by this band. Widen earlier "
-                f"(--layers) or patch from the onset down.")
-    if ri >= 1.5 * max(rq, 1e-3):
-        lead = (f"IMAGE TOKENS carry it — patching the image tokens to the positive-context values "
-                f"recovers {ri:.0%} of the read-out vs {rq:.0%} for the question tokens. The context's "
-                f"influence flows through the (context-reshaped) image representations.")
-    elif rq >= 1.5 * max(ri, 1e-3):
-        lead = (f"QUESTION TOKENS carry it — patching the question tokens recovers {rq:.0%} vs "
-                f"{ri:.0%} for the image tokens. The context writes into the question-token "
-                f"representations that the read-out attends to.")
+    rs, rt = rec["structure"]["probe"], rec["text_all"]["probe"]
+    ctx_share = 1.0 - rt   # left in the unpatchable context tokens
+    parts = f"(probe recovery) image {ri:.0%}, question {rq:.0%}, structure {rs:.0%}, all-text {rt:.0%}"
+    concl = []
+    concl.append("IMAGE tokens causally INERT (context does not route through the image "
+                 "representation)" if abs(ri) < 0.05 else
+                 f"IMAGE tokens carry {ri:.0%}")
+    if rs > 1.5 * max(rq, 1e-3):
+        concl.append(f"the network BROADCASTS the context into structure/turn (sink) tokens "
+                     f"(structure {rs:.0%} > question {rq:.0%})")
+    elif rq > 1.5 * max(rs, 1e-3):
+        concl.append(f"the context copies mainly into the QUESTION tokens ({rq:.0%} > structure {rs:.0%})")
     else:
-        lead = (f"SHARED — image {ri:.0%} and question {rq:.0%} recover comparably; the context "
-                f"effect is distributed across both high-attention groups (both {rb:.0%}).")
-    return lead
+        concl.append(f"question and structure carry it comparably ({rq:.0%} / {rs:.0%})")
+    concl.append(f"~{ctx_share:.0%} remains in the unpatched CONTEXT tokens (the literal sentence)")
+    return parts + ". " + "; ".join(concl) + "."
 
 
 def main() -> None:
@@ -214,8 +239,11 @@ def main() -> None:
     ap.add_argument("--config", default="config/stage_f.yaml")
     ap.add_argument("--limit", type=int, default=None, help="positive-group image count (default 60)")
     ap.add_argument("--layers", type=str, default=None, help="patch band 'a-b' (default onset..L17)")
+    ap.add_argument("--pos-idx", type=int, default=None, help="POSITIVE_CONTEXTS index (donor)")
+    ap.add_argument("--neg-idx", type=int, default=None, help="NEGATIVE_CONTEXTS index (recipient)")
     args = ap.parse_args()
-    run(args.config, limit_override=args.limit, layers_override=args.layers)
+    run(args.config, limit_override=args.limit, layers_override=args.layers,
+        pos_idx=args.pos_idx, neg_idx=args.neg_idx)
 
 
 if __name__ == "__main__":
