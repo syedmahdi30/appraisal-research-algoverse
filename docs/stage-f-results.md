@@ -14,6 +14,11 @@ shared appraisal read-out follow, and can a text-derived Δμ steering vector ar
    drops a positive face by −0.598, a positive context lifts a negative face by +0.333, while the
    with-the-grain directions have little headroom (+0.167, −0.056). The pilot's "negativity asymmetry"
    does not survive.
+   > **⚠ SUPERSEDED (2026-08-05).** This "ceiling/floor, not a negativity asymmetry" reading was
+   > under-analyzed and is **reversed** by the mechanism follow-up. The drop *survives* head-room
+   > normalization (0.63 vs 0.26) and is a genuine, cross-modal negativity asymmetry (absent text-only,
+   > where the banks are symmetric at 1.06). See **`docs/stage-f-mechanism.md`**. Results 1 (balanced
+   > integration) and 3 (arbitration) below are unchanged.
 3. **Steering arbitrates the conflict (causal).** On the incongruent cells, the text-derived
    **pleasantness Δμ** drives behavioral valence at slope **+0.215 (~65 % of Stage D's ~0.33**, within
    ±50 %) — the shared appraisal handle moves the output through the conflict, though a strong context
