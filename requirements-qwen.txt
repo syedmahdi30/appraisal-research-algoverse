@@ -9,5 +9,11 @@ pillow>=10.0
 accelerate>=0.30
 qwen-vl-utils>=0.0.8
 numpy>=1.26
+# Stage F multi-model port (stage_f_qwen.py): parquet I/O + the shared CPU analyzer
+# (analyze_stage_f._asymmetry_vs_floor uses scipy.stats.mannwhitneyu).
+pandas>=2.0
+pyarrow>=14.0
+scipy>=1.11
+tqdm>=4.66
 # Optional cleaner hook API over the raw HF module graph:
 # nnsight>=0.3
