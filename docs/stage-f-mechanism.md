@@ -18,13 +18,14 @@ ceiling/floor of the valence scale. Mechanistically:
 - The divergence **enters the network mid-stack (~layer 13 of 34) and amplifies ~7× through the late
   layers (peak ~L28)**.
 - The winning signal is carried **entirely by the text token stream — the image tokens are causally
-  inert (~0% recovery)**. The model **broadcasts** the context's valence into the **structure/turn
-  "sink" tokens** (BOS + turn delimiters) that the read-out attends to; the image's own valence never
+  inert (~0% recovery)**. Specifically it lives in the **assistant-turn-boundary tokens**
+  (`<end_of_turn>\n<start_of_turn>model`) right before the read-out (~55–65%); **BOS and the user-turn
+  prefix carry 0%**, so this is *not* a global attention-sink effect. The image's own valence never
   propagates out of the image tokens. **Replicated across two independent context pairs.**
 
 **One-line takeaway for the group:** *negativity dominance in cross-modal conflict is a text-stream
-phenomenon — the negative context hijacks the shared read-out via sink tokens, while the positive
-image stays trapped in the image tokens.*
+phenomenon — the negative context routes into the assistant-turn preamble the read-out reads from,
+while the positive image stays trapped in the image tokens.*
 
 ## Setup (shared across all four experiments)
 - **Model / read-out:** `google/gemma-3-4b-it` via TransformerBridge (bf16). Internal read-out = the
@@ -103,32 +104,38 @@ read-out layer the last token attends ~88% to template/question tokens, only ~3.
 *direct* context contribution is ~6% of the effect — i.e. the context reaches the read-out **indirectly**,
 having been mixed into other positions upstream. Experiment 4 finds which positions.
 
-## 4. Which tokens carry it? → **Text stream (sink tokens); image tokens inert.**
+## 4. Which tokens carry it? → **The assistant-turn-boundary tokens; image inert; NOT BOS.**
 `stage_f_patching.py`. Donor = positive-context run, recipient = negative-context run (**same image**).
 Overwrite the recipient's `resid_post` over layers [13,17] for one **position-aligned** token group at
 a time, and measure recovery toward the positive read-out:
 `recovery(G) = (patched − neg) / (pos − neg)`. Groups: **image** (256 tokens), **question** (the
-identical question string), **structure** (BOS + turn delimiters, *excluding the read-out token*),
-**text_all** (question ∪ structure). Context tokens differ in length and cannot be 1:1 patched — the
-`1 − text_all` remainder is their share.
+identical question string), and the structural/control tokens split into **bos** (first token),
+**prefix_delim** (`<start_of_turn>user…` before the image), and **suffix_delim**
+(`<end_of_turn>\n<start_of_turn>model`, the assistant-turn preamble *immediately before* the read-out
+token, which is itself excluded); **structure** = their union, **text_all** = question ∪ structure.
+Context tokens differ in length and cannot be 1:1 patched — the `1 − text_all` remainder is their share.
 
 Probe-read-out recovery, **replicated across two independent context pairs**:
 
-| group | pair 1 (championship / funeral) | pair 2 (wonderful news / devastating news) |
+| group | pair 1 (championship / funeral) | pair 2 (wonderful / devastating) |
 |---|---:|---:|
 | **image** | **−1%** | **+1%** |
 | question | 22% | 32% |
-| **structure / turn (sink)** | **65%** | **56%** |
+| bos | 0% | −1% |
+| prefix delimiters | 0% | −1% |
+| **suffix delimiters** (`<end_of_turn>…model`) | **65%** | **57%** |
+| structure (= suffix, additive) | 65% | 56% |
 | text_all (all aligned text) | 85% | 87% |
 | → remainder in context tokens | ~15% | ~13% |
 
 Three replicated conclusions:
 1. **Image tokens are causally inert (~0%).** Patching them does nothing → the negative context does
    **not** rewrite the image representation; the image's valence stays in the image tokens.
-2. **The structure/turn tokens are the dominant carrier (~55–65%)** — and this is a *tiny* group
-   (~10 tokens) vs the image's 256, so per-token they are extremely potent. The model **broadcasts** the
-   context's valence into BOS/delimiter **sink** positions the read-out attends to (attention-sink
-   behavior).
+2. **The carrier is the assistant-turn-boundary tokens (~55–65%), NOT a global BOS sink.** BOS and the
+   user-turn prefix carry **0%**; the entire structure-group recovery is the `<end_of_turn>` /
+   `<start_of_turn>model` preamble adjacent to the read-out. So this is **local aggregation into the
+   turn scaffold where the model begins its answer** (recency + turn boundary), not the BOS
+   attention-sink one might expect. The question tokens carry a secondary share (~22–32%).
 3. **~85–87% of the effect lives in the aligned text stream**; only ~13–15% remains in the literal
    context tokens. The effect is a text-stream phenomenon.
 
@@ -142,24 +149,26 @@ noisier: text_all 73–78%. The probe-level decomposition is the clean measureme
 > positive text overrides a negative image. The asymmetry is real (survives head-room normalization),
 > cross-modal (absent text-only, where the banks are symmetric at 1.06), and not a ceiling effect. It
 > **enters the network ~L13 and amplifies ~7× to ~L28**, and is **carried by the text token stream —
-> broadcast into structure/turn sink tokens — while the image tokens are causally inert**. The positive
-> image loses because its valence never propagates out of the image tokens; the negative context wins
-> by writing into the shared sink tokens the read-out reads.
+> specifically the assistant-turn-boundary tokens (`<end_of_turn><start_of_turn>model`) adjacent to the
+> read-out, not BOS — while the image tokens are causally inert**. The positive image loses because its
+> valence never propagates out of the image tokens; the negative context wins by writing into the turn
+> preamble the read-out reads.
 
 ## Threats to validity
 - **Single seed, one layer's read-out, one model.** All runs seed 0, read-out at L18, Gemma-3-4B. A
   3-seed repeat and a second model (Qwen-VL / 12B Gemma) are the outstanding robustness steps.
 - **Patching context-pair scope.** Two donor/recipient context pairs (championship/funeral,
-  wonderful/devastating). The image-inert / sink-carrier pattern replicates across both, but more pairs
+  wonderful/devastating). The image-inert / turn-preamble-carrier pattern replicates across both, but more pairs
   would tighten it. (This directly guards the single-context pitfall that misled the Stage F pilot.)
 - **Context-token ceiling.** The literal context sentences differ in length between donor and recipient
   and cannot be 1:1 patched, so aligned-group recovery caps below 100% (~13–15% remainder). We attribute
   *among the alignable positions*, not to the context tokens themselves.
 - **Logit-lens is off-layer.** The layerwise projection applies the L18 probe direction at every layer
   as a diagnostic; onset/peak are gated for scale and sign, but absolute `d` values are lens-relative.
-- **Sink interpretation is inferred.** "Broadcast into sink tokens" follows from the structure-group
-  recovery; a per-token attribution within the structure group (BOS vs delimiters) would confirm which
-  sink dominates.
+- **Carrier resolved to the suffix delimiters (not inferred).** The structure group was split and
+  re-patched: BOS 0% / prefix-delims 0% / **suffix-delims 57–65%**, additive with structure. So the
+  carrier is the assistant-turn preamble, not a BOS sink. (Open: this is one prompt template's turn
+  scaffold; a different chat format could relocate it.)
 - **Behavioral valence is negatively skewed** (even happy faces read slightly negative on the
   closed-vocab P[pos]−P[neg]); only *relative* effects are interpreted.
 
@@ -187,6 +196,6 @@ This sharpens the group's shared finding (image and text write into one appraisa
 a **causal, localized mechanism** for the conflict case. It also connects to the team's broader thread —
 *emotional images shifting VLM behavior* — with a cautionary result: an image's emotional pull is
 **real but fragile under conflicting text**, and mechanistically it is because the image's signal stays
-in the image tokens while text commandeers the sink tokens the model actually reads out from. For
+in the image tokens while text commandeers the turn-preamble tokens the model actually reads out from. For
 open-ended/ambiguous task contexts (where there is no strong overriding text), we'd expect the image to
 matter *more* than it does here.
