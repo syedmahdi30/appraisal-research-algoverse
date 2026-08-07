@@ -38,7 +38,7 @@ from .stage_a_steering import emotion_token_ids, valence_score
 from .stage_f_attribution import _stash_hook, segment_positions
 from .stage_f_conflict import select_extreme_images
 
-GROUPS = ("image", "question", "structure", "text_all")
+GROUPS = ("image", "question", "bos", "prefix_delim", "suffix_delim", "structure", "text_all")
 
 
 def _patch_hook(recip_idx, donor_vals):
@@ -82,15 +82,19 @@ def _aligned_groups(seg_d, seg_r):
     ok["question"] = bool(len(qd) and len(qd) == len(qr))
     if ok["question"]:
         out["question"] = (qd, qr)
-    # structure: prefix (aligned indices) + suffix (aligned, last token dropped)
-    ok["structure"] = False
+    # structure: prefix (aligned indices) + suffix (aligned, last token dropped), and its split into
+    # bos / prefix-delimiters / suffix-delimiters — the "which sink token" decomposition.
+    ok["structure"] = ok["bos"] = ok["prefix_delim"] = ok["suffix_delim"] = False
     if ok["image"] and ok["question"]:
         pre = np.arange(0, int(seg_d["image"][0]))                       # same indices both runs
         qe_d, qe_r = int(qd[-1]) + 1, int(qr[-1]) + 1
         suf_d, suf_r = np.arange(qe_d, seg_d["n"] - 1), np.arange(qe_r, seg_r["n"] - 1)  # drop last tok
-        if len(suf_d) == len(suf_r):
+        if len(suf_d) == len(suf_r) and len(pre) >= 2 and len(suf_d) >= 1:
             out["structure"] = (np.concatenate([pre, suf_d]), np.concatenate([pre, suf_r]))
-            ok["structure"] = True
+            out["bos"] = (pre[:1], pre[:1])                   # first token (<bos>) — canonical sink
+            out["prefix_delim"] = (pre[1:], pre[1:])          # <start_of_turn>user\n(<start_of_image>)
+            out["suffix_delim"] = (suf_d, suf_r)              # <end_of_turn>\n<start_of_turn>model (no last)
+            ok["structure"] = ok["bos"] = ok["prefix_delim"] = ok["suffix_delim"] = True
     if ok["question"] and ok["structure"]:
         out["text_all"] = (np.concatenate([out["question"][0], out["structure"][0]]),
                            np.concatenate([out["question"][1], out["structure"][1]]))
@@ -143,7 +147,7 @@ def run(config_path: str, limit_override: int | None = None,
         rin = build_image_inputs(bridge, img, prompt=context_prompt(neg_ctx))
         seg_d, seg_r = segment_positions(bridge, din["input_ids"]), segment_positions(bridge, rin["input_ids"])
         groups, ok = _aligned_groups(seg_d, seg_r)
-        if not (ok.get("image") and ok.get("question") and ok.get("structure")):
+        if not all(ok.get(g) for g in GROUPS):
             seg_bad += 1
             continue
 
@@ -193,9 +197,9 @@ def run(config_path: str, limit_override: int | None = None,
     print(f"  donor +ctx: \"{pos_ctx[:40]}\"   recipient -ctx: \"{neg_ctx[:40]}\"")
     print(f"  baselines: probe pos {rec['pos_probe']:+.3f} / neg {rec['neg_probe']:+.3f}  |  "
           f"valence pos {rec['pos_val']:+.3f} / neg {rec['neg_val']:+.3f}")
-    print(f"\n  {'group':9s} {'recovery(probe)':>16s} {'recovery(valence)':>18s}")
+    print(f"\n  {'group':13s} {'recovery(probe)':>16s} {'recovery(valence)':>18s}")
     for g in GROUPS:
-        print(f"  {g:9s} {rec[g]['probe']*100:>15.0f}% {rec[g]['val']*100:>17.0f}%")
+        print(f"  {g:13s} {rec[g]['probe']*100:>15.0f}% {rec[g]['val']*100:>17.0f}%")
     print(f"\n  VERDICT: {metrics['verdict']}")
     print(f"  data -> {STAGE_F_DIR/'patching.parquet'}   metrics -> {STAGE_F_DIR/'patching_metrics.json'}")
     return metrics
@@ -215,22 +219,22 @@ def _recovery(df) -> dict:
 
 
 def _verdict(rec) -> str:
-    ri, rq = rec["image"]["probe"], rec["question"]["probe"]
-    rs, rt = rec["structure"]["probe"], rec["text_all"]["probe"]
-    ctx_share = 1.0 - rt   # left in the unpatchable context tokens
-    parts = f"(probe recovery) image {ri:.0%}, question {rq:.0%}, structure {rs:.0%}, all-text {rt:.0%}"
-    concl = []
-    concl.append("IMAGE tokens causally INERT (context does not route through the image "
-                 "representation)" if abs(ri) < 0.05 else
-                 f"IMAGE tokens carry {ri:.0%}")
+    g = lambda k: rec[k]["probe"]  # noqa: E731
+    ri, rq, rs, rt = g("image"), g("question"), g("structure"), g("text_all")
+    sinks = {"BOS": g("bos"), "prefix-delims": g("prefix_delim"), "suffix-delims": g("suffix_delim")}
+    dom = max(sinks, key=lambda k: sinks[k])
+    parts = (f"(probe recovery) image {ri:.0%}, question {rq:.0%} | sinks: BOS {sinks['BOS']:.0%}, "
+             f"prefix-delims {sinks['prefix-delims']:.0%}, suffix-delims {sinks['suffix-delims']:.0%} "
+             f"→ structure {rs:.0%}, all-text {rt:.0%}")
+    concl = ["IMAGE tokens causally INERT" if abs(ri) < 0.05 else f"IMAGE tokens carry {ri:.0%}"]
     if rs > 1.5 * max(rq, 1e-3):
-        concl.append(f"the network BROADCASTS the context into structure/turn (sink) tokens "
-                     f"(structure {rs:.0%} > question {rq:.0%})")
-    elif rq > 1.5 * max(rs, 1e-3):
-        concl.append(f"the context copies mainly into the QUESTION tokens ({rq:.0%} > structure {rs:.0%})")
+        concl.append(f"the context is BROADCAST into sink/turn tokens (structure {rs:.0%} > question "
+                     f"{rq:.0%}); dominant sink = {dom} ({sinks[dom]:.0%})")
     else:
-        concl.append(f"question and structure carry it comparably ({rq:.0%} / {rs:.0%})")
-    concl.append(f"~{ctx_share:.0%} remains in the unpatched CONTEXT tokens (the literal sentence)")
+        concl.append(f"question and structure carry it comparably ({rq:.0%} / {rs:.0%}); "
+                     f"dominant sink = {dom} ({sinks[dom]:.0%})")
+    concl.append(f"sink parts sum {sum(sinks.values()):.0%} vs structure {rs:.0%} (additivity check)")
+    concl.append(f"~{1.0 - rt:.0%} remains in the unpatched CONTEXT tokens")
     return parts + ". " + "; ".join(concl) + "."
 
 
