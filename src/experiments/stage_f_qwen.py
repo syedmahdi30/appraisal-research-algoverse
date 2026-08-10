@@ -159,6 +159,15 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
           f"conditions = {len(rows)} forwards ({n_skip} skipped). Read-out: behavioral valence.")
     if multi:
         print(f"  multi-token labels (first sub-token scored): {list(multi)}")
+    # RAW per-(image group × condition) means — the diagnostic for whether the IMAGE moves the output
+    # at all under Qwen's saturation (e.g. is a positive face under a neutral context read as positive,
+    # or floored to sadness = image ignored?).
+    print("  RAW mean valence per cell (does the image move it?):")
+    for grp in ("positive", "negative"):
+        g = df[df["image_group"] == grp]
+        cells = "  ".join(f"{c}={g[g['condition'] == c]['valence'].mean():+.2f}"
+                          for c in ("none", "neutral", "positive", "negative"))
+        print(f"    {grp:8s} img: {cells}")
     if "drop_pos_img_neg_ctx" in asym:
         print(f"  ASYMMETRY vs FLOOR: drop {asym['drop_pos_img_neg_ctx']:+.3f}  rise "
               f"{asym['rise_neg_img_pos_ctx']:+.3f}  |drop|-|rise| {asym['asymmetry_index']:+.3f} "
