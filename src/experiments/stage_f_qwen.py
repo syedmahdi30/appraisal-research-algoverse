@@ -147,62 +147,58 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
     df = pd.DataFrame(rows)
     out_pq = STAGE_F_DIR / "conflict_qwen.parquet"
     df.to_parquet(out_pq)
+    metrics = _analyze_and_print(df, model_name, multi=multi, n_skipped=n_skip)
+    print(f"  data -> {out_pq}")
+    print("  NEXT: python -m src.experiments.stage_f_qwen --text-only --model " + model_name)
+    return metrics
 
-    from .analyze_stage_f import _asymmetry_vs_floor
+
+def _analyze_and_print(df, model_name, multi=None, n_skipped=0) -> dict:
+    """Compute + print the asymmetry, the cross-model override rate, and the raw cell diagnostic.
+
+    Shared by the GPU base pass and the CPU `--reanalyze` path (which recomputes from the saved
+    parquet, no model load). The override rate is the saturation-robust primary metric; the graded
+    asymmetry is kept as a secondary (fragile when the read-out saturates, as Qwen's does).
+    """
+    from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
     asym = _asymmetry_vs_floor(df) if len(df) else {}
-
-    # Saturation-robust WIN/FLIP-RATE metric — the right measure when the read-out is near-binary
-    # (confident models like Qwen saturate valence to +/-1, so graded head-room asymmetry is fragile).
-    # Negativity dominance = a negative context overrides a positive image MORE OFTEN than a positive
-    # context overrides a negative image. Aggregated PER IMAGE (each image contributes its mean flip
-    # rate over the context bank) and bootstrapped over images, so the CI respects the clustering.
-    def _per_image(group, cond, sign):
-        g = df[(df["image_group"] == group) & (df["condition"] == cond)]
-        return g.groupby("image_path")["valence"].apply(lambda v: float((sign * v.to_numpy() > 0).mean())).to_numpy()
-    pn = _per_image("positive", "negative", -1)   # per positive image: rate a negative ctx flips it → neg
-    np_ = _per_image("negative", "positive", +1)  # per negative image: rate a positive ctx flips it → pos
-    neg_override = float(pn.mean()) if len(pn) else float("nan")
-    pos_override = float(np_.mean()) if len(np_) else float("nan")
-    gap_ci = [float("nan"), float("nan")]
-    if len(pn) and len(np_):
-        rng = np.random.default_rng(0)
-        boot = np.array([pn[rng.integers(0, len(pn), len(pn))].mean()
-                         - np_[rng.integers(0, len(np_), len(np_))].mean() for _ in range(2000)])
-        gap_ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
-    flip = {"neg_ctx_overrides_pos_img": neg_override, "pos_ctx_overrides_neg_img": pos_override,
-            "dominance_gap": neg_override - pos_override, "dominance_gap_ci95": gap_ci,
-            "n_pos_images": int(len(pn)), "n_neg_images": int(len(np_))}
-
+    flip = _flip_override(df) if len(df) else {}
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "read_out": "behavioral_valence",
-               "n_images": int(sel.shape[0] - n_skip), "n_skipped": n_skip, "n_rows": int(len(rows)),
-               "asymmetry_vs_floor": asym, "flip_rate": flip, "tokenization_multi_token": multi}
+               "n_images": int(df["image_path"].nunique()), "n_skipped": n_skipped, "n_rows": int(len(df)),
+               "asymmetry_vs_floor": asym, "flip_override": flip, "tokenization_multi_token": multi or {}}
     save_json(metrics, STAGE_F_DIR / "conflict_qwen_metrics.json")
 
-    print(f"\nStage F [Qwen: {model_name}] base — {metrics['n_images']} images × {len(conditions)} "
-          f"conditions = {len(rows)} forwards ({n_skip} skipped). Read-out: behavioral valence.")
+    print(f"\nStage F [Qwen: {model_name}] — {metrics['n_images']} images, {len(df)} rows "
+          f"({n_skipped} skipped). Read-out: behavioral valence.")
     if multi:
         print(f"  multi-token labels (first sub-token scored): {list(multi)}")
-    # RAW per-(image group × condition) means — the diagnostic for whether the IMAGE moves the output
-    # at all under Qwen's saturation (e.g. is a positive face under a neutral context read as positive,
-    # or floored to sadness = image ignored?).
     print("  RAW mean valence per cell (does the image move it?):")
     for grp in ("positive", "negative"):
         g = df[df["image_group"] == grp]
         cells = "  ".join(f"{c}={g[g['condition'] == c]['valence'].mean():+.2f}"
                           for c in ("none", "neutral", "positive", "negative"))
         print(f"    {grp:8s} img: {cells}")
-    print(f"  NEGATIVITY DOMINANCE (flip rate, saturation-robust): neg-ctx overrides positive image "
-          f"{neg_override:.0%}  vs  pos-ctx overrides negative image {pos_override:.0%}  "
-          f"(gap {flip['dominance_gap']:+.0%}, CI [{gap_ci[0]:+.0%},{gap_ci[1]:+.0%}])")
+    if flip:
+        print(f"  NEGATIVITY DOMINANCE (override rate, argmax-emotion, cross-model): neg-ctx overrides "
+              f"positive image {flip['neg_ctx_overrides_pos_img']:.0%}  vs  pos-ctx overrides negative "
+              f"image {flip['pos_ctx_overrides_neg_img']:.0%}  (gap {flip['dominance_gap']:+.0%}, CI "
+              f"[{flip['dominance_gap_ci95'][0]:+.0%},{flip['dominance_gap_ci95'][1]:+.0%}])")
     if "drop_pos_img_neg_ctx" in asym:
-        print(f"  [graded valence, fragile under saturation] drop {asym['drop_pos_img_neg_ctx']:+.3f}  "
-              f"rise {asym['rise_neg_img_pos_ctx']:+.3f}  |drop|-|rise| {asym['asymmetry_index']:+.3f} "
-              f"CI [{asym['asymmetry_ci95'][0]:+.3f},{asym['asymmetry_ci95'][1]:+.3f}]  "
-              f"head-room pull drop {asym['headroom_norm_pull_drop']:.2f} vs rise "
-              f"{asym['headroom_norm_pull_rise']:.2f}")
-    print(f"  data -> {out_pq}")
-    print("  NEXT: python -m src.experiments.stage_f_qwen --text-only --model " + model_name)
+        print(f"  [graded valence, fragile under saturation] |drop|-|rise| {asym['asymmetry_index']:+.3f} "
+              f"CI [{asym['asymmetry_ci95'][0]:+.3f},{asym['asymmetry_ci95'][1]:+.3f}]  head-room pull "
+              f"drop {asym['headroom_norm_pull_drop']:.2f} vs rise {asym['headroom_norm_pull_rise']:.2f}")
     return metrics
+
+
+def reanalyze(config_path: str) -> dict:
+    """Recompute + print the base-pass metrics from the saved parquet — CPU only, no model load."""
+    ensure_dirs()
+    pq = STAGE_F_DIR / "conflict_qwen.parquet"
+    if not pq.exists():
+        raise FileNotFoundError(f"{pq} missing — run the Qwen base pass first.")
+    mpath = STAGE_F_DIR / "conflict_qwen_metrics.json"
+    model_name = load_config(mpath).get("model", "unknown") if mpath.exists() else "unknown"
+    return _analyze_and_print(pd.read_parquet(pq), model_name)
 
 
 # --------------------------------------------------------------------------- text-only control
@@ -284,9 +280,12 @@ def main() -> None:
     ap.add_argument("--config", default="config/stage_f.yaml")
     ap.add_argument("--model", default=DEFAULT_MODEL, help="Qwen-VL hub id (Qwen3-VL or Qwen2.5-VL)")
     ap.add_argument("--text-only", action="store_true", help="run the image-ablated context control")
+    ap.add_argument("--reanalyze", action="store_true", help="recompute metrics from the saved parquet (CPU, no model)")
     ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count (base pass)")
     args = ap.parse_args()
-    if args.text_only:
+    if args.reanalyze:
+        reanalyze(args.config)
+    elif args.text_only:
         run_text_only(args.config, args.model)
     else:
         run_base(args.config, args.model, limit_override=args.limit)

@@ -30,6 +30,47 @@ from .common import git_hash, run_stamp, save_json
 
 STAGE_D_SLOPE = 0.33  # Stage D pleasantness single-direction Δvalence slope (reference)
 
+# Valence categories of the argmax emotion (copied from stage_a_steering to keep this analyzer
+# import-light — it also runs in the Qwen venv, which lacks the bridge / crowd-enVENT stack).
+_POSITIVE = ("joy", "pride", "relief", "trust")
+_NEGATIVE = ("anger", "boredom", "disgust", "fear", "guilt", "sadness", "shame")
+
+
+def _flip_override(df, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Cross-model-comparable OVERRIDE rate from the argmax emotion's valence category.
+
+    Calibration-free (uses WHICH emotion the model picks, not the continuous score — Gemma's valence
+    is negatively skewed and Qwen's saturates, so a raw sign threshold is not comparable). A conflict
+    forward is an OVERRIDE when the context wins the valence category against the image:
+      * positive image + negative context → argmax emotion is NEGATIVE-valence
+      * negative image + positive context → argmax emotion is POSITIVE-valence
+    Aggregated per image (mean over the context bank) and bootstrapped over images (clustered CI).
+    Negativity dominance = neg-context override rate > pos-context override rate.
+    """
+    lp = [f"lp_{w}" for w in EMOTION_LABELS]
+    if not set(lp).issubset(df.columns):
+        return {}
+    cat = {w: ("pos" if w in _POSITIVE else "neg" if w in _NEGATIVE else "other") for w in EMOTION_LABELS}
+    d = df.copy()
+    d["_cat"] = [cat[EMOTION_LABELS[i]] for i in d[lp].to_numpy().argmax(axis=1)]
+
+    def per_image(group, cond, win):
+        g = d[(d["image_group"] == group) & (d["condition"] == cond)]
+        return g.groupby("image_path")["_cat"].apply(lambda s: float((s == win).mean())).to_numpy()
+
+    pn = per_image("positive", "negative", "neg")   # neg ctx overrides a positive image
+    np_ = per_image("negative", "positive", "pos")  # pos ctx overrides a negative image
+    if not len(pn) or not len(np_):
+        return {}
+    neg_ov, pos_ov = float(pn.mean()), float(np_.mean())
+    rng = np.random.default_rng(seed)
+    boot = np.array([pn[rng.integers(0, len(pn), len(pn))].mean()
+                     - np_[rng.integers(0, len(np_), len(np_))].mean() for _ in range(n_boot)])
+    ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
+    return {"neg_ctx_overrides_pos_img": neg_ov, "pos_ctx_overrides_neg_img": pos_ov,
+            "dominance_gap": neg_ov - pos_ov, "dominance_gap_ci95": ci,
+            "n_pos_images": int(len(pn)), "n_neg_images": int(len(np_))}
+
 
 def _z(x):
     x = np.asarray(x, dtype=float)
@@ -239,13 +280,14 @@ def run(config_path: str | None = None) -> dict:
 
     breakdown = _condition_breakdown(df)
     asymmetry = _asymmetry_vs_floor(df)
+    flip = _flip_override(df)
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "n_rows": int(len(df)),
         "n_images": int(df["image_path"].nunique()),
         "dominance": dom, "dominance_excludes_no_context": True,
         "cell_means": cells, "context_effect_vs_neutral": ctx_effect,
-        "asymmetry_vs_floor": asymmetry,
+        "asymmetry_vs_floor": asymmetry, "flip_override": flip,
         "condition_breakdown": breakdown,
     }
 
@@ -272,6 +314,12 @@ def run(config_path: str | None = None) -> dict:
     print("\n  context effect on behavioral valence (vs the NEUTRAL context):")
     for grp, e in ctx_effect.items():
         print(f"    {grp:8s} img: +ctx {e['positive']:+.3f}  -ctx {e['negative']:+.3f}")
+    if flip:
+        print(f"\n  FLIP-RATE OVERRIDE (argmax-emotion category, cross-model comparable): "
+              f"neg-ctx overrides positive image {flip['neg_ctx_overrides_pos_img']:.0%}  vs  "
+              f"pos-ctx overrides negative image {flip['pos_ctx_overrides_neg_img']:.0%}  "
+              f"(gap {flip['dominance_gap']:+.0%}, CI "
+              f"[{flip['dominance_gap_ci95'][0]:+.0%},{flip['dominance_gap_ci95'][1]:+.0%}])")
     if "drop_pos_img_neg_ctx" in asymmetry:
         a = asymmetry
         print("\n  ASYMMETRY vs FLOOR (is the pos-img+neg-ctx drop real, or ceiling/floor?):")
