@@ -166,8 +166,9 @@ only), 150 EMOTIC images. It **replicates near-quantitatively:**
 |---|---:|---:|
 | within-positive-image neg/pos ratio (graded valence) | **3.58×** | **3.64×** |
 | text-only raw \|neg\|/\|pos\| (confound control) | 1.06 (symmetric) | 1.00 (symmetric) |
-| override rate — neg-ctx overrides positive image | *(rerun pending)* | **77%** |
-| override rate — pos-ctx overrides negative image | *(rerun pending)* | **35%** |
+| override rate — neg-ctx overrides positive image | **84%** | **76%** |
+| override rate — pos-ctx overrides negative image | 21% | 37% |
+| override gap (95% CI, clustered over images) | **+64% [+55, +72]** | **+39% [+30, +49]** |
 
 - **Same magnitude, different architecture.** The within-positive-image negativity ratio lands at
   3.64× vs Gemma's 3.58×, and text-only is symmetric on both (1.00 / 1.06) → **cross-modal on Qwen too**,
@@ -178,9 +179,10 @@ only), 150 EMOTIC images. It **replicates near-quantitatively:**
   **saturates to ±1** and floors negative images — the graded head-room metric is fragile at small n
   (a 20-image smoke looked symmetric; at n=150 it clears 0: |drop|−|rise| = +0.394, CI [+0.249,+0.542]).
   The robust primary metric is therefore a **calibration-free override rate** on the argmax emotion's
-  valence category (shared across both models via `analyze_stage_f._flip_override`): on Qwen, negative
-  context overrides a positive image **77%** of the time vs positive context overriding a negative image
-  **35%** (gap +41%, CI [+32, +51]).
+  valence category (shared across both models via `analyze_stage_f._flip_override`): negative context
+  overrides a positive image **76%** vs positive context overriding a negative image **37%** on Qwen
+  (gap +39%, CI [+30, +49]), and **84% vs 21%** on Gemma (gap +64%, CI [+55, +72]) — the same direction
+  and both strongly significant, if anything *more* pronounced on the smaller Gemma model.
 
 **Scope:** this replicates the *effect* (experiments 1–2), not yet the *mechanism* — the L13-entry /
 turn-token-carrier findings need the patching port on Qwen (variable image-token counts + Qwen's own
