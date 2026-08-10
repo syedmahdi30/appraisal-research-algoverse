@@ -22,9 +22,10 @@ ceiling/floor of the valence scale. Mechanistically:
   (`<end_of_turn>\n<start_of_turn>model`) right before the read-out (~55–65%); **BOS and the user-turn
   prefix carry 0%**, so this is *not* a global attention-sink effect. The image's own valence never
   propagates out of the image tokens. **Replicated across two independent context pairs.**
-- **The behavioral effect replicates on a different-architecture VLM (Qwen3-VL-8B), near-quantitatively**
-  (within-positive-image negativity ratio 3.64× vs Gemma's 3.58×; cross-modal on both) — see
-  *Multi-model robustness* below.
+- **Both the effect AND the mechanism replicate on a different-architecture VLM (Qwen3-VL-8B):** the
+  negativity ratio lands at 3.64× (vs Gemma's 3.58×, cross-modal on both), and the image tokens are
+  causally inert on Qwen too (0% patch recovery) — the carrier is distributed across Qwen's text stream
+  rather than concentrated in the turn scaffold. See *Multi-model robustness* below.
 
 **One-line takeaway for the group:** *negativity dominance in cross-modal conflict is a text-stream
 phenomenon — the negative context routes into the assistant-turn preamble the read-out reads from,
@@ -184,19 +185,40 @@ only), 150 EMOTIC images. It **replicates near-quantitatively:**
   (gap +39%, CI [+30, +49]), and **84% vs 21%** on Gemma (gap +64%, CI [+55, +72]) — the same direction
   and both strongly significant, if anything *more* pronounced on the smaller Gemma model.
 
-**Scope:** this replicates the *effect* (experiments 1–2), not yet the *mechanism* — the L13-entry /
-turn-token-carrier findings need the patching port on Qwen (variable image-token counts + Qwen's own
-turn scaffold), which is the next step. Reproduce (separate `requirements-qwen.txt` env):
+**The mechanism replicates too — with a twist.** Porting the activation-patching experiment to Qwen
+(`stage_f_qwen_patching.py`, raw HF hooks, recovery on behavioral valence, 60 positive images):
+
+| patched group | Gemma-3-4B | Qwen3-VL-8B |
+|---|---:|---:|
+| **image tokens** | **−1%** | **0%** |
+| question | 22% | 12% |
+| suffix / turn scaffold (alone) | **65%** | 6% |
+| **all aligned text** | 85% | **65%** |
+
+- **Image tokens are causally inert on both** (~0%) — the headline mechanism (*the image's valence never
+  propagates out of the image tokens; the text stream carries the conflict*) **generalizes across
+  architectures.**
+- **The fine-grained locus differs.** Gemma *concentrates* the carrier in the assistant-turn scaffold
+  (that ~4-token group alone recovers 65%); Qwen *distributes* it — no single text group recovers much
+  (question 12%, suffix 6%), yet all-text recovers 65% (super-additive → a redundancy signature: the
+  negative signal is copied across the text positions, so you must patch them all). Same high-level
+  mechanism, model-specific concentration.
+
+**Scope note:** the layer-*entry* localization (Gemma's ~L13) is not yet run on Qwen (needs a
+probe-free layer lens); the Qwen band was a broad mid+late default. Reproduce (separate
+`requirements-qwen.txt` env):
 ```bash
-python -m src.experiments.stage_f_qwen              # base pass (override rate + graded asymmetry)
-python -m src.experiments.stage_f_qwen --text-only  # confound control (raw |neg|/|pos| ~ 1.0)
+python -m src.experiments.stage_f_qwen               # base pass (override rate + graded asymmetry)
+python -m src.experiments.stage_f_qwen --text-only   # confound control (raw |neg|/|pos| ~ 1.0)
+python -m src.experiments.stage_f_qwen_patching      # carrier (image inert; distributed vs Gemma)
 ```
 
 ## Threats to validity
-- **Single seed; mechanism on one model.** All runs seed 0. The *behavioral* effect now holds on two
-  architectures (Gemma-3-4B + Qwen3-VL-8B), but the *mechanism* (L13 entry, turn-token carrier) is
-  verified on Gemma only — the Qwen patching port is the outstanding step. A 3-seed repeat and a third
-  model (12B / Gemma-4) would further tighten it.
+- **Single seed; layer-entry localization on one model.** All runs seed 0. Effect *and* the
+  image-inert / text-carried mechanism now hold on two architectures (Gemma-3-4B + Qwen3-VL-8B); what
+  is Gemma-only is the *layer-entry* localization (~L13) and the carrier's concentration (Gemma
+  concentrates, Qwen distributes) — a probe-free layer lens on Qwen would close it. A 3-seed repeat and
+  a third model (12B / Gemma-4) would further tighten it.
 - **Patching context-pair scope.** Two donor/recipient context pairs (championship/funeral,
   wonderful/devastating). The image-inert / turn-preamble-carrier pattern replicates across both, but more pairs
   would tighten it. (This directly guards the single-context pitfall that misled the Stage F pilot.)
