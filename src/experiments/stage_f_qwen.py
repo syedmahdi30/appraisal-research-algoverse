@@ -154,14 +154,24 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
     # Saturation-robust WIN/FLIP-RATE metric — the right measure when the read-out is near-binary
     # (confident models like Qwen saturate valence to +/-1, so graded head-room asymmetry is fragile).
     # Negativity dominance = a negative context overrides a positive image MORE OFTEN than a positive
-    # context overrides a negative image (each conflict forward flips or it doesn't).
-    def _flip(group, cond, sign):
-        v = df[(df["image_group"] == group) & (df["condition"] == cond)]["valence"].to_numpy()
-        return (float((sign * v > 0).mean()), int(len(v))) if len(v) else (float("nan"), 0)
-    neg_override, n_pn = _flip("positive", "negative", -1)   # neg ctx flips a positive image → negative
-    pos_override, n_np = _flip("negative", "positive", +1)   # pos ctx flips a negative image → positive
+    # context overrides a negative image. Aggregated PER IMAGE (each image contributes its mean flip
+    # rate over the context bank) and bootstrapped over images, so the CI respects the clustering.
+    def _per_image(group, cond, sign):
+        g = df[(df["image_group"] == group) & (df["condition"] == cond)]
+        return g.groupby("image_path")["valence"].apply(lambda v: float((sign * v.to_numpy() > 0).mean())).to_numpy()
+    pn = _per_image("positive", "negative", -1)   # per positive image: rate a negative ctx flips it → neg
+    np_ = _per_image("negative", "positive", +1)  # per negative image: rate a positive ctx flips it → pos
+    neg_override = float(pn.mean()) if len(pn) else float("nan")
+    pos_override = float(np_.mean()) if len(np_) else float("nan")
+    gap_ci = [float("nan"), float("nan")]
+    if len(pn) and len(np_):
+        rng = np.random.default_rng(0)
+        boot = np.array([pn[rng.integers(0, len(pn), len(pn))].mean()
+                         - np_[rng.integers(0, len(np_), len(np_))].mean() for _ in range(2000)])
+        gap_ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
     flip = {"neg_ctx_overrides_pos_img": neg_override, "pos_ctx_overrides_neg_img": pos_override,
-            "dominance_gap": neg_override - pos_override, "n_pos_neg_cells": n_pn, "n_neg_pos_cells": n_np}
+            "dominance_gap": neg_override - pos_override, "dominance_gap_ci95": gap_ci,
+            "n_pos_images": int(len(pn)), "n_neg_images": int(len(np_))}
 
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "read_out": "behavioral_valence",
                "n_images": int(sel.shape[0] - n_skip), "n_skipped": n_skip, "n_rows": int(len(rows)),
@@ -183,7 +193,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
         print(f"    {grp:8s} img: {cells}")
     print(f"  NEGATIVITY DOMINANCE (flip rate, saturation-robust): neg-ctx overrides positive image "
           f"{neg_override:.0%}  vs  pos-ctx overrides negative image {pos_override:.0%}  "
-          f"(gap {flip['dominance_gap']:+.0%})")
+          f"(gap {flip['dominance_gap']:+.0%}, CI [{gap_ci[0]:+.0%},{gap_ci[1]:+.0%}])")
     if "drop_pos_img_neg_ctx" in asym:
         print(f"  [graded valence, fragile under saturation] drop {asym['drop_pos_img_neg_ctx']:+.3f}  "
               f"rise {asym['rise_neg_img_pos_ctx']:+.3f}  |drop|-|rise| {asym['asymmetry_index']:+.3f} "
