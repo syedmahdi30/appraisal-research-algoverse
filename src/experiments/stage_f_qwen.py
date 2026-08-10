@@ -230,11 +230,14 @@ def run_text_only(config_path: str, model_name: str) -> dict:
     print(f"  vs-neutral: pos {pe:+.3f}  neg {ne:+.3f}  |neg|/|pos| = {text_ratio:.2f}")
     print(f"  RAW (vs 0): pos {pr:+.3f}  neg {nr:+.3f}  |neg|/|pos| = {raw_ratio:.2f}  "
           f"(robust if neutral is floored)")
-    if img_ratio is not None:
-        verdict = ("CROSS-MODAL amplification (image inflates the ratio)" if img_ratio > 1.25 * text_ratio
-                   else "STIMULUS confound (ratios match)" if abs(img_ratio - text_ratio) <= 0.25 * text_ratio
+    # Compare the image-conditioned ratio to the RAW text-only ratio (vs-neutral is unreliable when
+    # the model floors its no-information baseline, as Qwen does).
+    ref = raw_ratio if np.isfinite(raw_ratio) else text_ratio
+    if img_ratio is not None and np.isfinite(ref):
+        verdict = ("CROSS-MODAL amplification (image inflates the ratio)" if img_ratio > 1.25 * ref
+                   else "STIMULUS confound (ratios match)" if abs(img_ratio - ref) <= 0.25 * ref
                    else "image dampens (reversed)")
-        print(f"  image-conditioned |neg|/|pos| = {img_ratio:.2f}  →  {verdict}")
+        print(f"  image-conditioned |neg|/|pos| = {img_ratio:.2f}  vs raw text-only {ref:.2f}  →  {verdict}")
     else:
         print("  (run the base pass first to auto-compare against the image-conditioned ratio)")
     print(f"  data -> {STAGE_F_DIR/'text_only_qwen.parquet'}")
