@@ -235,32 +235,59 @@ def run(config_path: str, model_name: str, limit_override: int | None = None,
 
     df = pd.DataFrame(rows)
     df.to_parquet(STAGE_F_DIR / "patching_qwen.parquet")
+    meta = {"model": model_name, "n_layers": n_layers, "patch_band": [band[0], band[-1]] if band else [],
+            "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
+            "donor_pos_context": pos_ctx, "recipient_neg_context": neg_ctx}
+    return _analyze_and_print(df, meta)
+
+
+def _analyze_and_print(df, meta) -> dict:
     rec = _recovery(df)
-
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "read_out": "behavioral_valence",
-               "n_layers": n_layers, "patch_band": [band[0], band[-1]] if band else [],
-               "n_images": n_ok, "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
-               "donor_pos_context": pos_ctx, "recipient_neg_context": neg_ctx,
-               "recovery": rec, "verdict": _verdict(rec)}
+    metrics = {"run": run_stamp(), "git": git_hash(), "read_out": "behavioral_valence",
+               "n_images": int(len(df)), "recovery": rec, "verdict": _verdict(rec), **meta}
     save_json(metrics, STAGE_F_DIR / "patching_qwen_metrics.json")
-
-    print(f"\nStage F [Qwen: {model_name}] patching — {n_ok} positive images ({n_skip} skipped, "
-          f"{seg_bad} seg-dropped); patch decoder layers {band[0]}-{band[-1]} of {n_layers}.")
-    print(f"  donor +ctx: \"{pos_ctx[:38]}\"   recipient -ctx: \"{neg_ctx[:38]}\"")
+    band = meta.get("patch_band", [])
+    print(f"\nStage F [Qwen: {meta.get('model')}] patching — {len(df)} positive images "
+          f"({meta.get('n_skipped', 0)} skipped, {meta.get('n_segmentation_dropped', 0)} seg-dropped); "
+          f"patch decoder layers {band[0] if band else '?'}-{band[-1] if band else '?'} of "
+          f"{meta.get('n_layers', '?')}.")
     print(f"  baselines (behavioral valence): pos {rec['pos_val']:+.3f}  neg {rec['neg_val']:+.3f}")
-    print(f"  {'group':13s} {'recovery(valence)':>18s}")
+    print(f"  {'group':13s} {'recovery':>9s}   95% CI")
     for g in GROUPS:
-        print(f"  {g:13s} {rec[g]['val'] * 100:>17.0f}%")
+        print(f"  {g:13s} {rec[g]['val'] * 100:>8.0f}%   [{rec[g]['ci95'][0] * 100:+.0f}%, "
+              f"{rec[g]['ci95'][1] * 100:+.0f}%]")
     print(f"\n  VERDICT: {metrics['verdict']}")
     print(f"  data -> {STAGE_F_DIR/'patching_qwen.parquet'}")
     return metrics
 
 
-def _recovery(df) -> dict:
-    out = {k: float(df[k].mean()) for k in ("pos_val", "neg_val")}
+def reanalyze(config_path: str) -> dict:
+    """Recompute recovery + CIs from the saved parquet — CPU only, no model load."""
+    ensure_dirs()
+    pq = STAGE_F_DIR / "patching_qwen.parquet"
+    if not pq.exists():
+        raise FileNotFoundError(f"{pq} missing — run the Qwen patching pass first.")
+    mpath = STAGE_F_DIR / "patching_qwen_metrics.json"
+    meta = {k: load_config(mpath).get(k) for k in
+            ("model", "n_layers", "patch_band", "n_skipped", "n_segmentation_dropped")} if mpath.exists() else {}
+    return _analyze_and_print(pd.read_parquet(pq), meta)
+
+
+def _recovery(df, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Recovery per group with a 95% CI bootstrapped over images (clustered)."""
+    pos, neg = df["pos_val"].to_numpy(), df["neg_val"].to_numpy()
+    out = {"pos_val": float(pos.mean()), "neg_val": float(neg.mean())}
     d = out["pos_val"] - out["neg_val"]
+    rng = np.random.default_rng(seed)
+    boots = rng.integers(0, len(df), (n_boot, len(df))) if len(df) else None
     for g in GROUPS:
-        out[g] = {"val": float((df[f"patch_{g}_val"].mean() - out["neg_val"]) / d) if d else float("nan")}
+        pv = df[f"patch_{g}_val"].to_numpy()
+        r = float((pv.mean() - out["neg_val"]) / d) if d else float("nan")
+        ci = [float("nan"), float("nan")]
+        if boots is not None and d:
+            bs = [(pv[b].mean() - neg[b].mean()) / (pos[b].mean() - neg[b].mean()) for b in boots]
+            ci = [float(x) for x in np.percentile(bs, [2.5, 97.5])]
+        out[g] = {"val": r, "ci95": ci}
     return out
 
 
@@ -293,9 +320,13 @@ def main() -> None:
     ap.add_argument("--layers", type=str, default=None, help="patch band 'a-b' (default mid+late)")
     ap.add_argument("--pos-idx", type=int, default=None)
     ap.add_argument("--neg-idx", type=int, default=None)
+    ap.add_argument("--reanalyze", action="store_true", help="recompute recovery + CIs from the saved parquet (CPU)")
     args = ap.parse_args()
-    run(args.config, args.model, limit_override=args.limit, layers_override=args.layers,
-        pos_idx=args.pos_idx, neg_idx=args.neg_idx)
+    if args.reanalyze:
+        reanalyze(args.config)
+    else:
+        run(args.config, args.model, limit_override=args.limit, layers_override=args.layers,
+            pos_idx=args.pos_idx, neg_idx=args.neg_idx)
 
 
 if __name__ == "__main__":
