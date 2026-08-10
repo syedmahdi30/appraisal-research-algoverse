@@ -22,6 +22,9 @@ ceiling/floor of the valence scale. Mechanistically:
   (`<end_of_turn>\n<start_of_turn>model`) right before the read-out (~55–65%); **BOS and the user-turn
   prefix carry 0%**, so this is *not* a global attention-sink effect. The image's own valence never
   propagates out of the image tokens. **Replicated across two independent context pairs.**
+- **The behavioral effect replicates on a different-architecture VLM (Qwen3-VL-8B), near-quantitatively**
+  (within-positive-image negativity ratio 3.64× vs Gemma's 3.58×; cross-modal on both) — see
+  *Multi-model robustness* below.
 
 **One-line takeaway for the group:** *negativity dominance in cross-modal conflict is a text-stream
 phenomenon — the negative context routes into the assistant-turn preamble the read-out reads from,
@@ -154,9 +157,44 @@ noisier: text_all 73–78%. The probe-level decomposition is the clean measureme
 > valence never propagates out of the image tokens; the negative context wins by writing into the turn
 > preamble the read-out reads.
 
+## Multi-model robustness — Qwen3-VL-8B (different architecture)
+The behavioral effect replicates on a second, unrelated VLM. `stage_f_qwen.py` runs the base pass +
+text-only control on Qwen via raw HuggingFace (no TransformerBridge, no probe — behavioral valence
+only), 150 EMOTIC images. It **replicates near-quantitatively:**
+
+| metric | Gemma-3-4B | Qwen3-VL-8B |
+|---|---:|---:|
+| within-positive-image neg/pos ratio (graded valence) | **3.58×** | **3.64×** |
+| text-only raw \|neg\|/\|pos\| (confound control) | 1.06 (symmetric) | 1.00 (symmetric) |
+| override rate — neg-ctx overrides positive image | *(rerun pending)* | **77%** |
+| override rate — pos-ctx overrides negative image | *(rerun pending)* | **35%** |
+
+- **Same magnitude, different architecture.** The within-positive-image negativity ratio lands at
+  3.64× vs Gemma's 3.58×, and text-only is symmetric on both (1.00 / 1.06) → **cross-modal on Qwen too**,
+  not a stimulus artifact and not a Gemma quirk.
+- **The image is integrated, not ignored** (positive-image neutral valence +0.63 — a happy face reads
+  positive; Qwen weighs both modalities and negative text wins the conflict).
+- **A read-out-regime change, handled.** Qwen is far more confident, so its closed-vocab valence
+  **saturates to ±1** and floors negative images — the graded head-room metric is fragile at small n
+  (a 20-image smoke looked symmetric; at n=150 it clears 0: |drop|−|rise| = +0.394, CI [+0.249,+0.542]).
+  The robust primary metric is therefore a **calibration-free override rate** on the argmax emotion's
+  valence category (shared across both models via `analyze_stage_f._flip_override`): on Qwen, negative
+  context overrides a positive image **77%** of the time vs positive context overriding a negative image
+  **35%** (gap +41%, CI [+32, +51]).
+
+**Scope:** this replicates the *effect* (experiments 1–2), not yet the *mechanism* — the L13-entry /
+turn-token-carrier findings need the patching port on Qwen (variable image-token counts + Qwen's own
+turn scaffold), which is the next step. Reproduce (separate `requirements-qwen.txt` env):
+```bash
+python -m src.experiments.stage_f_qwen              # base pass (override rate + graded asymmetry)
+python -m src.experiments.stage_f_qwen --text-only  # confound control (raw |neg|/|pos| ~ 1.0)
+```
+
 ## Threats to validity
-- **Single seed, one layer's read-out, one model.** All runs seed 0, read-out at L18, Gemma-3-4B. A
-  3-seed repeat and a second model (Qwen-VL / 12B Gemma) are the outstanding robustness steps.
+- **Single seed; mechanism on one model.** All runs seed 0. The *behavioral* effect now holds on two
+  architectures (Gemma-3-4B + Qwen3-VL-8B), but the *mechanism* (L13 entry, turn-token carrier) is
+  verified on Gemma only — the Qwen patching port is the outstanding step. A 3-seed repeat and a third
+  model (12B / Gemma-4) would further tighten it.
 - **Patching context-pair scope.** Two donor/recipient context pairs (championship/funeral,
   wonderful/devastating). The image-inert / turn-preamble-carrier pattern replicates across both, but more pairs
   would tighten it. (This directly guards the single-context pitfall that misled the Stage F pilot.)
