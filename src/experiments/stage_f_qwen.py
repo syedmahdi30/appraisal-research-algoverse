@@ -180,19 +180,27 @@ def run_text_only(config_path: str, model_name: str) -> dict:
                   + [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)])
     model, processor = load_qwen(model_name)
     tok_ids = emotion_token_ids(processor)
+    multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
+             if not r["single_token"]}
 
     rows = []
     for cond, cid, sentence in conditions:
         val, lp = readout(model, build_inputs(processor, None, sentence), tok_ids)  # image=None
+        top = max(lp, key=lp.get)
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
-                     "text_code": TEXT_CODE[cond], "valence": val,
+                     "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": top,
                      **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
     df = pd.DataFrame(rows)
     df.to_parquet(STAGE_F_DIR / "text_only_qwen.parquet")
 
     neu = float(df[df["condition"] == "neutral"]["valence"].mean())
+    none_v = float(df[df["condition"] == "none"]["valence"].mean())
     pe = float((df[df["condition"] == "positive"]["valence"] - neu).mean())
     ne = float((df[df["condition"] == "negative"]["valence"] - neu).mean())
+    # raw ratio (vs 0, not vs the possibly-contaminated neutral) — robust when neutral is floored.
+    pr = float(df[df["condition"] == "positive"]["valence"].mean())
+    nr = float(df[df["condition"] == "negative"]["valence"].mean())
+    raw_ratio = abs(nr) / abs(pr) if pr else float("nan")
     text_ratio = abs(ne) / abs(pe) if pe else float("nan")
 
     # compare to the image-conditioned ratio from the base run, if present
@@ -205,12 +213,23 @@ def run_text_only(config_path: str, model_name: str) -> dict:
             img_ratio = abs(dn) / abs(dp)
 
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "neutral_baseline": neu, "pos_effect": pe, "neg_effect": ne,
-               "text_only_ratio": text_ratio, "image_conditioned_ratio": img_ratio}
+               "neutral_baseline": neu, "none_baseline": none_v, "pos_effect": pe, "neg_effect": ne,
+               "pos_raw": pr, "neg_raw": nr, "text_only_ratio_vs_neutral": text_ratio,
+               "text_only_ratio_raw": raw_ratio, "image_conditioned_ratio": img_ratio,
+               "tokenization_multi_token": multi}
     save_json(metrics, STAGE_F_DIR / "text_only_qwen_metrics.json")
 
     print(f"\nStage F [Qwen: {model_name}] text-only — {len(rows)} forwards (no images).")
-    print(f"  pos-ctx {pe:+.3f}  neg-ctx {ne:+.3f}  |neg|/|pos| = {text_ratio:.2f}")
+    if multi:
+        print(f"  ⚠ multi-token labels (first sub-token scored): {list(multi)}")
+    print(f"  per-context (no image): valence | argmax emotion")
+    for _, r in df.iterrows():
+        print(f"    {r['context_id']:5s} {r['valence']:+6.3f}  {r['argmax_emotion']:9s}  "
+              f"\"{r['context'][:42]}\"")
+    print(f"  baselines: neutral {neu:+.3f}  none {none_v:+.3f}")
+    print(f"  vs-neutral: pos {pe:+.3f}  neg {ne:+.3f}  |neg|/|pos| = {text_ratio:.2f}")
+    print(f"  RAW (vs 0): pos {pr:+.3f}  neg {nr:+.3f}  |neg|/|pos| = {raw_ratio:.2f}  "
+          f"(robust if neutral is floored)")
     if img_ratio is not None:
         verdict = ("CROSS-MODAL amplification (image inflates the ratio)" if img_ratio > 1.25 * text_ratio
                    else "STIMULUS confound (ratios match)" if abs(img_ratio - text_ratio) <= 0.25 * text_ratio
