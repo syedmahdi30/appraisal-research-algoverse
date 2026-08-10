@@ -150,9 +150,22 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
 
     from .analyze_stage_f import _asymmetry_vs_floor
     asym = _asymmetry_vs_floor(df) if len(df) else {}
+
+    # Saturation-robust WIN/FLIP-RATE metric — the right measure when the read-out is near-binary
+    # (confident models like Qwen saturate valence to +/-1, so graded head-room asymmetry is fragile).
+    # Negativity dominance = a negative context overrides a positive image MORE OFTEN than a positive
+    # context overrides a negative image (each conflict forward flips or it doesn't).
+    def _flip(group, cond, sign):
+        v = df[(df["image_group"] == group) & (df["condition"] == cond)]["valence"].to_numpy()
+        return (float((sign * v > 0).mean()), int(len(v))) if len(v) else (float("nan"), 0)
+    neg_override, n_pn = _flip("positive", "negative", -1)   # neg ctx flips a positive image → negative
+    pos_override, n_np = _flip("negative", "positive", +1)   # pos ctx flips a negative image → positive
+    flip = {"neg_ctx_overrides_pos_img": neg_override, "pos_ctx_overrides_neg_img": pos_override,
+            "dominance_gap": neg_override - pos_override, "n_pos_neg_cells": n_pn, "n_neg_pos_cells": n_np}
+
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "read_out": "behavioral_valence",
                "n_images": int(sel.shape[0] - n_skip), "n_skipped": n_skip, "n_rows": int(len(rows)),
-               "asymmetry_vs_floor": asym, "tokenization_multi_token": multi}
+               "asymmetry_vs_floor": asym, "flip_rate": flip, "tokenization_multi_token": multi}
     save_json(metrics, STAGE_F_DIR / "conflict_qwen_metrics.json")
 
     print(f"\nStage F [Qwen: {model_name}] base — {metrics['n_images']} images × {len(conditions)} "
@@ -168,12 +181,15 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
         cells = "  ".join(f"{c}={g[g['condition'] == c]['valence'].mean():+.2f}"
                           for c in ("none", "neutral", "positive", "negative"))
         print(f"    {grp:8s} img: {cells}")
+    print(f"  NEGATIVITY DOMINANCE (flip rate, saturation-robust): neg-ctx overrides positive image "
+          f"{neg_override:.0%}  vs  pos-ctx overrides negative image {pos_override:.0%}  "
+          f"(gap {flip['dominance_gap']:+.0%})")
     if "drop_pos_img_neg_ctx" in asym:
-        print(f"  ASYMMETRY vs FLOOR: drop {asym['drop_pos_img_neg_ctx']:+.3f}  rise "
-              f"{asym['rise_neg_img_pos_ctx']:+.3f}  |drop|-|rise| {asym['asymmetry_index']:+.3f} "
+        print(f"  [graded valence, fragile under saturation] drop {asym['drop_pos_img_neg_ctx']:+.3f}  "
+              f"rise {asym['rise_neg_img_pos_ctx']:+.3f}  |drop|-|rise| {asym['asymmetry_index']:+.3f} "
               f"CI [{asym['asymmetry_ci95'][0]:+.3f},{asym['asymmetry_ci95'][1]:+.3f}]  "
-              f"MW p={asym['mannwhitney_p_greater']:.3f}")
-        print(f"  → {asym['interpretation']}")
+              f"head-room pull drop {asym['headroom_norm_pull_drop']:.2f} vs rise "
+              f"{asym['headroom_norm_pull_rise']:.2f}")
     print(f"  data -> {out_pq}")
     print("  NEXT: python -m src.experiments.stage_f_qwen --text-only --model " + model_name)
     return metrics
