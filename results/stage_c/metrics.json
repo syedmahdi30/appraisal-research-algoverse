@@ -1,0 +1,90 @@
+{
+  "run": "20260716T105625Z",
+  "layer": 18,
+  "tap": "hook_attn_out",
+  "seed": 0,
+  "n_images_requested": 7280,
+  "n_images_scored": 7280,
+  "n_skipped_unreadable": 0,
+  "n_single_label": 503,
+  "n_dropped_multilabel": 6777,
+  "polarity_groups": {
+    "positive": [
+      "joy"
+    ],
+    "negative": [
+      "anger",
+      "disgust",
+      "fear",
+      "sadness"
+    ]
+  },
+  "caveats": [
+    "EMOTIC has no appraisal ground truth; pleasantness is anchored to continuous valence (1-10) and to shared-7 emotion polarity \u2014 both are proxies.",
+    "EMOTIC-26 -> shared-7 mapping is lossy; single-label filtering drops multilabel rows.",
+    "Metrics are correlation/AUC (scale-invariant): raw r2 is NOT comparable across the 1-5 (probe) vs 1-10 (valence) scales."
+  ],
+  "image_readout": {
+    "pleasantness": {
+      "vs_valence": {
+        "n": 7280,
+        "pearson": 0.5239240077543953,
+        "spearman": 0.5073726510684934
+      },
+      "polarity_auc": {
+        "n": 440,
+        "n_pos": 384,
+        "n_neg": 56,
+        "auc": 0.8981584821428571
+      },
+      "vs_control_p": 0.009900990099009901
+    },
+    "unpleasantness": {
+      "vs_valence": {
+        "n": 7280,
+        "pearson": -0.47261435486233194,
+        "spearman": -0.4483121122850076
+      },
+      "polarity_auc": {
+        "n": 440,
+        "n_pos": 384,
+        "n_neg": 56,
+        "auc": 0.123046875
+      },
+      "vs_control_p": 0.009900990099009901
+    }
+  },
+  "random_control": {
+    "n_random": 100,
+    "n_valid": 100,
+    "mean": 0.12818972325059874,
+    "std": 0.09332538902269888,
+    "max": 0.3616158432678858,
+    "p95": 0.3000913122899169
+  },
+  "text_reference": {
+    "pleasantness": {
+      "n": 1000,
+      "pearson": 0.7951586250913807,
+      "spearman": 0.7683260578415715
+    },
+    "unpleasantness": {
+      "n": 1000,
+      "pearson": 0.7698697907697305,
+      "spearman": 0.746720986471004
+    }
+  },
+  "transfer": {
+    "pleasantness": {
+      "text_abs_spearman": 0.7683260578415715,
+      "image_abs_spearman": 0.5073726510684934,
+      "retention": 0.6603611134754893
+    },
+    "unpleasantness": {
+      "text_abs_spearman": 0.746720986471004,
+      "image_abs_spearman": 0.4483121122850076,
+      "retention": 0.6003743304493505
+    }
+  },
+  "verdict": "supports read-out transfer (pleasantness rho=+0.51 vs valence, polarity AUC=0.90, beats random dirs p=0.010, unpleasantness mirrors) \u2014 NEXT: caption baseline to separate shared-geometry vs verbalization"
+}

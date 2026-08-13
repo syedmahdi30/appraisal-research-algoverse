@@ -33,3 +33,15 @@ hf_cache/
 
 # Internal strategy doc — keep local, not in public repo
 compass_artifact_*.md
+
+# Local Claude settings (personal permission allowlist, not shared)
+.claude/settings.local.json
+
+# Local staging duplicate of results — contains gated EMOTIC data (see data-rules)
+/algoverse-appraisal/
+
+# EMOTIC-derived processed tables anywhere (gated — never redistribute)
+**/data/processed/
+
+# Derived analysis tables embed per-image EMOTIC valence/paths (gated) — keep JSON metrics + PNG figures only
+results/**/*.parquet
