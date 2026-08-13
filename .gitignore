@@ -21,11 +21,8 @@ data/processed/
 *.npy
 *.npz
 
-# Results (regenerable — commit only curated tables/figures if desired)
-results/**/*.pt
-results/**/*.pkl
-results/**/*.joblib
-results/**/cache/
+# Results (regenerable — not tracked)
+/results/
 
 # Model / HF caches
 *.safetensors
@@ -42,6 +39,3 @@ compass_artifact_*.md
 
 # EMOTIC-derived processed tables anywhere (gated — never redistribute)
 **/data/processed/
-
-# Derived analysis tables embed per-image EMOTIC valence/paths (gated) — keep JSON metrics + PNG figures only
-results/**/*.parquet
