@@ -26,6 +26,9 @@ ceiling/floor of the valence scale. Mechanistically:
   negativity ratio lands at 3.64× (vs Gemma's 3.58×, cross-modal on both), and the image tokens are
   causally inert on Qwen too (0% patch recovery) — the carrier is distributed across Qwen's text stream
   rather than concentrated in the turn scaffold. See *Multi-model robustness* below.
+- **Prompt-robust:** the behavioral override holds across 6 prompt phrasings (dominance gap +46% to
+  +74%, mean +58%, every CI clears 0), and the reported base prompt is mid-pack — not the best case.
+  See *Prompt robustness* below.
 
 **One-line takeaway for the group:** *negativity dominance in cross-modal conflict is a text-stream
 phenomenon — the negative context routes into the assistant-turn preamble the read-out reads from,
@@ -213,6 +216,40 @@ python -m src.experiments.stage_f_qwen --text-only   # confound control (raw |ne
 python -m src.experiments.stage_f_qwen_patching      # carrier (image inert; distributed vs Gemma)
 ```
 
+## Prompt robustness — the effect is not an artifact of one phrasing (Gemma-3-4B)
+The most common objection to a behavioral VLM result is *did you cherry-pick the prompt?*
+`stage_f_prompts.py` answers it by holding the SCORING fixed (the same calibration-free
+argmax-emotion override rate) and the turn scaffold byte-identical, then varying only the user-turn
+text — question wording, context placement, and the `Context:` label — across 6 natural rephrasings.
+Full context bank (6 pos / 6 neg / 2 neutral), 150 EMOTIC test extremes, **13,500 forwards**:
+
+| variant | phrasing / framing | neg-ctx > pos img | pos-ctx > neg img | dominance gap | 95% CI |
+|---|---|---:|---:|---:|---:|
+| `v0_original` | *What single emotion is this person feeling?* (base run) | 84% | 19% | **+65%** | [+0.57, +0.73] |
+| `v1_howfeel` | *How is this person feeling?* | 82% | 26% | +57% | [+0.47, +0.66] |
+| `v2_oneword` | *In one word, what emotion is this person experiencing?* | 76% | 29% | **+46%** | [+0.37, +0.56] |
+| `v3_mostlikely` | *What is the most likely emotion of the person in this photo?* | 76% | 27% | +49% | [+0.38, +0.60] |
+| `v4_ctx_after` | context placed *after* the question | 84% | 29% | +54% | [+0.45, +0.63] |
+| `v5_no_label` | bare context sentence, no `Context:` label | 89% | 16% | **+74%** | [+0.65, +0.81] |
+
+- **The direction never flips and every CI clears 0** — dominance gap **+46% to +74%, mean +58%**.
+  The negativity-dominance effect is a property of the conflict, not of one sentence.
+- **Anchor check:** `v0_original` reproduces the published base run (84% / 19% here vs 84% / 21%
+  reported) → the sweep faithfully re-implements the original pipeline, so the other five rows are
+  trustworthy deltas.
+- **We did not maximize the effect with our phrasing.** The base prompt (`v0`, +65%) sits mid-pack;
+  the *unlabelled* variant (`v5`, +74%) is actually stronger. So the reported number is not the
+  best-case cherry-pick.
+- **Weakest variant is interpretable, not a threat.** `v2_oneword` (+46%) is the softest — asking for
+  "one word" nudges the model toward a terse, image-literal descriptor that slightly blunts text
+  override; it still clears 0 comfortably.
+
+Reproduce (Gemma venv):
+```bash
+python -m src.experiments.stage_f_prompts             # 6 variants x full bank (A100)
+python -m src.experiments.stage_f_prompts --reanalyze # per-variant gap + CI + verdict (CPU)
+```
+
 ## Threats to validity
 - **Single seed; layer-entry localization on one model.** All runs seed 0. Effect *and* the
   image-inert / text-carried mechanism now hold on two architectures (Gemma-3-4B + Qwen3-VL-8B); what
@@ -229,8 +266,10 @@ python -m src.experiments.stage_f_qwen_patching      # carrier (image inert; dis
   as a diagnostic; onset/peak are gated for scale and sign, but absolute `d` values are lens-relative.
 - **Carrier resolved to the suffix delimiters (not inferred).** The structure group was split and
   re-patched: BOS 0% / prefix-delims 0% / **suffix-delims 57–65%**, additive with structure. So the
-  carrier is the assistant-turn preamble, not a BOS sink. (Open: this is one prompt template's turn
-  scaffold; a different chat format could relocate it.)
+  carrier is the assistant-turn preamble, not a BOS sink. Scope: the *behavioral* effect is now shown
+  prompt-robust across 6 phrasings (see *Prompt robustness*); what remains format-specific is the
+  *carrier locus* — this is one prompt template's turn scaffold, and a different chat format could
+  relocate where the signal aggregates without changing the behavioral outcome.
 - **Behavioral valence is negatively skewed** (even happy faces read slightly negative on the
   closed-vocab P[pos]−P[neg]); only *relative* effects are interpreted.
 
