@@ -29,6 +29,9 @@ ceiling/floor of the valence scale. Mechanistically:
 - **Prompt-robust:** the behavioral override holds across 6 prompt phrasings (dominance gap +46% to
   +74%, mean +58%, every CI clears 0), and the reported base prompt is mid-pack — not the best case.
   See *Prompt robustness* below.
+- **Holds at scale:** dominance persists from Gemma-3-4B to 12B (gap +51%, CI clears 0); with scale
+  the model becomes *more* text-driven in BOTH directions (neg-override 84%→93%, pos-override
+  19%→42%) — the image loses influence, negativity dominance does not. See *Model-scale robustness*.
 
 **One-line takeaway for the group:** *negativity dominance in cross-modal conflict is a text-stream
 phenomenon — the negative context routes into the assistant-turn preamble the read-out reads from,
@@ -250,12 +253,48 @@ python -m src.experiments.stage_f_prompts             # 6 variants x full bank (
 python -m src.experiments.stage_f_prompts --reanalyze # per-variant gap + CI + verdict (CPU)
 ```
 
+## Model-scale robustness — Gemma-3 4B → 12B
+`stage_f_scaling.py` (behavioral-only; the 4B probe does not transfer to 12B, so scoring is the
+shared calibration-free override rate — comparable to the 4B/Qwen numbers). Same EMOTIC test
+extremes, canonical prompt, and full context bank across both sizes; only `--model` changes. 150
+images, ran on the A100:
+
+| size | params | neg-ctx overrides pos img | pos-ctx overrides neg img | dominance gap | 95% CI |
+|---|---:|---:|---:|---:|---:|
+| `gemma-3-4b-it`  | 4.3B  | 84% | 19% | **+65%** | [+0.57, +0.73] |
+| `gemma-3-12b-it` | 12.2B | **93%** | **42%** | **+51%** | [+0.42, +0.59] |
+
+- **Anchor check:** 4B reproduces the base run (84% / 19% ≈ published 84% / 21%) → the behavioral-only
+  scaling path matches the probe-era pipeline.
+- **Dominance PERSISTS at scale.** The 12B gap is **+51%, CI [+0.42, +0.59]** — well clear of 0. A 3×
+  parameter increase does not remove the effect.
+- **Read the components, not just the gap.** The headline is NOT "the effect weakens": negative
+  override *rises* with scale (84% → **93%**). The gap narrows only because *positive* override rises
+  faster (19% → **42%**, more than double). ⇒ **the larger model is more text-driven in BOTH
+  directions — the image loses influence overall**, and negativity override is pushing into its
+  ceiling (93%).
+- **Two honest caveats.** (i) The two gap CIs OVERLAP ([0.57,0.73] vs [0.42,0.59] share [0.57,0.59]),
+  so the −14% narrowing is **not** clearly significant — do not claim the asymmetry significantly
+  decreased; the clearly-significant, large change is pos-override doubling. (ii) With neg-override
+  near 100%, the gap metric is mechanically compressed from above, so part of the "narrowing" is a
+  ceiling artifact of the metric, not a weakening of the phenomenon.
+- **Reportable trend:** negativity dominance holds across 4B→12B, and *overall* text-dominance
+  increases with scale (both override rates up; image influence down) — a scaling trend, not a null.
+
+Reproduce (Gemma venv; one model per invocation to avoid OOM):
+```bash
+python -m src.experiments.stage_f_scaling --model google/gemma-3-4b-it
+python -m src.experiments.stage_f_scaling --model google/gemma-3-12b-it
+python -m src.experiments.stage_f_scaling --reanalyze   # gap-vs-size table + component deltas + figure
+```
+
 ## Threats to validity
-- **Single seed; layer-entry localization on one model.** All runs seed 0. Effect *and* the
-  image-inert / text-carried mechanism now hold on two architectures (Gemma-3-4B + Qwen3-VL-8B); what
-  is Gemma-only is the *layer-entry* localization (~L13) and the carrier's concentration (Gemma
-  concentrates, Qwen distributes) — a probe-free layer lens on Qwen would close it. A 3-seed repeat and
-  a third model (12B / Gemma-4) would further tighten it.
+- **Single seed; layer-entry localization on one model.** All runs seed 0. The behavioral effect now
+  holds on two architectures (Gemma-3-4B + Qwen3-VL-8B) AND across scale (4B→12B, see *Model-scale
+  robustness*); the image-inert / text-carried mechanism holds on both architectures. What is
+  Gemma-4B-only is the *layer-entry* localization (~L13) and the carrier's concentration (Gemma
+  concentrates, Qwen distributes) — a probe-free layer lens on Qwen would close it. A 3-seed repeat
+  remains the main open robustness item.
 - **Patching context-pair scope.** Two donor/recipient context pairs (championship/funeral,
   wonderful/devastating). The image-inert / turn-preamble-carrier pattern replicates across both, but more pairs
   would tighten it. (This directly guards the single-context pitfall that misled the Stage F pilot.)

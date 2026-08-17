@@ -145,16 +145,27 @@ def analyze() -> dict:
 
 
 def _trend(per_model: list[dict]) -> dict:
-    """Direction of the override gap across size (smallest → largest), CIs for overlap check."""
+    """Scale trend, reported HONESTLY — the gap alone is misleading when a component saturates.
+
+    The dominance GAP can narrow even while the negative-override effect STRENGTHENS, if positive
+    override rises faster and/or negative override hits its ceiling. So we surface the component
+    deltas (neg-override, pos-override) alongside the gap, flag a near-ceiling component, and check
+    whether the smallest/largest gap CIs even separate before calling the gap change 'significant'.
+    """
     if len(per_model) < 2:
         return {}
     lo, hi = per_model[0], per_model[-1]
-    delta = hi["dominance_gap"] - lo["dominance_gap"]
-    direction = "grows with scale" if delta > 0.03 else "shrinks with scale" if delta < -0.03 \
-        else "flat across scale"
+    dgap = hi["dominance_gap"] - lo["dominance_gap"]
+    dneg = hi["neg_ctx_overrides_pos_img"] - lo["neg_ctx_overrides_pos_img"]
+    dpos = hi["pos_ctx_overrides_neg_img"] - lo["pos_ctx_overrides_neg_img"]
+    lo_ci, hi_ci = lo["dominance_gap_ci95"], hi["dominance_gap_ci95"]
+    gaps_overlap = not (lo_ci[0] > hi_ci[1] or hi_ci[0] > lo_ci[1])  # crude significance guard
+    gap_dir = "grows" if dgap > 0.03 else "narrows" if dgap < -0.03 else "flat"
     return {"smallest": lo["model"], "largest": hi["model"],
             "gap_smallest": lo["dominance_gap"], "gap_largest": hi["dominance_gap"],
-            "delta_gap": delta, "direction": direction,
+            "delta_gap": dgap, "delta_neg_override": dneg, "delta_pos_override": dpos,
+            "gap_direction": gap_dir, "gap_cis_overlap": gaps_overlap,
+            "neg_override_near_ceiling": max(m["neg_ctx_overrides_pos_img"] for m in per_model) > 0.9,
             "all_gaps_clear_zero": all(m["dominance_gap_ci95"][0] > 0 for m in per_model)}
 
 
@@ -208,10 +219,13 @@ def reanalyze() -> dict:
               f"{m['dominance_gap']:>+7.0%}  [{ci[0]:+.2f}, {ci[1]:+.2f}]")
     t = out.get("trend", {})
     if t:
-        print(f"\n  TREND {model_tag(t['smallest'])} ({t['gap_smallest']:+.0%}) → "
-              f"{model_tag(t['largest'])} ({t['gap_largest']:+.0%}): Δ {t['delta_gap']:+.0%} "
-              f"→ dominance {t['direction']}; "
-              f"{'all sizes clear 0' if t['all_gaps_clear_zero'] else 'a size includes 0'}.")
+        print(f"\n  TREND (smallest → largest): dominance gap {t['gap_smallest']:+.0%} → "
+              f"{t['gap_largest']:+.0%} (Δ {t['delta_gap']:+.0%}, gap {t['gap_direction']}"
+              f"{'; CIs OVERLAP — Δgap not clearly significant' if t['gap_cis_overlap'] else ''}).")
+        print(f"        components: neg-override Δ {t['delta_neg_override']:+.0%}, "
+              f"pos-override Δ {t['delta_pos_override']:+.0%}"
+              f"{'  [neg-override near ceiling >90%: gap compressed from above]' if t['neg_override_near_ceiling'] else ''}.")
+        print(f"        dominance {'PERSISTS at every scale (all CIs clear 0)' if t['all_gaps_clear_zero'] else 'NOT robust — a size includes 0'}.")
     if len(out["per_model"]) >= 2:
         fig_path = FIGURES_DIR / "stage_f_scaling.png"
         _plot(out["per_model"], fig_path)
