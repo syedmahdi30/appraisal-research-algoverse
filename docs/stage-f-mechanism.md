@@ -203,11 +203,40 @@ metric (`analyze_stage_f --parquet conflict_minimal.parquet`).
   text-only ratio (1.25) is slightly above the original bank's (1.06), so we lean on the override /
   asymmetry-vs-floor metrics (which control for it) as primary, not the raw text-only symmetry.
 
+**Strictest test — within-item, within-event paired contrast.** Because a minimal pair holds the
+event constant, we can compare the negative and positive member *on the same photo*
+(`analyze_stage_f._minimal_pair_asymmetry`): per image and per pair, `|Δneg| − |Δpos|` vs that image's
+neutral, on the positive-image group. This is the tightest possible test — and it is **positive but
+marginal**: overall **+0.166, bootstrap CI [+0.016, +0.324], Wilcoxon p = 0.052** (n = 62 images × 6
+pairs), weaker than the cross-cell asymmetry-vs-floor (+0.330). The per-pair breakdown explains why —
+and is the more informative result:
+
+| pair | swap | Δneg | Δpos | \|Δneg\|−\|Δpos\| |
+|---|---|---:|---:|---:|
+| mp0 | won ↔ lost | −0.547 | **+0.469** | +0.078 |
+| mp1 | best ↔ worst | −0.534 | −0.055 | +0.479 |
+| mp2 | got ↔ lost | −0.658 | −0.264 | +0.394 |
+| mp3 | wonderful ↔ devastating | −0.742 | +0.285 | +0.457 |
+| mp4 | celebration ↔ memorial | −0.348 | **+0.453** | −0.105 |
+| mp5 | joyful ↔ heartbreaking | −0.413 | +0.215 | +0.198 |
+
+- **Negative framing is reliable; positive framing is fragile.** Every negative member drops the
+  read-out hard and consistently (Δneg −0.35 to −0.74). Positive framing's lift is event-dependent:
+  strong concrete positives break through even on a positive image (won a championship +0.47, a
+  celebration +0.45), while abstract or oddly-parsed positives do not ("best day" −0.06; "got the job
+  they *wanted*" −0.26 — the model appears to read "wanted" as unfulfilled longing). The two strong
+  positives (mp0, mp4) drag the paired asymmetry down and mp4 even reverses.
+- **Refinement, not contradiction.** Within matched events, negativity dominance is carried by the
+  **consistency** of negative framing, not by negatives being uniformly larger in magnitude. The
+  category-level override gap (+65%) and cross-cell asymmetry (+0.330) remain the primary robust
+  results; the within-item paired test is reported as a stricter, honest check (marginal) that sharpens
+  the mechanism. (Stimulus note: revise mp1/mp2's positive members in any follow-up — they read weak.)
+
 Reproduce:
 ```bash
 python -m src.experiments.stage_f_conflict  --bank minimal   # base pass → conflict_minimal.parquet
 python -m src.experiments.stage_f_text_only --bank minimal   # matched text-only control
-python -m src.experiments.analyze_stage_f   --parquet conflict_minimal.parquet
+python -m src.experiments.analyze_stage_f   --parquet conflict_minimal.parquet   # incl. per-pair table
 ```
 
 ## Multi-model robustness — Qwen3-VL-8B (different architecture)
