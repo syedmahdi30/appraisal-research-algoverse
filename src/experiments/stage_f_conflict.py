@@ -32,7 +32,8 @@ from ..bridge.boot import boot_gemma
 from ..bridge.hooks import make_steer_hook, resid_post_name
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
-                                      STRONG_CONTEXT, TEXT_CODE, context_prompt, sample_contexts)
+                                      STRONG_CONTEXT, TEXT_CODE, build_conditions, context_prompt,
+                                      sample_contexts)
 from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_E_DIR, STAGE_F_DIR, ensure_dirs
@@ -101,14 +102,15 @@ def pleasantness_dmu(bridge, layer, n_dir, seed):
 
 
 # --------------------------------------------------------------------------- base pass (F2)
-def run_base(config_path: str, limit_override: int | None = None) -> dict:
+def run_base(config_path: str, limit_override: int | None = None, bank: str | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     layer = int(cfg.get("critical_layer", 18))
     tap = cfg.get("tap", "hook_attn_out")
     seed = int(cfg.get("seed", 0))
     n_images = limit_override or int(cfg.get("n_images", 40))
-    full_bank = bool(cfg.get("full_context_bank", False))
+    bank = bank or cfg.get("bank", "full")
+    full_bank = bool(cfg.get("full_context_bank", False)) or bank == "minimal"
 
     probes = load_probes(STAGE_A_DIR_probes())
     pi = probes.index("pleasantness")
@@ -117,11 +119,10 @@ def run_base(config_path: str, limit_override: int | None = None) -> dict:
     # conditions: (polarity, ctx_id, sentence). Full run sweeps the whole bank (averaged in analysis);
     # pilot uses one sampled context per polarity.
     ctx = sample_contexts(seed)
-    if full_bank:
-        conditions = [("none", "none", None)]
-        conditions += [("positive", f"p{i}", c) for i, c in enumerate(POSITIVE_CONTEXTS)]
-        conditions += [("negative", f"n{i}", c) for i, c in enumerate(NEGATIVE_CONTEXTS)]
-        conditions += [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
+    if bank == "minimal":
+        conditions = build_conditions("minimal")
+    elif full_bank:
+        conditions = build_conditions("full")
     else:
         conditions = [("none", "none", None), ("positive", "p", ctx["positive"]),
                       ("negative", "n", ctx["negative"]), ("neutral", "z", ctx["neutral"])]
@@ -150,25 +151,30 @@ def run_base(config_path: str, limit_override: int | None = None) -> dict:
                          **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
 
     df = pd.DataFrame(rows)
-    df.to_parquet(STAGE_F_DIR / "conflict_pilot.parquet")
+    stem = "conflict_minimal" if bank == "minimal" else "conflict_pilot"
+    out_pq = STAGE_F_DIR / f"{stem}.parquet"
+    df.to_parquet(out_pq)
     metrics = {
         "run": run_stamp(), "git": git_hash(), "layer": layer, "tap": tap, "seed": seed,
-        "n_images": int(sel.shape[0] - n_skip), "n_skipped": n_skip,
+        "bank": bank, "n_images": int(sel.shape[0] - n_skip), "n_skipped": n_skip,
         "n_forwards": int(len(rows)), "full_context_bank": full_bank, "contexts": ctx,
         "n_conditions": len(conditions),
         "text_code": TEXT_CODE, "tokenization_multi_token": multi,
         "image_ids": [{"image_path": r["image_path"], "valence": float(r["valence"]),
                        "group": r["image_group"]} for _, r in sel.iterrows()],
     }
-    save_json(metrics, STAGE_F_DIR / "conflict_metrics.json")
-    print(f"\nStage F base [full_bank={full_bank}] — {metrics['n_images']} images x "
+    save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
+    print(f"\nStage F base [bank={bank}] — {metrics['n_images']} images x "
           f"{len(conditions)} conditions = {len(rows)} forwards ({n_skip} skipped).")
-    if not full_bank:
+    if bank not in ("full", "minimal"):
         print(f"  contexts: +[{ctx['positive']}]  -[{ctx['negative']}]  0[{ctx['neutral']}]")
     if multi:
         print(f"  WARNING multi-token labels (first sub-token scored): {list(multi)}")
-    print(f"  data -> {STAGE_F_DIR/'conflict_pilot.parquet'}")
-    print("  NEXT: python -m src.experiments.stage_f_conflict --arbitrate")
+    print(f"  data -> {out_pq}")
+    if bank == "minimal":
+        print(f"  NEXT: python -m src.experiments.analyze_stage_f --parquet {out_pq.name}")
+    else:
+        print("  NEXT: python -m src.experiments.stage_f_conflict --arbitrate")
     return metrics
 
 
@@ -256,12 +262,15 @@ def main() -> None:  # noqa: D401
     ap = argparse.ArgumentParser(description="Stage F — modality conflict (base + arbitration)")
     ap.add_argument("--config", default="config/stage_f.yaml")
     ap.add_argument("--arbitrate", action="store_true", help="run the steering arbitration pass (F3)")
+    ap.add_argument("--bank", choices=["full", "minimal"], default=None,
+                    help="context bank for the base pass: 'full' (default) or 'minimal' (T1.1 "
+                         "matched valence-only pairs → conflict_minimal.parquet)")
     ap.add_argument("--limit", type=int, default=None, help="use only N images (dry run)")
     args = ap.parse_args()
     if args.arbitrate:
         run_arbitrate(args.config, limit_override=args.limit)
     else:
-        run_base(args.config, limit_override=args.limit)
+        run_base(args.config, limit_override=args.limit, bank=args.bank)
 
 
 if __name__ == "__main__":
