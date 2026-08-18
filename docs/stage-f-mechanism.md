@@ -13,6 +13,9 @@ ceiling/floor of the valence scale. Mechanistically:
 
 - The asymmetry **only appears when an image is present** (text-only, the positive and negative context
   banks are equally strong).
+- **Valence, not event semantics.** A token-matched minimal-pair control (won↔lost, best↔worst, …;
+  only the valence word changes) reproduces the override gap (**+65% vs +64%**) — so the effect is
+  about valence, not "funeral vs championship" event semantics. See *Minimal-pair valence control*.
 - Adding a positive image **blunts the positive-text channel by ~76% but the negative-text channel by
   only ~20%** — so the image *suppresses agreeing text* far more than *conflicting negative text*.
 - The divergence **enters the network mid-stack (~layer 13 of 34) and amplifies ~7× through the late
@@ -91,6 +94,11 @@ retains only **24%** of the positive-text effect (0.706 → 0.167) but **80%** o
 effect (0.752 → 0.598). The image **suppresses agreeing (positive) framing** far more than it
 suppresses **conflicting (negative) framing**.
 
+This control matches the banks on *strength* but not *content*. The stronger version — matching
+*content* too, so only the valence word differs — is the token-matched minimal-pair control below
+(*Minimal-pair valence control*); it reproduces the effect (override gap +65% vs +64%), ruling out
+the "different event semantics" alternative.
+
 ## 3. Where in the network does it enter? → **~Layer 13, amplifying to ~L28.**
 `stage_f_layerwise.py` + `analyze_stage_f_layerwise.py`. Two probe-lenses on the last token using the
 frozen probe weight as a fixed direction (logit-lens diagnostic): `resid_post · w` (running read-out)
@@ -163,6 +171,44 @@ noisier: text_all 73–78%. The probe-level decomposition is the clean measureme
 > read-out, not BOS — while the image tokens are causally inert**. The positive image loses because its
 > valence never propagates out of the image tokens; the negative context wins by writing into the turn
 > preamble the read-out reads.
+
+## Minimal-pair valence control — valence, not event semantics (Gemma-3-4B)
+The §2 text-only control matches the banks on *strength* (|neg|/|pos| ≈ 1.06) but not *content*:
+"funeral" and "championship" engage different event semantics, so a reviewer can argue the asymmetry
+is about semantics, not valence — the strongest surviving alternative. `stage_f_conflict.py
+--bank minimal` closes it with 6 minimal pairs that hold sentence structure and wording constant and
+flip ONLY the valence-bearing token — verified **token-identical** on the Gemma tokenizer (per-pair
+`token_delta = 0`, so the read-out position is byte-identical within each pair): won↔lost, best↔worst,
+got↔lost, wonderful↔devastating, celebration↔memorial, joyful↔heartbreaking. Same 150 images, same
+metric (`analyze_stage_f --parquet conflict_minimal.parquet`).
+
+| metric | full bank | minimal pairs |
+|---|---:|---:|
+| override gap (neg>pos img − pos>neg img) | +64% [+55, +72] (84/21) | **+65% [+56, +73] (85/20)** |
+| asymmetry vs floor \|drop\|−\|rise\| | +0.265 [+0.095, +0.431] | **+0.330 [+0.151, +0.501]**, p=0.003 |
+| head-room-normalized pull (drop vs rise) | 0.63 vs 0.26 | **0.92 vs 0.23** |
+| text-only \|neg\|/\|pos\| (no image) | 1.06 (MW p=0.155) | 1.25 (MW p=0.120) |
+| image-conditioned \|neg\|/\|pos\| | 3.58 | 3.58 |
+
+- **The effect is unchanged** — override gap **+65% vs +64%**, statistically indistinguishable. When the
+  only difference between conditions is a single token-matched valence word, negativity dominance holds.
+  ⇒ the asymmetry is **valence, not event semantics** — the strongest surviving alternative is ruled out.
+  This is now the headline stimulus control; the original-bank comparison moves to the appendix.
+- The residual asymmetry is if anything **sharper** under the cleaner control (|drop|−|rise| +0.330,
+  head-room pull 0.92 vs 0.23).
+- **Cross-modal amplification replicates.** Text-only the minimal banks are ~symmetric (1.25, MW
+  p=0.120 — not a significant stimulus asymmetry at n=6 pairs; a couple of positive members read weak
+  text-only, e.g. "celebration for a close friend" −0.09), and the image inflates the ratio to **3.58**
+  — the asymmetry is created by the image, not the sentences. Honest caveat: the minimal bank's
+  text-only ratio (1.25) is slightly above the original bank's (1.06), so we lean on the override /
+  asymmetry-vs-floor metrics (which control for it) as primary, not the raw text-only symmetry.
+
+Reproduce:
+```bash
+python -m src.experiments.stage_f_conflict  --bank minimal   # base pass → conflict_minimal.parquet
+python -m src.experiments.stage_f_text_only --bank minimal   # matched text-only control
+python -m src.experiments.analyze_stage_f   --parquet conflict_minimal.parquet
+```
 
 ## Multi-model robustness — Qwen3-VL-8B (different architecture)
 The behavioral effect replicates on a second, unrelated VLM. `stage_f_qwen.py` runs the base pass +
