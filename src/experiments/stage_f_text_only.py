@@ -31,7 +31,7 @@ import torch
 
 from ..bridge.boot import boot_gemma
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
-                                      TEXT_CODE, context_prompt)
+                                      TEXT_CODE, build_conditions, context_prompt)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
@@ -82,11 +82,12 @@ def _asymmetry(df, value: str) -> dict:
             "per_pos": [float(x) for x in pos], "per_neg": [float(x) for x in neg]}
 
 
-def run(config_path: str) -> dict:
+def run(config_path: str, bank: str | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     layer = int(cfg.get("critical_layer", 18))
     tap = cfg.get("tap", "hook_attn_out")
+    bank = bank or cfg.get("bank", "full")
 
     from ..paths import STAGE_A_DIR
     ppath = STAGE_A_DIR / "probes.npz"
@@ -96,10 +97,7 @@ def run(config_path: str) -> dict:
     pi = probes.index("pleasantness")
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
-    conditions = [("none", "none", None)]
-    conditions += [("positive", f"p{i}", c) for i, c in enumerate(POSITIVE_CONTEXTS)]
-    conditions += [("negative", f"n{i}", c) for i, c in enumerate(NEGATIVE_CONTEXTS)]
-    conditions += [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
+    conditions = build_conditions(bank)
 
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))
     tok_ids = emotion_token_ids(bridge)
@@ -115,7 +113,8 @@ def run(config_path: str) -> dict:
                      **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
 
     df = pd.DataFrame(rows)
-    df.to_parquet(STAGE_F_DIR / "text_only.parquet")
+    stem = "text_only_minimal" if bank == "minimal" else "text_only"
+    df.to_parquet(STAGE_F_DIR / f"{stem}.parquet")
 
     asym = {"valence": _asymmetry(df, "valence"), "probe_readout": _asymmetry(df, "probe_readout")}
 
@@ -123,17 +122,17 @@ def run(config_path: str) -> dict:
     compare = _compare_to_image(asym)
 
     metrics = {
-        "run": run_stamp(), "git": git_hash(), "layer": layer, "tap": tap,
+        "run": run_stamp(), "git": git_hash(), "layer": layer, "tap": tap, "bank": bank,
         "n_forwards": int(len(rows)), "asymmetry": asym, "image_comparison": compare,
         "tokenization_multi_token": multi,
         "note": ("image-ablated context baseline: same prompt as the base pass minus <start_of_image>. "
                  "Isolates whether the negativity asymmetry is a stimulus property of the context "
                  "bank (matched here) or cross-modal amplification (needs the image)."),
     }
-    save_json(metrics, STAGE_F_DIR / "text_only_metrics.json")
+    save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
 
     av = asym["valence"]
-    print(f"\nStage F text-only baseline — {len(rows)} forwards (no images), L{layer} {tap}.\n")
+    print(f"\nStage F text-only baseline [bank={bank}] — {len(rows)} forwards (no images), L{layer} {tap}.\n")
     print("  per-context (no image) behavioral valence & probe:")
     print(f"    {'ctx':6s} {'valence':>8s} {'probe':>8s}  context")
     for _, r in df.iterrows():
@@ -153,7 +152,7 @@ def run(config_path: str) -> dict:
         print("\n  (run analyze_stage_f first to auto-compare against the image-conditioned ratio)")
     if multi:
         print(f"  WARNING multi-token labels (first sub-token scored): {list(multi)}")
-    print(f"\n  data -> {STAGE_F_DIR/'text_only.parquet'}   metrics -> {STAGE_F_DIR/'text_only_metrics.json'}")
+    print(f"\n  data -> {STAGE_F_DIR/(stem + '.parquet')}   metrics -> {STAGE_F_DIR/(stem + '_metrics.json')}")
     return metrics
 
 
@@ -200,8 +199,10 @@ def _compare_to_image(asym) -> dict | None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage F — text-only context baseline (asymmetry confound)")
     ap.add_argument("--config", default="config/stage_f.yaml")
+    ap.add_argument("--bank", choices=["full", "minimal"], default=None,
+                    help="context bank: 'full' (default) or 'minimal' (T1.1 matched valence-only pairs)")
     args = ap.parse_args()
-    run(args.config)
+    run(args.config, bank=args.bank)
 
 
 if __name__ == "__main__":

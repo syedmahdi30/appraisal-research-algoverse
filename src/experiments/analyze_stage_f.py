@@ -20,6 +20,7 @@ context leaves both read-outs unchanged (retry a stronger, person-naming context
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -253,9 +254,19 @@ def _arbitration(df, betas):
     return res
 
 
-def run(config_path: str | None = None) -> dict:
+def run(config_path: str | None = None, base_pq=None) -> dict:
     ensure_dirs()
-    base_pq = STAGE_F_DIR / "conflict_pilot.parquet"
+    # default = the full-bank base pass; `base_pq` (name or path) analyses an alternate bank, e.g.
+    # conflict_minimal.parquet (T1.1). A custom parquet writes a stem-matched *_analysis.json so it
+    # never clobbers the canonical conflict_analysis.json.
+    if base_pq is None:
+        base_pq = STAGE_F_DIR / "conflict_pilot.parquet"
+        out_name, fig_name = "conflict_analysis.json", "stage_f_conflict.png"
+    else:
+        base_pq = Path(base_pq)
+        if not base_pq.is_absolute():
+            base_pq = STAGE_F_DIR / base_pq
+        out_name, fig_name = f"{base_pq.stem}_analysis.json", f"{base_pq.stem}.png"
     if not base_pq.exists():
         raise FileNotFoundError(f"{base_pq} missing — run stage_f_conflict (base pass) first.")
     df = pd.read_parquet(base_pq)
@@ -302,8 +313,9 @@ def run(config_path: str | None = None) -> dict:
         metrics["arbitration"] = arb
 
     metrics["verdict"] = _verdict(dom, ctx_effect, arb)
-    save_json(metrics, STAGE_F_DIR / "conflict_analysis.json")
-    _plot(cells, arb)
+    metrics["source_parquet"] = base_pq.name
+    save_json(metrics, STAGE_F_DIR / out_name)
+    _plot(cells, arb, fig_name)
 
     print(f"\nStage F analysis — {metrics['n_images']} images, {metrics['n_rows']} base rows "
           f"(dominance on sentence-bearing conditions only; no-context excluded).\n")
@@ -346,8 +358,7 @@ def run(config_path: str | None = None) -> dict:
               f"(Stage D ~{STAGE_D_SLOPE}; within±50%: {arb['within_50pct_of_stage_d']})  |  "
               f"probe slope {arb['probe_slope']:+.3f} (expected ~0, upstream)")
     print(f"\n  VERDICT: {metrics['verdict']}")
-    print(f"  figure -> {FIGURES_DIR/'stage_f_conflict.png'}   "
-          f"metrics -> {STAGE_F_DIR/'conflict_analysis.json'}")
+    print(f"  figure -> {FIGURES_DIR/fig_name}   metrics -> {STAGE_F_DIR/out_name}")
     return metrics
 
 
@@ -379,7 +390,7 @@ def _verdict(dom, ctx_effect, arb) -> str:
             f"human call; consider stronger contexts or more images.")
 
 
-def _plot(cells, arb):
+def _plot(cells, arb, fig_name: str = "stage_f_conflict.png"):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -406,15 +417,18 @@ def _plot(cells, arb):
     fig.suptitle("Stage F — modality conflict: image vs text cues, and steering arbitration")
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    fig.savefig(FIGURES_DIR / "stage_f_conflict.png", dpi=130)
+    fig.savefig(FIGURES_DIR / fig_name, dpi=130)
     plt.close(fig)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage F — analysis + decision D2")
     ap.add_argument("--config", default="config/stage_f.yaml")
-    ap.parse_args()
-    run()
+    ap.add_argument("--parquet", default=None,
+                    help="alternate base-pass parquet (name under results/stage_f or a path), e.g. "
+                         "conflict_minimal.parquet for the T1.1 minimal-pair bank")
+    args = ap.parse_args()
+    run(base_pq=args.parquet)
 
 
 if __name__ == "__main__":
