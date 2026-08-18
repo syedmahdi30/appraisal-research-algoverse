@@ -73,6 +73,73 @@ def _flip_override(df, n_boot: int = 2000, seed: int = 0) -> dict:
             "n_pos_images": int(len(pn)), "n_neg_images": int(len(np_))}
 
 
+def _minimal_pair_asymmetry(df, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Within-item, within-EVENT valence asymmetry for the minimal-pair bank (context_id `mp{i}`).
+
+    The minimal-pair control holds each event constant and flips only the valence word, so for a given
+    image a pair's negative and positive members differ ONLY in valence. This is the tightest test of
+    negativity dominance available: for each image and each pair, compare the negative member's effect
+    to the positive member's effect vs that image's own NEUTRAL baseline —
+        Δneg = v(neg member) − v(neutral),  Δpos = v(pos member) − v(neutral),  d = |Δneg| − |Δpos|.
+    Reported on the positive-image group (the clean cell, symmetric head-room). The contrast is PAIRED
+    (same photo, same event), so we test it with a Wilcoxon signed-rank over images and a clustered
+    bootstrap over images — stronger than the across-item aggregate because event and image are held
+    fixed. Returns {} for non-minimal banks (no `mp*` context ids).
+    """
+    if "context_id" not in df.columns:
+        return {}
+    pairs = sorted({c for c in df["context_id"].dropna().unique()
+                    if isinstance(c, str) and c.startswith("mp")})
+    if not pairs:
+        return {}
+    try:  # short "won ↔ lost" labels; optional (analyzer also runs in the probe-free Qwen venv)
+        from ..data.conflict_contexts import MINIMAL_PAIRS
+        swap = {f"mp{i}": s for i, (_, _, s) in enumerate(MINIMAL_PAIRS)}
+    except Exception:
+        swap = {}
+
+    g = df[df["image_group"] == "positive"]
+    neu = g[g["condition"] == "neutral"].groupby("image_path")["valence"].mean()
+    if neu.empty:
+        return {}
+
+    per_pair, img_asym = {}, {}   # img_asym: image_path -> [d over pairs]
+    for cid in pairs:
+        sub = g[g["context_id"] == cid]
+        posv = sub[sub["condition"] == "positive"].groupby("image_path")["valence"].mean()
+        negv = sub[sub["condition"] == "negative"].groupby("image_path")["valence"].mean()
+        dneg_l, dpos_l = [], []
+        for img in neu.index:
+            if img in posv.index and img in negv.index:
+                dn, dp = float(negv[img] - neu[img]), float(posv[img] - neu[img])
+                dneg_l.append(dn); dpos_l.append(dp)
+                img_asym.setdefault(img, []).append(abs(dn) - abs(dp))
+        if dneg_l:
+            mn, mp = float(np.mean(dneg_l)), float(np.mean(dpos_l))
+            per_pair[cid] = {"swap": swap.get(cid, ""), "neg_effect": mn, "pos_effect": mp,
+                             "asymmetry": abs(mn) - abs(mp),
+                             "ratio": abs(mn) / abs(mp) if mp != 0 else float("inf"),
+                             "n_images": len(dneg_l)}
+    imgs = sorted(img_asym)
+    per_img = np.array([np.mean(img_asym[i]) for i in imgs])
+    if not len(per_img):
+        return {}
+    rng = np.random.default_rng(seed)
+    boot = np.array([per_img[rng.integers(0, len(per_img), len(per_img))].mean()
+                     for _ in range(n_boot)])
+    ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
+    wp = None
+    try:
+        from scipy.stats import wilcoxon
+        if np.any(per_img != 0):
+            wp = float(wilcoxon(per_img, alternative="greater").pvalue)
+    except Exception:
+        pass
+    return {"image_group": "positive", "n_pairs": len(per_pair), "n_images": len(imgs),
+            "paired_asymmetry": float(per_img.mean()), "ci95": ci, "wilcoxon_p_greater": wp,
+            "per_pair": per_pair}
+
+
 def _z(x):
     x = np.asarray(x, dtype=float)
     s = x.std()
@@ -113,10 +180,15 @@ def _condition_breakdown(df) -> dict:
                     "n": int(len(cell)), "valence": float(cell["valence"].mean()),
                     "probe": float(cell["probe_readout"].mean())}
     if "context_id" in df.columns:
+        # Group by (context_id, condition), NOT context_id alone: the minimal-pair bank shares one id
+        # (mp{i}) across a pair's positive AND negative member, so keying on context_id alone would
+        # average the two polarities together into a meaningless row. Splitting by condition keeps each
+        # sentence separate; for the full bank (one condition per id) the condition suffix is redundant
+        # but harmless.
         for grp in ("positive", "negative"):
             g = df[df["image_group"] == grp]
-            for cid, cell in g.groupby("context_id"):
-                out["by_context_id"][f"{grp}/{cid}"] = {
+            for (cid, cond), cell in g.groupby(["context_id", "condition"]):
+                out["by_context_id"][f"{grp}/{cid}/{cond}"] = {
                     "n": int(len(cell)), "valence": float(cell["valence"].mean()),
                     "probe": float(cell["probe_readout"].mean()),
                     "context": str(cell["context"].iloc[0])}
@@ -292,6 +364,7 @@ def run(config_path: str | None = None, base_pq=None) -> dict:
     breakdown = _condition_breakdown(df)
     asymmetry = _asymmetry_vs_floor(df)
     flip = _flip_override(df)
+    minimal = _minimal_pair_asymmetry(df)   # non-empty only for the minimal-pair bank (mp* ids)
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "n_rows": int(len(df)),
@@ -301,6 +374,8 @@ def run(config_path: str | None = None, base_pq=None) -> dict:
         "asymmetry_vs_floor": asymmetry, "flip_override": flip,
         "condition_breakdown": breakdown,
     }
+    if minimal:
+        metrics["minimal_pair_asymmetry"] = minimal
 
     arb_pq = STAGE_F_DIR / "arbitration_pilot.parquet"
     arb = None
@@ -345,6 +420,19 @@ def run(config_path: str | None = None, base_pq=None) -> dict:
         print(f"    headroom-normalized pull: drop {a['headroom_norm_pull_drop']:.3f} vs "
               f"rise {a['headroom_norm_pull_rise']:.3f}  (Δ {a['headroom_norm_asymmetry']:+.3f})")
         print(f"    → {a['interpretation']}")
+    if minimal:
+        m = minimal
+        print("\n  MINIMAL-PAIR within-item asymmetry (positive images; same event, only the valence "
+              "word flipped):")
+        print(f"    {'pair':5s} {'swap':26s} {'Δneg':>8s} {'Δpos':>8s} {'|Δn|-|Δp|':>10s} {'ratio':>7s}")
+        for cid, pp in sorted(m["per_pair"].items()):
+            r = pp["ratio"]
+            print(f"    {cid:5s} {pp['swap'][:26]:26s} {pp['neg_effect']:>+8.3f} {pp['pos_effect']:>+8.3f} "
+                  f"{pp['asymmetry']:>+10.3f} {r:>7.2f}")
+        wp = f", Wilcoxon p={m['wilcoxon_p_greater']:.3f}" if m["wilcoxon_p_greater"] is not None else ""
+        print(f"    OVERALL paired |Δneg|-|Δpos| = {m['paired_asymmetry']:+.3f} "
+              f"CI [{m['ci95'][0]:+.3f}, {m['ci95'][1]:+.3f}]{wp} "
+              f"(n={m['n_images']} images x {m['n_pairs']} pairs, within-item paired)")
     print("\n  RAW per-condition means (diagnose the vs-none anomaly; is `none` or `neutral` odd?):")
     print(f"    {'cell':18s} {'n':>4s} {'valence':>9s} {'probe':>9s}")
     for k, v in breakdown["by_condition"].items():
@@ -352,7 +440,7 @@ def run(config_path: str | None = None, base_pq=None) -> dict:
     if breakdown["by_context_id"]:
         print("\n  per-context detail (spot a single outlier context):")
         for k, v in sorted(breakdown["by_context_id"].items()):
-            print(f"    {k:14s} val {v['valence']:+.3f}  probe {v['probe']:+.3f}  \"{v['context'][:44]}\"")
+            print(f"    {k:24s} val {v['valence']:+.3f}  probe {v['probe']:+.3f}  \"{v['context'][:40]}\"")
     if arb:
         print(f"\n  arbitration: behavioral valence slope {arb['valence_slope']:+.3f} "
               f"(Stage D ~{STAGE_D_SLOPE}; within±50%: {arb['within_50pct_of_stage_d']})  |  "
