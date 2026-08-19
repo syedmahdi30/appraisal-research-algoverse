@@ -216,10 +216,17 @@ caveat below):
   (identically 0 for every group, including `all`). Only behavioral valence is meaningful there;
   `stage_f_cross_patching._probe_valid` gates this and the runner prints a warning.
 
-**Open (confirmatory run, `--context negative`).** This ran with a neutral context. Whether the
-image's valence still broadcasts to the text stream *under the competing negative context* — the actual
-conflict — is not yet directly tested; that run would make the "competition in a shared channel" story
-airtight. Reproduce:
+**Confirmatory run (`--context negative`) — inconclusive by design, but informative.** Repeating with
+the negative context held constant restates negativity dominance *behaviorally*: a negative caption
+collapses the image-driven valence gap from **0.87 (neutral) to 0.08** — a positive image (−0.85) and
+a negative image (−0.93) read nearly identically once the caption is negative, i.e. the text has all
+but erased the image's behavioral contribution. The probe read-out at the mid band still shows the
+image tokens encode visual valence under competition (**85%, CI [51,150]**). But *because* the
+behavioral gap is ~0.08, the late-band valence-recovery denominator is near-zero and its CIs blow up
+(text_all 93% **[15, 212]**), so this run **cannot localize whether the image still broadcasts to the
+text stream under competition**. The neutral-context migration result stands as the primary finding;
+broadcast-under-competition remains open — and may be intrinsically hard to measure behaviorally,
+precisely because dominance collapses the signal being localized. Reproduce:
 ```bash
 python -m src.experiments.stage_f_cross_patching                     # neutral ctx, band 13-17
 python -m src.experiments.stage_f_cross_patching --layers 0-12       # early band
