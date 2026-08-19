@@ -201,15 +201,26 @@ def _recovery(df, n_boot: int = 2000, seed: int = 0) -> dict:
     return out
 
 
-def _verdict(rec) -> str:
+def _probe_valid(patch_layers, crit) -> bool:
+    """The probe tap is attn_out L{crit}, computed from L{crit-1}'s output — UPSTREAM of resid_post at
+    L>=crit. So probe recovery is invariant-by-construction (identically 0) once any patched layer is
+    >= crit; only behavioral valence is meaningful for such a band."""
+    return bool(patch_layers) and max(patch_layers) < crit
+
+
+def _verdict(rec, patch_layers, crit) -> str:
     if "image" not in rec:
         return "no pairs analysed"
-    ri, rt, ra = rec["image"]["probe"], rec["text_all"]["probe"], rec["all"]["probe"]
-    ci = rec["image"]["probe_ci95"]
+    pv = _probe_valid(patch_layers, crit)
+    m = "probe" if pv else "val"
+    ri, rt, ra = rec["image"][m], rec["text_all"][m], rec["all"][m]
+    ci = rec["image"][f"{m}_ci95"]
+    note = "" if pv else (f" [NOTE: patched at/after the L{crit} probe tap, so probe recovery is "
+                          f"invariant-by-construction — verdict uses behavioral VALENCE]")
     lead = ("VISUAL VALENCE LIVES IN THE IMAGE TOKENS" if ri > 0.5 else
             "image tokens carry a MODERATE share" if ri > 0.2 else
-            "image tokens carry LITTLE even cross-image — weaken the 'valence lives in image tokens' wording")
-    return (f"{lead}: patching image tokens recovers {ri:.0%} [{ci[0]:.0%},{ci[1]:.0%}] of the "
+            "image tokens carry LITTLE in this band")
+    return (f"{lead}{note}: patching image tokens recovers {ri:.0%} [{ci[0]:.0%},{ci[1]:.0%}] of the "
             f"image-driven read-out gap, vs all-text {rt:.0%}. Sanity: patching every token bar the "
             f"read-out query recovers {ra:.0%} (expect ~100%). Mirror of the same-image result, where "
             f"image tokens were inert for the TEXT context delta.")
@@ -218,7 +229,8 @@ def _verdict(rec) -> str:
 def _metrics(rec, patch_layers, crit, ctx, pol, n_ok, n_skip, seg_bad) -> dict:
     return {"run": run_stamp(), "git": git_hash(), "critical_layer": crit, "patch_layers": patch_layers,
             "n_pairs": n_ok, "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
-            "context_polarity": pol, "context": ctx, "recovery": rec, "verdict": _verdict(rec),
+            "context_polarity": pol, "context": ctx, "recovery": rec,
+            "probe_valid": _probe_valid(patch_layers, crit), "verdict": _verdict(rec, patch_layers, crit),
             "design": ("CROSS-IMAGE: donor=positive image, recipient=negative image, SAME context → "
                        "identical input_ids, all positions (incl. context) patchable. recovery = "
                        "(patched-neg_img)/(pos_img-neg_img) at L{c} read-out, resid_post over band "
@@ -234,6 +246,9 @@ def _print(rec, metrics, patch_layers) -> None:
         print("  no pairs analysed."); return
     print(f"  baselines: probe pos-img {rec['pos_probe']:+.3f} / neg-img {rec['neg_probe']:+.3f}  |  "
           f"valence pos-img {rec['pos_val']:+.3f} / neg-img {rec['neg_val']:+.3f}")
+    if not metrics.get("probe_valid", True):
+        print(f"  NOTE: patched at/after the L{metrics['critical_layer']} probe tap → the probe column "
+              f"is invariant-by-construction (all 0); read the VALENCE column for this band.")
     print(f"\n  {'group':10s} {'recovery(probe)':>22s} {'recovery(valence)':>22s}")
     for g in GROUPS:
         p, v = rec[g]["probe"], rec[g]["val"]
