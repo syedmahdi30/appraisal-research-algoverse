@@ -31,10 +31,13 @@ ceiling/floor of the valence scale. Mechanistically:
   depth (by the read-out, the image tokens no longer carry it; the turn scaffold does). So both cues
   are integrated into one shared text-stream read-out channel, and negative text wins the competition
   *within* that channel — not because the image is trapped. See *Cross-image patching* below.
-- **Both the effect AND the mechanism replicate on a different-architecture VLM (Qwen3-VL-8B):** the
-  negativity ratio lands at 3.64× (vs Gemma's 3.58×, cross-modal on both), and the image tokens are
-  causally inert on Qwen too (0% patch recovery) — the carrier is distributed across Qwen's text stream
-  rather than concentrated in the turn scaffold. See *Multi-model robustness* below.
+- **Effect + mechanism replicate on Qwen3-VL-8B, but the effect is BOUNDED by LLaVA-1.5 — it is
+  architecture-dependent, not universal.** Qwen: negativity ratio 3.64× (vs Gemma 3.58×), override gap
+  +39%, and image tokens causally inert (0% recovery, carrier distributed vs Gemma's turn scaffold).
+  **LLaVA-1.5: NO negativity dominance** — conflict resolves symmetrically (head-room pull 0.33/0.33,
+  |drop|−|rise| ≈ 0, override gap −13%); it is strongly image-anchored, so text cannot commandeer the
+  read-out. So the effect holds for pooled-/native-ViT designs (Gemma, Qwen) but not LLaVA's
+  linear-projector-unpooled design. See *Multi-model robustness* below.
 - **Prompt-robust:** the behavioral override holds across 6 prompt phrasings (dominance gap +46% to
   +74%, mean +58%, every CI clears 0), and the reported base prompt is mid-pack — not the best case.
   See *Prompt robustness* below.
@@ -302,11 +305,40 @@ python -m src.experiments.stage_f_text_only --bank minimal   # matched text-only
 python -m src.experiments.analyze_stage_f   --parquet conflict_minimal.parquet   # incl. per-pair table
 ```
 
-## Multi-model robustness — Qwen3-VL-8B (different architecture)
-The behavioral effect replicates on a second, unrelated VLM. `stage_f_qwen.py` runs the base pass +
-text-only control on Qwen via raw HuggingFace (no TransformerBridge, no probe — behavioral valence
-only), 150 EMOTIC images. It **replicates near-quantitatively:**
+## Multi-model robustness — replicates on Qwen, BOUNDED by LLaVA (three unification families)
+The behavioral effect is tested on three VLM "unification" designs: Gemma-3 (SigLIP pooled to 256 soft
+tokens), Qwen3-VL (native dynamic-resolution ViT), and LLaVA-1.5 (frozen CLIP ViT → linear projector →
+unpooled patch tokens). `stage_f_qwen.py` / `stage_f_llava.py` run the base pass + text-only control
+via raw HuggingFace (no TransformerBridge, no probe — behavioral valence only), 150 EMOTIC images each.
+**It replicates on Qwen but NOT on LLaVA — negativity dominance is architecture-dependent, not
+universal.**
 
+| metric | Gemma-3-4B | Qwen3-VL-8B | LLaVA-1.5-7B |
+|---|---:|---:|---:|
+| text-only raw \|neg\|/\|pos\| (banks matched?) | 1.06 (symmetric) | 1.00 (symmetric) | 0.99 (symmetric) |
+| within-positive-image neg/pos ratio (graded) | 3.58× | 3.64× | 3.06× |
+| **head-room-normalized pull (drop / rise)** | **0.63 / 0.26** | (saturates) | **0.33 / 0.33** |
+| \|drop\|−\|rise\| (residual asymmetry) | **+0.265 [+.10,+.43]** | — | **−0.018 [−.08,+.05]** |
+| override gap (95% CI, clustered over images) | **+64% [+55,+72]** | **+39% [+30,+49]** | **−13% [−22,−3]** |
+| verdict | negativity dominance | negativity dominance | **symmetric (no dominance)** |
+
+**The LLaVA boundary — and why the within-image ratio is a trap.** LLaVA's within-positive-image ratio
+(3.06×) looks like Gemma's (3.58×), which would naively read as replication. It is **not**: that ratio
+is pure ceiling/floor. LLaVA is strongly image-anchored (neutral valence **±0.72**, near-saturated), so
+on a positive image only the *incongruent* negative context has head-room to move it, and vice-versa on
+negative images. The **head-room-normalized pull settles it — 0.33 vs 0.33, perfectly symmetric** (vs
+Gemma's asymmetric 0.63 / 0.26), and |drop|−|rise| = −0.018 (CI includes 0). So LLaVA resolves conflict
+**symmetrically** (each image group moved equally by the opposing context); the only residual is a small
+*reverse* categorical asymmetry (override −13%). This is exactly the ceiling/floor case the
+asymmetry-vs-floor control was built to detect — the same control that confirmed Gemma's asymmetry is
+real now confirms LLaVA's is absent. **Candidate mechanism:** LLaVA's less-compressed (unpooled,
+frozen-CLIP) image representation weights the image more heavily, so text cannot commandeer the read-out.
+Scope claim accordingly: negativity dominance holds for pooled-/native-ViT designs (Gemma, Qwen) but not
+LLaVA's linear-projector-unpooled design. (Reproduce: `stage_f_llava.py` [+ `--text-only`,
+`--reanalyze`]; note the shared `emotion_token_ids` was fixed for LLaMA/SentencePiece tokenizers, which
+otherwise collapse the emotion labels to one id → a degenerate constant read-out.)
+
+### Qwen replication detail (negativity dominance holds)
 | metric | Gemma-3-4B | Qwen3-VL-8B |
 |---|---:|---:|
 | within-positive-image neg/pos ratio (graded valence) | **3.58×** | **3.64×** |
@@ -339,10 +371,11 @@ only), 150 EMOTIC images. It **replicates near-quantitatively:**
 | suffix / turn scaffold (alone) | **65%** | 6% |
 | **all aligned text** | 85% | **65%** |
 
-- **Image tokens are causally inert on both** (~0%) — the headline mechanism (*the image tokens do not
-  carry the text-context delta; the text stream carries the conflict*) **generalizes across
-  architectures.** (The cross-image migration finding is Gemma-only so far; the Qwen ports test the
-  context-delta carrier, not where visual valence lives.)
+- **Image tokens are causally inert on both Gemma and Qwen** (~0%) — the mechanism (*the image tokens
+  do not carry the text-context delta; the text stream carries the conflict*) holds on both architectures
+  **that show the effect.** (Mechanism was not run on LLaVA — where the behavioral effect is absent, so
+  there is no dominance to localize; and the cross-image migration finding is Gemma-only. The Qwen ports
+  test the context-delta carrier, not where visual valence lives.)
 - **The fine-grained locus differs.** Gemma *concentrates* the carrier in the assistant-turn scaffold
   (that ~4-token group alone recovers 65%); Qwen *distributes* it — no single text group recovers much
   (question 12%, suffix 6%), yet all-text recovers 65% (super-additive → a redundancy signature: the
