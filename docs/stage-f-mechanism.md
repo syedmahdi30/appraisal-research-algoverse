@@ -21,10 +21,16 @@ ceiling/floor of the valence scale. Mechanistically:
 - The divergence **enters the network mid-stack (~layer 13 of 34) and amplifies ~7× through the late
   layers (peak ~L28)**.
 - The winning signal is carried **entirely by the text token stream — the image tokens are causally
-  inert (~0% recovery)**. Specifically it lives in the **assistant-turn-boundary tokens**
-  (`<end_of_turn>\n<start_of_turn>model`) right before the read-out (~55–65%); **BOS and the user-turn
-  prefix carry 0%**, so this is *not* a global attention-sink effect. The image's own valence never
-  propagates out of the image tokens. **Replicated across two independent context pairs.**
+  inert *for the text-context delta* (~0% recovery)**. Specifically it lives in the
+  **assistant-turn-boundary tokens** (`<end_of_turn>\n<start_of_turn>model`) right before the read-out
+  (~55–65%); **BOS and the user-turn prefix carry 0%**, so this is *not* a global attention-sink
+  effect. **Replicated across two independent context pairs.**
+- **The image's own valence is not trapped — it migrates into the same text-stream channel.** A
+  cross-image patching experiment (vary the image, hold context fixed) shows visual valence
+  *originates* in the image tokens (early layers) and *broadcasts into the text-stream positions* over
+  depth (by the read-out, the image tokens no longer carry it; the turn scaffold does). So both cues
+  are integrated into one shared text-stream read-out channel, and negative text wins the competition
+  *within* that channel — not because the image is trapped. See *Cross-image patching* below.
 - **Both the effect AND the mechanism replicate on a different-architecture VLM (Qwen3-VL-8B):** the
   negativity ratio lands at 3.64× (vs Gemma's 3.58×, cross-modal on both), and the image tokens are
   causally inert on Qwen too (0% patch recovery) — the carrier is distributed across Qwen's text stream
@@ -36,9 +42,10 @@ ceiling/floor of the valence scale. Mechanistically:
   the model becomes *more* text-driven in BOTH directions (neg-override 84%→93%, pos-override
   19%→42%) — the image loses influence, negativity dominance does not. See *Model-scale robustness*.
 
-**One-line takeaway for the group:** *negativity dominance in cross-modal conflict is a text-stream
-phenomenon — the negative context routes into the assistant-turn preamble the read-out reads from,
-while the positive image stays trapped in the image tokens.*
+**One-line takeaway for the group:** *negativity dominance in cross-modal conflict is a shared-channel
+phenomenon — both cues are read out from the text-stream positions (the assistant-turn preamble); the
+image's valence reaches that channel by broadcasting out of the image tokens over depth, and the
+negative context wins the competition there.*
 
 ## Setup (shared across all four experiments)
 - **Model / read-out:** `google/gemma-3-4b-it` via TransformerBridge (bf16). Internal read-out = the
@@ -147,8 +154,11 @@ Probe-read-out recovery, **replicated across two independent context pairs**:
 | → remainder in context tokens | ~15% | ~13% |
 
 Three replicated conclusions:
-1. **Image tokens are causally inert (~0%).** Patching them does nothing → the negative context does
-   **not** rewrite the image representation; the image's valence stays in the image tokens.
+1. **Image tokens are causally inert *for the text-context delta* (~0%).** Patching them does nothing →
+   the negative context does **not** rewrite the image representation. (This is specific to the context
+   delta; the image's *own* valence does live in the image tokens and later migrates to the text stream
+   — see *Cross-image patching*. The two are not in tension: this experiment varies the text, so image
+   tokens hold nothing text-specific to recover.)
 2. **The carrier is the assistant-turn-boundary tokens (~55–65%), NOT a global BOS sink.** BOS and the
    user-turn prefix carry **0%**; the entire structure-group recovery is the `<end_of_turn>` /
    `<start_of_turn>model` preamble adjacent to the read-out. So this is **local aggregation into the
@@ -166,11 +176,57 @@ noisier: text_all 73–78%. The probe-level decomposition is the clean measureme
 > **Controlled cross-modal negativity dominance:** negative text overrides a positive image more than
 > positive text overrides a negative image. The asymmetry is real (survives head-room normalization),
 > cross-modal (absent text-only, where the banks are symmetric at 1.06), and not a ceiling effect. It
-> **enters the network ~L13 and amplifies ~7× to ~L28**, and is **carried by the text token stream —
-> specifically the assistant-turn-boundary tokens (`<end_of_turn><start_of_turn>model`) adjacent to the
-> read-out, not BOS — while the image tokens are causally inert**. The positive image loses because its
-> valence never propagates out of the image tokens; the negative context wins by writing into the turn
-> preamble the read-out reads.
+> **enters the network ~L13 and amplifies ~7× to ~L28**, and the text-context signal is **carried by the
+> text token stream — specifically the assistant-turn-boundary tokens (`<end_of_turn><start_of_turn>model`)
+> adjacent to the read-out, not BOS; the image tokens are causally inert *for that context delta***. Both
+> cues are ultimately read out from a **shared text-stream channel**: the image's own valence originates
+> in the image tokens and **broadcasts into those same text-stream positions over depth** (cross-image
+> patching), so the positive image loses not because its valence is trapped but because the negative
+> context **dominates the competition in the shared channel** the read-out reads.
+
+## Cross-image patching — where does the image's own valence live? (T1.2, Gemma-3-4B)
+The same-image experiment (§4) shows the image tokens are inert *for the text-context delta*. The
+mirror question — where the **image's own valence** lives — needs the complementary design
+(`stage_f_cross_patching.py`): **donor = a positive-valence image, recipient = a negative-valence
+image, holding the context fixed (neutral)**. Because the context and prompt are identical, the two
+runs have byte-identical `input_ids` (only `pixel_values` differ), so *every* position — including the
+context tokens — is 1:1 patchable. We overwrite the recipient's `resid_post` over a layer band for one
+token group and measure recovery toward the donor image's read-out:
+`recovery(G) = (patched − neg_img) / (pos_img − neg_img)`, 60 donor/recipient pairs.
+
+Behavioral-valence recovery across three depth bands (the metric valid at every band — see the probe
+caveat below):
+
+| patch band | `image` tokens | `text_all` (non-image) | `all` (sanity) |
+|---|---:|---:|---:|
+| **0–12** (early) | **80%** | 10% | 100% |
+| **13–17** (mid) | 66% | 65% | 91% |
+| **18–28** (late) | **9%** | **68%** | 79% |
+
+- **Visual valence migrates image → text over depth.** Early, it is recoverable *only* from the image
+  tokens (80% vs 10%); by the late band the image tokens no longer carry it (9%) and the text-stream
+  positions do (68%). The probe read-out corroborates for the bands where it is valid: patching image
+  tokens fully restores the L18 read-out early/mid (115% / 125%).
+- **So the image's valence is not trapped** — it broadcasts into the same text-stream channel that
+  carries the text context. This *corrects* the earlier inference ("valence never propagates out of the
+  image tokens") and is consistent with the balanced/integrated dominance regression (β_img/β_txt ≈
+  1.19) and the L18 attention pattern (the last token reads mostly text/template positions).
+- **Probe caveat (baked into the tool).** The probe tap is `attn_out` L18, computed from L17 — upstream
+  of any `resid_post` at L≥18 — so probe recovery is invariant-by-construction for the 18–28 band
+  (identically 0 for every group, including `all`). Only behavioral valence is meaningful there;
+  `stage_f_cross_patching._probe_valid` gates this and the runner prints a warning.
+
+**Open (confirmatory run, `--context negative`).** This ran with a neutral context. Whether the
+image's valence still broadcasts to the text stream *under the competing negative context* — the actual
+conflict — is not yet directly tested; that run would make the "competition in a shared channel" story
+airtight. Reproduce:
+```bash
+python -m src.experiments.stage_f_cross_patching                     # neutral ctx, band 13-17
+python -m src.experiments.stage_f_cross_patching --layers 0-12       # early band
+python -m src.experiments.stage_f_cross_patching --layers 18-28      # late band (valence only)
+python -m src.experiments.stage_f_cross_patching --context negative  # confirmatory: broadcast under conflict?
+python -m src.experiments.stage_f_cross_patching --reanalyze         # CPU recompute + CIs
+```
 
 ## Minimal-pair valence control — valence, not event semantics (Gemma-3-4B)
 The §2 text-only control matches the banks on *strength* (|neg|/|pos| ≈ 1.06) but not *content*:
@@ -276,9 +332,10 @@ only), 150 EMOTIC images. It **replicates near-quantitatively:**
 | suffix / turn scaffold (alone) | **65%** | 6% |
 | **all aligned text** | 85% | **65%** |
 
-- **Image tokens are causally inert on both** (~0%) — the headline mechanism (*the image's valence never
-  propagates out of the image tokens; the text stream carries the conflict*) **generalizes across
-  architectures.**
+- **Image tokens are causally inert on both** (~0%) — the headline mechanism (*the image tokens do not
+  carry the text-context delta; the text stream carries the conflict*) **generalizes across
+  architectures.** (The cross-image migration finding is Gemma-only so far; the Qwen ports test the
+  context-delta carrier, not where visual valence lives.)
 - **The fine-grained locus differs.** Gemma *concentrates* the carrier in the assistant-turn scaffold
   (that ~4-token group alone recovers 65%); Qwen *distributes* it — no single text group recovers much
   (question 12%, suffix 6%), yet all-text recovers 65% (super-additive → a redundancy signature: the
@@ -410,7 +467,8 @@ Artifacts under `results/stage_f/`: `conflict_analysis.json` (asymmetry), `text_
 This sharpens the group's shared finding (image and text write into one appraisal representation) into
 a **causal, localized mechanism** for the conflict case. It also connects to the team's broader thread —
 *emotional images shifting VLM behavior* — with a cautionary result: an image's emotional pull is
-**real but fragile under conflicting text**, and mechanistically it is because the image's signal stays
-in the image tokens while text commandeers the turn-preamble tokens the model actually reads out from. For
+**real but fragile under conflicting text**, and mechanistically it is because both cues are read out
+from a shared text-stream channel (the turn-preamble tokens) — the image's valence reaches it by
+broadcasting out of the image tokens, but a conflicting negative context dominates that channel. For
 open-ended/ambiguous task contexts (where there is no strong overriding text), we'd expect the image to
 matter *more* than it does here.
