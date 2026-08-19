@@ -70,9 +70,26 @@ def load_qwen(model_name: str = DEFAULT_MODEL):
 
 
 def emotion_token_ids(processor) -> dict[str, int]:
-    """First-subtoken id per emotion label on the Qwen tokenizer (leading space kept)."""
+    """First CONTENT sub-token id per emotion label (skips a leading SentencePiece '▁' space token).
+
+    Naively taking `encode(' '+w)[0]` breaks on LLaMA/SentencePiece tokenizers (e.g. LLaVA-1.5): they
+    emit the leading space as a STANDALONE '▁' token, so `[0]` returns that same space id for EVERY
+    label → all 13 collapse to one id → a uniform softmax → a constant, degenerate read-out
+    (valence pinned at (4−7)/13 = −0.231). We instead take the first token that decodes to
+    non-whitespace, which is unchanged for BPE tokenizers (Gemma/Qwen: the first token already carries
+    the word). The guard makes a collapse fail loudly instead of silently producing −0.231.
+    """
     tok = processor.tokenizer
-    return {w: tok.encode(" " + w, add_special_tokens=False)[0] for w in EMOTION_LABELS}
+    ids = {}
+    for w in EMOTION_LABELS:
+        enc = tok.encode(" " + w, add_special_tokens=False)
+        ids[w] = next((t for t in enc if tok.decode([t]).strip()), enc[0]) if enc else -1
+    n_distinct = len(set(ids.values()))
+    if n_distinct < len(EMOTION_LABELS):
+        raise ValueError(
+            f"emotion label token ids collapsed ({n_distinct}/{len(EMOTION_LABELS)} distinct) — the "
+            f"read-out would be degenerate. Tokenizer {type(tok).__name__}; inspect encode(' joy').")
+    return ids
 
 
 def _user_text(context_sentence: str | None) -> str:
