@@ -64,8 +64,15 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
 
     sentence = NEGATIVE_CONTEXTS[0]
     prompt = context_prompt(sentence)          # the exact scaffold the published run used
-    sel = select_extreme_images(max(2, n_images * 2))
-    paths = sel["image_path"].tolist()[:n_images] if n_images > 1 else [sel["image_path"].iloc[0]]
+    # EMOTIC annotates per PERSON, so image_path recurs across rows — taking a head slice returns the
+    # same photo several times (and only from one valence group). Dedupe, then interleave the two
+    # groups so the sample spans both positive and negative images.
+    sel = select_extreme_images(max(4, n_images * 4))
+    pos = sel[sel["image_group"] == "positive"]["image_path"].drop_duplicates().tolist()
+    neg = sel[sel["image_group"] == "negative"]["image_path"].drop_duplicates().tolist()
+    paths = [p for pair in zip(pos, neg) for p in pair][:n_images] or pos[:n_images]
+    print(f"\n  sampling {len(paths)} distinct image(s): "
+          f"{sum(p in pos for p in paths)} positive / {sum(p in neg for p in paths)} negative")
 
     # ---------------- raw HF
     print("\n=== raw HuggingFace ===")
