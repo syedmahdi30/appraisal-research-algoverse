@@ -155,12 +155,17 @@ and has not been run.*
 | 1344px | 262 | +39% [+29,+48] | 0.986 |
 
 Flat across a 2× budget change with image quality held (a clean null, not a masked effect). Killed
-independently by a matched-budget cross-model pair: **Gemma 256 tokens → +65%** vs **Qwen 262 tokens
-→ +39%**. *Gotcha: `_prep_image` only downscales and EMOTIC photos are ~640px, so `--max-side 896`
+independently by a matched-budget cross-model pair: **Gemma 256 tokens** vs **Qwen 262 tokens → +39%**.
+_(Corrected 2026-08-22: this line originally read "Gemma 256 tokens → +65%", the retracted bridge
+number. Gemma's raw-HF gap is **+12%**. The conclusion is unaffected — and in fact strengthened: two
+models at an all-but-identical token budget differ by 27 points in the opposite direction to the
+hypothesis.)_ *Gotcha: `_prep_image` only downscales and EMOTIC photos are ~640px, so `--max-side 896`
 and `1344` were both no-ops giving identical runs.*
 
-**Net:** the asymmetry is present in 3 of 4 models with graded strength (+65/+39/+19/−13) and **no
-validated explanation for the variation.** Report it that way rather than inventing a third
+**Net:** graded strength across 4 models with **no validated explanation for the variation.**
+_(Corrected 2026-08-22: originally "present in 3 of 4 models (+65/+39/+19/−13)", which quoted the
+retracted Gemma number. With Gemma at +12% CI [−0,+24] the standing is Qwen +39% and LLaVA-NeXT +19%
+clearing zero, Gemma marginal, LLaVA-1.5 null — **2 of 4**. See `docs/paper-retraction-audit.md`.)_ Report it that way rather than inventing a third
 mechanism. Two ruled-out architectural explanations fit Interp4Discovery's negative-results track.
 
 ### Robustness re-analysis (CPU, no GPU — `a8d6b3d`)
@@ -218,6 +223,11 @@ clobbering that previously destroyed three published numbers.
 1. ~~Stage D re-run~~ — **done, survives** (+0.336 vs +0.329). See §4.
 2. **Re-score same-image patching on raw HF** to confirm the 57–65% turn-boundary result. Expected to
    survive (probe-scored), but confirm rather than assume.
+   Port written: `src/experiments/stage_f_patching_hf.py` (bridge-free; aggregation imported from
+   `stage_f_patching` so the runs are directly comparable). Run `--verify-tap` first.
+2b. **Also re-score cross-image patching** (§6.3, the 80%/9%/68% table). Not previously flagged: it
+   states "behavioural valence is the main readout", which is exactly the bridge's failing
+   combination. The L18 probe is only a secondary check there.
 3. **Paper**: retract the +65%, promote Qwen to primary, drop "1.8×" from the abstract, rewrite §7.1
    and the Discussion (the LLaVA boundary claim is falsified), re-word LLaVA-1.5 as a null.
 4. `llava-v1.6-vicuna-7b` to close the backbone confound.
