@@ -296,3 +296,78 @@ Cross-image, `cross_patching_hf_{band}.json`: 0–12 image val 1.001 / probe 1.0
 
 Neither gap blocks anything now: both tables are being replaced by the raw-HF sweeps above, which are
 fully artifact-backed. The bridge numbers only appear in the paper as the values being retracted.
+
+---
+
+# Rebuilt §5 on raw HF — and a robustness finding that changes the claim (2026-08-22)
+
+`analyze_stage_f.py` is CPU-only and writes stem-matched output, so §5 was rebuilt from the raw-HF
+parquets locally. `analyze_stage_f_unbounded.py` was re-run on the raw-HF parquets too — the previous
+`unbounded_crossed.json` had used the **bridge** Gemma parquet (`conflict_pilot.parquet`). The old
+file is preserved as `unbounded_crossed_bridge-gemma.json`; the new one is `unbounded_crossed_rawhf.json`.
+
+## Image-clustered results (the CIs the paper currently reports)
+
+| model | $\beta_{img}$ | $\beta_{txt}$ | ratio | mirror contrast | 95% CI | override gap |
+|---|---|---|---|---|---|---|
+| \qwen{} | +0.510 | +0.584 | **1.14** | **+0.394** | [+0.249, +0.542] | +39% |
+| LLaVA-NeXT | +0.828 | +0.364 | 0.44 | **+0.392** | [+0.337, +0.450] | +19% |
+| \gemma{} (raw HF) | +0.723 | +0.321 | 0.44 | **+0.319** | [+0.181, +0.451] | +12% |
+| LLaVA-1.5 | +0.749 | +0.414 | 0.55 | **−0.018** | [−0.081, +0.049] | −13% |
+
+**Qwen is a strictly better primary model than Gemma ever was.** It is the only model with *balanced*
+integration (1.14 — the property the paper claims for Gemma, which on raw HF is image-led at 0.44),
+it has the largest mirror contrast, and its head-room normalisation is clean (drop 0.714 / rise 0.394).
+
+**Do not report Gemma's head-room-normalised pull.** On raw HF it comes out as **62.716** vs a rise of
+0.259 — degenerate, because the positive-image neutral baseline (+0.905) sits almost on the ceiling
+and the denominator collapses. The published $0.63 / 0.26$ is not recoverable and the statistic is
+not meaningful for this model.
+
+## The crossed (image × sentence) bootstrap — the honest test, and it is unforgiving
+
+Three readouts × four models. "Clears" means the crossed 95% CI excludes zero.
+
+| model | override gap | crossed CI | bounded mirror | crossed CI | unbounded margin | crossed CI |
+|---|---|---|---|---|---|---|
+| \qwen{} | +39.8% | **[+7.3, +66.9]** ✓ | +0.394 | [−0.187, +0.891] ✗ | −1.567 | [−4.995, +1.811] ✗ |
+| LLaVA-NeXT | +16.2% | [−2.4, +35.6] ✗ | +0.392 | **[+0.219, +0.577]** ✓ | +0.971 | **[+0.478, +1.471]** ✓ |
+| \gemma{} (raw HF) | +9.6% | [−15.3, +31.3] ✗ | +0.319 | [−0.044, +0.666] ✗ | +4.742 | **[+3.076, +6.271]** ✓ |
+| LLaVA-1.5 | −17.6% | [−49.6, +13.1] ✗ | −0.018 | [−0.447, +0.367] ✗ | +0.096 | [−1.090, +1.160] ✗ |
+
+**No model clears zero on all three readouts.** LLaVA-NeXT clears two of three; Qwen and Gemma clear
+one each, and on *different* readouts; LLaVA-1.5 clears none.
+
+Two specific reversals worth noting:
+
+- **Raw-HF Gemma's unbounded margin is +4.742 log-odds (ratio 3.07), crossed CI [+3.08, +6.27] —
+  decisively positive.** On the *bridge* parquet the same statistic was **−0.958** (ratio 0.76, sign
+  flipped). The earlier conclusion that "the ~1.8× magnitude claim is an artefact of the bounded
+  scale" was itself computed on the corrupted stack. On raw HF the unbounded readout *strengthens*
+  the asymmetry rather than reversing it. Drop "1.8×" from the abstract as planned, but for the
+  original reason (bounded-scale dependence), not because the effect inverts.
+- **Qwen's unbounded margin goes negative (−1.567, ratio 0.87)** because its bounded valence saturates
+  at $\pm 1$; on log-odds its rise exceeds its drop.
+
+### How to state this without overclaiming in either direction
+
+With **6 sentences per polarity**, the crossed bootstrap resamples 6 items and is badly underpowered —
+wide CIs are partly a design limit, not evidence of absence. The defensible claim:
+
+> The asymmetry is robust to *image* sampling in 3 of 4 models, but with only six sentences per
+> polarity the design cannot establish that it generalises to new *sentences*. Which readout shows it
+> most strongly varies by model, tracking how each model uses the bounded valence scale.
+
+**Qwen's override gap is the one statistic that clears zero under the crossed bootstrap
+(+39.8% [+7.3, +66.9]).** That makes "Qwen primary, lead with the override rate" the defensible
+structure — but the paper must report all three readouts per model rather than choosing per model.
+
+Expanding the sentence banks is now the single highest-value remaining experiment: it is the only
+thing that converts these into sentence-generalisable claims, and it needs no GPU beyond re-running
+the conflict pass.
+
+### Minor: two override definitions differ by a few points
+
+`analyze_stage_f._flip_override` and `analyze_stage_f_unbounded` disagree slightly (Qwen +39.4 vs
++39.8; NeXT +18.7 vs +16.2; Gemma +12.2 vs +9.6; LLaVA-1.5 −12.6 vs −17.6) because they subset
+conditions differently. Pick one definition for the paper and state it; do not mix them across tables.
