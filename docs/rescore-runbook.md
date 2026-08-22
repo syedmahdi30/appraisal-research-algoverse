@@ -125,3 +125,56 @@ cp -r results/stage_f "$DEST"/stage_f-after-rescore
 Not yet ported, and needed only if §6 survives: §6.1 layerwise onset and the attention analysis
 (`stage_f_layerwise`, `stage_f_attribution`). Both are probe-projected differences, so they sit in the
 safe category — but so did these, and they were still worth measuring.
+
+---
+
+# Round 2 — closing the last bridge-measured numbers in §6.1 and §7.4
+
+After the §6.2/§6.3 re-scores, three numbers in the paper still came from the superseded stack: the
+layerwise onset, the attention analysis, and the conflict steering slope. The paper discloses the
+stack problem, so each of these is something a reviewer can pull on.
+
+## 5. Layerwise localization (§6.1)
+
+60 positive-group images × 14 contexts = 840 forwards. The raw projections grow with residual-stream
+norm, so the paper's numbers come from the scale-free re-analysis, not from the runner.
+
+```bash
+python -m src.experiments.stage_f_layerwise_hf
+python -m src.experiments.analyze_stage_f_layerwise --parquet layerwise_hf.parquet
+```
+
+The analyzer now takes `--parquet` and writes a stem-matched `layerwise_hf_normalized.json`, so it
+cannot clobber the original analysis.
+
+Published reference (bridge): entry near **L13** (|d| = 0.21 against a 0.125 noise floor), amplifying
+**7.0×** to a peak |d| = **1.47** at **L28**. Watch the entry layer, the peak layer, and the ratio —
+the interpretive claim is "enters mid, amplifies late", so the ratio matters more than either endpoint.
+
+## 6. Conflict steering slope (§7.4)
+
+150 incongruent cells × 7 betas = 1,050 forwards. Verify the direction first — a wrong residual site
+does not error, it just steers with a vector that means nothing.
+
+```bash
+python -m src.experiments.stage_f_arbitration_hf --verify-dir   # expect rel err < 5%
+python -m src.experiments.stage_f_arbitration_hf
+```
+
+Published reference (bridge): behavioral-valence slope **+0.215**, reported as 65% of the no-conflict
+slope. Note the denominator has already moved — Stage D's no-conflict slope is **+0.336** on raw HF,
+not +0.329 — so the reported *fraction* changes even if the slope itself reproduces. The runner prints
+the fraction against the corrected denominator.
+
+The probe slope should come out at ~0. That is not a bug: the probe tap (`post_attention_layernorm`,
+inside layer 18) is upstream of the `resid_post` injection at the same layer, so it is invariant to
+steering by construction. It is recorded to demonstrate that, not to score.
+
+## Not ported: the attention analysis (§6.1, second paragraph)
+
+The $88\%$ / $3.5\%$ attention shares and the $6\%$ knockout are the one piece still on the old stack.
+Reading attention patterns on raw HF needs `attn_implementation="eager"` plus `output_attentions=True`,
+and the knockout needs the layer-18 attention mask rewritten through a forward pre-hook rather than a
+pattern edit. That is a real port, not a translation. Options, in order of cost: leave the paragraph
+with its current numbers and a stated caveat; drop the paragraph (the patching result in §6.2
+supersedes its conclusion anyway); or port it.
