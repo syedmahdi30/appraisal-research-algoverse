@@ -35,6 +35,7 @@ overwrite an existing parquet.
 
   python -m src.experiments.stage_f_token_budget --model Qwen/Qwen3-VL-8B-Instruct --max-side 896
   python -m src.experiments.stage_f_token_budget --model llava-hf/llava-v1.6-mistral-7b-hf
+  python -m src.experiments.stage_f_token_budget --model <id> --text-only   # stimulus control
   python -m src.experiments.stage_f_token_budget --aggregate      # CPU: build the trend table
 """
 from __future__ import annotations
@@ -254,6 +255,111 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
     return metrics
 
 
+# --------------------------------------------------------------------------- text-only control
+def _base_runs_for(model_slug: str) -> list[Path]:
+    """Every base-run metrics file for this model, across token budgets (natural + each --max-side)."""
+    exact = STAGE_F_DIR / f"conflict_{model_slug}_metrics.json"
+    runs = [exact] if exact.exists() else []
+    return runs + sorted(STAGE_F_DIR.glob(f"conflict_{model_slug}_px*_metrics.json"))
+
+
+def _amplification(img_ratio: float | None, ref: float) -> str:
+    """Label the image-conditioned vs text-only ratio comparison (the cross-modal amplification test)."""
+    if img_ratio is None or not np.isfinite(ref) or not np.isfinite(img_ratio):
+        return "no base run to compare"
+    if img_ratio > 1.25 * ref:
+        return "CROSS-MODAL amplification (image inflates the ratio)"
+    if abs(img_ratio - ref) <= 0.25 * ref:
+        return "STIMULUS confound (ratios match)"
+    return "image dampens (reversed)"
+
+
+def run_text_only(config_path: str, model_name: str, force: bool = False) -> dict:
+    """The image-ablated stimulus control: every context sentence with NO image.
+
+    Isolates whether the negativity asymmetry is a property of the SENTENCES (the banks are simply
+    unbalanced in strength) or genuinely cross-modal (it needs the image). Keyed by MODEL ONLY, with
+    no token-budget tag: there is no image in this pass, so `--max-side` cannot affect it and running
+    it once per resolution would burn compute re-deriving identical numbers.
+
+    Because the text-only ratio is fixed per model while the image-conditioned ratio is measured per
+    token budget, the comparison is reported against EVERY base run of this model — so cross-modal
+    amplification can be read as a function of the visual token budget.
+    """
+    load_config(config_path)
+    ensure_dirs()
+    key = slug(model_name, None)          # deliberately budget-free; see docstring
+    out_pq = STAGE_F_DIR / f"text_only_{key}.parquet"
+    if out_pq.exists() and not force:
+        raise FileExistsError(f"{out_pq} already exists — pass --force to replace it.")
+
+    model, processor, family = load_any(model_name, None)
+    tok_ids = emotion_token_ids(processor)
+    multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
+             if not r["single_token"]}
+
+    rows = []
+    for cond, cid, sentence in _conditions():
+        val, lp = readout(model, build_inputs(processor, None, sentence, family), tok_ids)  # image=None
+        rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
+                     "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": max(lp, key=lp.get),
+                     **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
+    df = pd.DataFrame(rows)
+    df.to_parquet(out_pq)
+
+    neu = float(df[df["condition"] == "neutral"]["valence"].mean())
+    none_v = float(df[df["condition"] == "none"]["valence"].mean())
+    pe = float((df[df["condition"] == "positive"]["valence"] - neu).mean())
+    ne = float((df[df["condition"] == "negative"]["valence"] - neu).mean())
+    # raw ratio (vs 0, not vs a possibly-floored neutral) — the robust reference when a model pins
+    # its no-information baseline to the scale bound, as Qwen does.
+    pr = float(df[df["condition"] == "positive"]["valence"].mean())
+    nr = float(df[df["condition"] == "negative"]["valence"].mean())
+    raw_ratio = abs(nr) / abs(pr) if pr else float("nan")
+    text_ratio = abs(ne) / abs(pe) if pe else float("nan")
+    ref = raw_ratio if np.isfinite(raw_ratio) else text_ratio
+
+    per_base = []
+    for bp in _base_runs_for(key):
+        j = json.loads(bp.read_text())
+        a = j.get("asymmetry_vs_floor", {})
+        dn, dp = a.get("drop_pos_img_neg_ctx"), a.get("congruent_pos_img_pos_ctx")
+        img_ratio = abs(dn) / abs(dp) if dn is not None and dp else None
+        per_base.append({"base_run": bp.name, "max_side": j.get("max_side"),
+                         "image_tokens": j.get("image_tokens", {}).get("image_tokens"),
+                         "image_conditioned_ratio": img_ratio,
+                         "verdict": _amplification(img_ratio, ref)})
+
+    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
+               "keyed_by": "model only (no image in this pass; --max-side cannot affect it)",
+               "neutral_baseline": neu, "none_baseline": none_v, "pos_effect": pe, "neg_effect": ne,
+               "pos_raw": pr, "neg_raw": nr, "text_only_ratio_vs_neutral": text_ratio,
+               "text_only_ratio_raw": raw_ratio, "reference_ratio": ref,
+               "per_base_run": per_base, "tokenization_multi_token": multi}
+    save_json(metrics, STAGE_F_DIR / f"text_only_{key}_metrics.json")
+
+    print(f"\nStage F text-only [{model_name}] — {len(rows)} forwards (no images).")
+    if multi:
+        print(f"  [!] multi-token labels (first sub-token scored): {list(multi)}")
+    for _, r in df.iterrows():
+        print(f"    {r['context_id']:5s} {r['valence']:+6.3f}  {r['argmax_emotion']:9s}  "
+              f"\"{r['context'][:42]}\"")
+    print(f"  baselines: neutral {neu:+.3f}  none {none_v:+.3f}")
+    print(f"  vs-neutral: pos {pe:+.3f}  neg {ne:+.3f}  |neg|/|pos| = {text_ratio:.2f}")
+    print(f"  RAW (vs 0): pos {pr:+.3f}  neg {nr:+.3f}  |neg|/|pos| = {raw_ratio:.2f}  <- reference")
+    if per_base:
+        print("  cross-modal amplification vs each base run:")
+        for b in per_base:
+            ir = b["image_conditioned_ratio"]
+            print(f"    max_side={str(b['max_side']):>5s}  img_tokens={str(b['image_tokens']):>5s}  "
+                  f"image-conditioned {('%.2f' % ir) if ir else '  n/a'}  vs text-only {ref:.2f}"
+                  f"  -> {b['verdict']}")
+    else:
+        print("  (no base run for this model yet — run the base pass to enable the comparison)")
+    print(f"  data -> {out_pq}")
+    return metrics
+
+
 def reanalyze(model_name: str, max_side: int | None) -> dict:
     """Recompute metrics from a saved parquet (CPU, no model load)."""
     ensure_dirs()
@@ -286,15 +392,24 @@ def aggregate() -> dict:
         f, t, d = j.get("flip_override", {}), j.get("image_tokens", {}), j.get("image_discriminability", {})
         if not f:
             continue
+        # the model's text-only reference ratio, if that control has been run (keyed by model alone)
+        tpath = STAGE_F_DIR / f"text_only_{slug(j.get('model', ''), None)}_metrics.json"
+        text_ratio = None
+        if tpath.exists():
+            try:
+                text_ratio = json.loads(tpath.read_text()).get("reference_ratio")
+            except json.JSONDecodeError:
+                pass
         rows.append({"source": mp.name, "model": j.get("model", "?"), "max_side": j.get("max_side"),
                      "image_tokens": t.get("image_tokens"),
                      "image_token_fraction": t.get("image_token_fraction"),
                      "discriminability_gap": d.get("discriminability_gap"), "auc": d.get("auc"),
+                     "text_only_ratio": text_ratio,
                      "override_gap": f.get("dominance_gap"),
                      "ci_lo": f.get("dominance_gap_ci95", [None, None])[0],
                      "ci_hi": f.get("dominance_gap_ci95", [None, None])[1]})
     cols = ["source", "model", "max_side", "image_tokens", "image_token_fraction",
-            "discriminability_gap", "auc", "override_gap", "ci_lo", "ci_hi"]
+            "discriminability_gap", "auc", "text_only_ratio", "override_gap", "ci_lo", "ci_hi"]
     tab = pd.DataFrame(rows, columns=cols)
     if len(tab):
         tab = tab.sort_values(["model", "image_tokens"], na_position="last")
@@ -328,11 +443,17 @@ def main() -> None:
                          "dynamic-resolution models); omit for the model's native handling")
     ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
     ap.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
+    ap.add_argument("--text-only", action="store_true",
+                    help="image-ablated stimulus control (keyed by model; ignores --max-side)")
     ap.add_argument("--reanalyze", action="store_true", help="recompute from the saved parquet (CPU)")
     ap.add_argument("--aggregate", action="store_true", help="build the cross-run trend table (CPU)")
     a = ap.parse_args()
     if a.aggregate:
         aggregate()
+    elif a.text_only:
+        if a.max_side:
+            print("  [note] --max-side ignored: the text-only control has no image.")
+        run_text_only(a.config, a.model, force=a.force)
     elif a.reanalyze:
         reanalyze(a.model, a.max_side)
     else:
