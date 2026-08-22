@@ -24,7 +24,14 @@ the candidate that reproduces ~0.64 is the correct tap. A candidate scoring ~0 i
 Run that first; the main pass refuses to run on an unverified tap unless forced.
 
     python -m src.experiments.stage_c_transfer_hf --verify-tap      # do this first
-    python -m src.experiments.stage_c_transfer_hf --tap self_attn --full
+    python -m src.experiments.stage_c_transfer_hf --full             # verified tap is the default
+
+VERIFIED RESULT (Gemma-3-4B, 2026-08-22). The correct module is `post_attention_layernorm`, NOT the
+plausible-looking `self_attn`: probe r^2 = +0.634 (Stage A reference 0.641) vs **-6.26** for
+`self_attn`/`o_proj`, whose read-out correlates with the target at rho = +0.04. Gemma applies the
+post-attention norm before the residual add and TransformerLens folds it into the attn-block output.
+Running the images through `self_attn` would have returned near-zero correlation and read as
+"cross-modal transfer failed" — the false negative this verification exists to prevent.
 """
 from __future__ import annotations
 
@@ -47,6 +54,8 @@ from .stage_c_transfer import _auc, _corr, _polarity, _random_controls, _shared_
 # Candidate raw-HF modules for the bridge's `hook_attn_out`, relative to a decoder layer.
 # Gemma applies `post_attention_layernorm` to the attention output BEFORE the residual add, so these
 # are genuinely different tensors and only one matches what the probe was fit on.
+# Verified on Gemma-3-4B: `post_attention_layernorm` is the match (r^2 +0.634 vs Stage A 0.641);
+# `self_attn` and its `o_proj` return the SAME pre-norm tensor and score r^2 -6.26.
 CANDIDATE_TAPS = ("self_attn", "self_attn.o_proj", "post_attention_layernorm")
 DEFAULT_MODEL = "google/gemma-3-4b-it"
 
@@ -344,7 +353,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Stage C cross-modal read-out on raw HuggingFace")
     ap.add_argument("--config", default="config/stage_c.yaml")
     ap.add_argument("--model", default=DEFAULT_MODEL)
-    ap.add_argument("--tap", default="self_attn", choices=CANDIDATE_TAPS)
+    ap.add_argument("--tap", default="post_attention_layernorm", choices=CANDIDATE_TAPS)
     ap.add_argument("--verify-tap", action="store_true",
                     help="identify the correct module by reproducing the Stage A probe r^2 (run first)")
     ap.add_argument("--n-text-verify", type=int, default=300)
