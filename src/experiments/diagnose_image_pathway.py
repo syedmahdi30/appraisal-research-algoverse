@@ -225,19 +225,27 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
 
 
 def layer_scan(model_name: str, device: str = "cuda", layer: int = 18) -> dict:
-    """Where in the stack do the two forwards diverge? Compares resid_post at EVERY layer.
+    """Where do the two forwards diverge? Compared with OUTLIER-ROBUST metrics.
 
-    Motivated by a sharp asymmetry in the re-runs: Stage C, which reads the probe at layer 18, is
-    IDENTICAL across stacks (rho +0.507 bridge vs +0.510 raw HF over 7,280 images), while the final
-    logits differ by 6.15 nats and flip the argmax. That places the defect DOWNSTREAM of the probe
-    site — which would mean probe-read mechanism results survive and only behaviour-read ones die.
-    This locates the onset layer instead of inferring it.
+    METRIC CHOICE MATTERS HERE, and an earlier version of this function got it wrong. Gemma carries a
+    few enormous-magnitude outlier dimensions, so `max|Δ| / RMS` is dominated by one coordinate out of
+    2,560 and reported catastrophic divergence at every layer — including layer 0, and including the
+    probe site. That conclusion is refuted by direct evidence: a probe FIT on bridge L18 activations
+    reads raw-HF L18 activations at rho = +0.510 over 7,280 images (Stage C). A linear probe depends
+    on DIRECTION, so the right measures are cosine similarity and relative L2 norm, both of which are
+    insensitive to a single outlier coordinate.
+
+    Compares two sites per layer:
+      * resid_post   (bridge `blocks.{i}.hook_resid_post`)  vs HF `hidden_states[i+1]`
+      * attn_out     (bridge `blocks.{i}.hook_attn_out`)    vs HF `post_attention_layernorm` output
+        — the actual probe site, verified as the raw-HF equivalent in `stage_c_transfer_hf`.
     """
     import numpy as np
     from transformers import AutoModelForImageTextToText, AutoProcessor
     from ..bridge.boot import boot_gemma
     from ..bridge.hooks import keep_language_taps
     from ..bridge.multimodal import build_image_inputs
+    from .stage_c_transfer_hf import find_lm_layers
 
     sentence = NEGATIVE_CONTEXTS[0]
     prompt = context_prompt(sentence)
@@ -249,44 +257,71 @@ def layer_scan(model_name: str, device: str = "cuda", layer: int = 18) -> dict:
         model_name, dtype=torch.bfloat16, device_map="auto").eval()
     bridge = boot_gemma(model_name, device=device)
 
+    # capture HF post_attention_layernorm (the probe site) at every layer, last token
+    layers = find_lm_layers(hf)
+    hf_attn: dict = {}
+    handles = []
+    for i, lyr in enumerate(layers):
+        def mk(idx):
+            def hook(_m, _i, out):
+                t = out[0] if isinstance(out, tuple) else out
+                hf_attn[idx] = t[0, -1].detach().float().cpu().numpy()
+            return hook
+        handles.append(lyr.post_attention_layernorm.register_forward_hook(mk(i)))
+
     enc = processor(text=prompt, images=[img], return_tensors="pt")
     with torch.no_grad():
         out_h = hf(**{k: v.to(hf.device) for k, v in enc.items()}, output_hidden_states=True)
+    for h in handles:
+        h.remove()
+
     br_in = build_image_inputs(bridge, img, prompt=prompt)
     with torch.no_grad():
-        _, cache = bridge.run_with_cache(br_in["input_ids"], pixel_values=br_in["pixel_values"],
-                                         names_filter=keep_language_taps(("hook_resid_post",)))
+        _, cache = bridge.run_with_cache(
+            br_in["input_ids"], pixel_values=br_in["pixel_values"],
+            names_filter=keep_language_taps(("hook_resid_post", "hook_attn_out")))
+
+    def cmp(b, h):
+        nb, nh = np.linalg.norm(b), np.linalg.norm(h)
+        cos = float(b @ h / (nb * nh)) if nb and nh else float("nan")
+        return {"cosine": cos, "rel_l2": float(np.linalg.norm(b - h) / (nh + 1e-9)),
+                "norm_ratio": float(nb / (nh + 1e-9))}
 
     n = len(out_h.hidden_states) - 1
-    print(f"\n=== (D) layer scan: resid_post divergence, {n} layers ===")
-    print(f"  {'layer':>5s}  {'max|Δ|':>10s}  {'rel':>8s}   (rel = max|Δ| / RMS of the HF activation)")
+    print(f"\n=== (D) layer scan: cosine similarity, {n} layers ===")
+    print(f"  {'layer':>5s} | {'resid cos':>9s} {'relL2':>7s} {'|b|/|h|':>8s} | "
+          f"{'attn cos':>9s} {'relL2':>7s} {'|b|/|h|':>8s}")
     rows, onset = [], None
     for i in range(n):
-        name = f"blocks.{i}.hook_resid_post"
-        if name not in cache:
-            continue
-        b = cache[name][0, -1].detach().float().cpu().numpy()
-        h = out_h.hidden_states[i + 1][0, -1].detach().float().cpu().numpy()
-        md = float(np.abs(b - h).max())
-        rel = md / (float(np.sqrt((h ** 2).mean())) + 1e-9)
-        rows.append({"layer": i, "max_abs_diff": md, "relative": rel})
-        if onset is None and rel > 0.05:
+        r = a = None
+        rn, an = f"blocks.{i}.hook_resid_post", f"blocks.{i}.hook_attn_out"
+        if rn in cache:
+            r = cmp(cache[rn][0, -1].detach().float().cpu().numpy(),
+                    out_h.hidden_states[i + 1][0, -1].detach().float().cpu().numpy())
+        if an in cache and i in hf_attn:
+            a = cmp(cache[an][0, -1].detach().float().cpu().numpy(), hf_attn[i])
+        rows.append({"layer": i, "resid": r, "attn": a})
+        if onset is None and r and r["cosine"] < 0.99:
             onset = i
-        mark = "  <-- probe site" if i == layer else ("  <-- divergence onset" if i == onset else "")
         if i < 3 or i % 4 == 0 or i in (layer, onset) or i >= n - 3:
-            print(f"  {i:>5d}  {md:>10.4f}  {rel:>8.4f}{mark}")
+            rs = f"{r['cosine']:>9.5f} {r['rel_l2']:>7.3f} {r['norm_ratio']:>8.3f}" if r else " " * 26
+            as_ = f"{a['cosine']:>9.5f} {a['rel_l2']:>7.3f} {a['norm_ratio']:>8.3f}" if a else " " * 26
+            mark = "  <-- probe site" if i == layer else ""
+            print(f"  {i:>5d} | {rs} | {as_}{mark}")
 
-    at_probe = next((r for r in rows if r["layer"] == layer), None)
-    print(f"\n  divergence onset (rel > 5%): layer {onset}")
-    if at_probe:
-        print(f"  at the probe site (L{layer}): rel = {at_probe['relative']:.4f}")
-        if at_probe["relative"] < 0.05:
-            print("  -> the two stacks AGREE at the probe site, so probe-read results (Stage C, and")
-            print("     any mechanism recovery scored on the L18 probe) are trustworthy; only")
-            print("     behaviour-read results (logits, argmax, behavioural valence) are affected.")
+    at = next((x for x in rows if x["layer"] == layer), None)
+    print(f"\n  first layer with resid cosine < 0.99: {onset}")
+    if at and at["attn"]:
+        c = at["attn"]["cosine"]
+        print(f"  PROBE SITE L{layer} attn_out: cosine = {c:.5f}, rel L2 = {at['attn']['rel_l2']:.4f}")
+        if c > 0.99:
+            print("  -> the probe site AGREES in direction, consistent with Stage C reproducing")
+            print("     (rho +0.507 bridge vs +0.510 raw HF). Probe-scored results are trustworthy;")
+            print("     only behaviour-scored results (logits/argmax) are affected.")
         else:
-            print("  -> the stacks already differ AT the probe site; probe-read results are affected too.")
-    return {"onset_layer": onset, "layers": rows, "probe_layer": layer}
+            print("  -> the probe site differs in DIRECTION too — which would contradict Stage C,")
+            print("     so re-check this measurement before acting on it.")
+    return {"onset_layer": onset, "probe_layer": layer, "layers": rows}
 
 
 def main() -> None:
