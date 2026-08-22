@@ -33,8 +33,9 @@ group carries anything. `--verify-tap` checks the site before spending a sweep o
     python -m src.experiments.stage_f_patching_hf                 # full sweep (pair 1)
     python -m src.experiments.stage_f_patching_hf --pos-idx 1 --neg-idx 0   # pair 2
 
-Published reference (bridge, results/stage_f/patching_metrics.json): assistant-turn boundary
-65% / 57% across the two pairs, image tokens ~0%, all-aligned-text 85% / 87%.
+Published reference (bridge): assistant-turn boundary 65% / 57% across the two pairs, image tokens
+~0%, all-aligned-text 85% / 87%. NOTE the pair indices --- Pair 1 is (pos 0, neg 2) and Pair 2 is
+(pos 4, neg 0), NOT (1, 0). Only Pair 2 is artifact-backed; Pair 1's run was overwritten.
 """
 from __future__ import annotations
 
@@ -57,9 +58,23 @@ from .stage_f_attribution import segment_positions
 from .stage_f_patching import GROUPS, _aligned_groups, _recovery, _verdict
 from .stage_f_qwen import emotion_token_ids, valence_score
 
-# Published bridge result, for the side-by-side print. Probe read-out, layers 13-17.
-PUBLISHED = {"image": (-0.01, 0.01), "bos": (0.00, -0.01), "prefix_delim": (0.00, -0.01),
-             "question": (0.22, 0.32), "suffix_delim": (0.65, 0.57), "text_all": (0.85, 0.87)}
+# Published bridge results, keyed by the (pos_idx, neg_idx) context pair they were actually run on.
+# Keyed explicitly because the two published pairs are NOT (0,2) and (1,0): pair 2 is (4,0), the
+# "wonderful news"/"devastating news" minimal pair. Any other pair has no published comparator and
+# must print "--" rather than borrowing a number from a different context pair.
+#
+#   (0, 2)  championship / funeral      — paper Pair 1. DOC-ONLY: the run that produced it was
+#                                         overwritten by the old fixed-path clobbering, so it
+#                                         survives only in docs/stage-f-mechanism.md.
+#   (4, 0)  wonderful / devastating     — paper Pair 2. Artifact-backed:
+#                                         results/stage_f/patching_metrics.json.
+PUBLISHED_BY_PAIR = {
+    (0, 2): {"image": -0.01, "bos": 0.00, "prefix_delim": 0.00,
+             "question": 0.22, "suffix_delim": 0.65, "text_all": 0.85},
+    (4, 0): {"image": 0.007, "bos": -0.008, "prefix_delim": -0.011,
+             "question": 0.320, "suffix_delim": 0.566, "text_all": 0.867},
+}
+PAIR_LABEL = {(0, 2): "paper Pair 1 (doc-only provenance)", (4, 0): "paper Pair 2 (artifact-backed)"}
 
 
 class _TokShim:
@@ -285,17 +300,20 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
     }
     save_json(metrics, STAGE_F_DIR / "patching_hf_metrics.json")
 
-    pair = "pair 1" if (pj, ni) == (0, 2) else f"pos{pj}/neg{ni}"
+    pub = PUBLISHED_BY_PAIR.get((pj, ni))
+    pair = PAIR_LABEL.get((pj, ni), f"pos{pj}/neg{ni} — NO published comparator")
     print(f"\nStage F patching (RAW HF) — {len(df)} positive images "
           f"({n_skip} skipped, {seg_bad} seg-dropped); patch resid_post {patch_layers[0]}-{patch_layers[-1]}.")
     print(f"  donor +ctx: \"{pos_ctx[:40]}\"   recipient -ctx: \"{neg_ctx[:40]}\"   [{pair}]")
     print(f"  baselines: probe pos {rec['pos_probe']:+.3f} / neg {rec['neg_probe']:+.3f}  |  "
           f"valence pos {rec['pos_val']:+.3f} / neg {rec['neg_val']:+.3f}")
-    k = 0 if (pj, ni) == (0, 2) else 1
+    if pub is None:
+        print(f"\n  NOTE: ({pj}, {ni}) is not one of the two published context pairs "
+              f"((0,2) and (4,0)), so there is nothing to compare against — the published column "
+              f"is blank by design rather than borrowed from a different pair.")
     print(f"\n  {'group':14s} {'raw HF (probe)':>15s} {'published (bridge)':>20s} {'valence':>10s}")
     for g in GROUPS:
-        pub = PUBLISHED.get(g)
-        pub_s = f"{pub[k]*100:.0f}%" if pub else "--"
+        pub_s = f"{pub[g]*100:.0f}%" if pub and g in pub else "--"
         print(f"  {g:14s} {rec[g]['probe']*100:>14.0f}% {pub_s:>20s} {rec[g]['val']*100:>9.0f}%")
     print(f"\n  VERDICT: {metrics['verdict']}")
     print(f"  data -> {STAGE_F_DIR/'patching_hf.parquet'}   "

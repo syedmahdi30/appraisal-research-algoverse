@@ -57,9 +57,13 @@ running anything else.
 Published (bridge): assistant-turn boundary **65% / 57%**, image tokens ~0%, all-aligned-text 85%/87%.
 Expected to survive: a ratio of differences, probe-scored at L18 where bridge-vs-HF cosine is 0.980.
 
+The two published pairs are **(pos 0, neg 2)** championship/funeral and **(pos 4, neg 0)**
+wonderful/devastating — *not* (1, 0). Only Pair 2 is artifact-backed; Pair 1's run was overwritten by
+the old fixed-path clobbering and survives only in `docs/stage-f-mechanism.md`.
+
 ```bash
-python -m src.experiments.stage_f_patching_hf                        # pair 1 (pos 0 / neg 2)
-python -m src.experiments.stage_f_patching_hf --pos-idx 1 --neg-idx 0 # pair 2
+python -m src.experiments.stage_f_patching_hf                         # Pair 1 (pos 0 / neg 2)
+python -m src.experiments.stage_f_patching_hf --pos-idx 4 --neg-idx 0 # Pair 2 (pos 4 / neg 0)
 ```
 
 The run prints raw HF beside the published bridge number per token group. Outputs:
