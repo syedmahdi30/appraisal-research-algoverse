@@ -162,3 +162,73 @@ remains **additive** (47 + 46 ≈ 93 recovered by all text), while Qwen is **sup
 parts sum to 18% against a 65% whole (`patching_qwen_metrics.json`: question 12%, turn markers 6%,
 all text 65%), i.e. genuinely redundant across positions. Gemma moves toward Qwen but the kinds still
 differ. Do not write that the contrast dissolves.
+
+---
+
+# Re-score results — §6.3 cross-image patching (raw HF, 2026-08-22)
+
+60 donor/recipient pairs, neutral context, three bands. Published column is bridge + behavioural
+valence (paper Table 4); raw HF is reported on both readouts where the probe is valid.
+
+| band | image (pub) | image (raw HF val) | image (raw HF probe) | non-image text (pub) | text (raw HF val) | text (raw HF probe) | all (pub) | all (raw HF) |
+|---|---|---|---|---|---|---|---|---|
+| 0–12 | 80% | **100%** | 101% | 10% | **2%** | 8% | 100% | **100%** |
+| 13–17 | 66% | **96%** | 75% | 65% | **74%** | 87% | 91% | **100%** |
+| 18–28 | 9% | **31%** | *(invariant)* | 68% | **63%** | *(invariant)* | 79% | **90%** |
+
+## The qualitative claim survives
+
+Image-token recovery falls with depth (**100% → 96% → 31%**) while text-position recovery rises
+(**2% → 74% → 63%**). That is the same shape as the published 80/66/9 and 10/65/68, and it supports
+the paper's reading unchanged: visual valence starts in the image tokens and is progressively
+readable from text-token states instead. The `all` sanity column is *better* than published
+(100/100/90 vs 100/91/79).
+
+## But the sharpest number in the table nearly quadruples
+
+The paper leans on late-band image recovery falling to **9%** — near-total handoff out of the image
+tokens. On raw HF it is **31% [24, 38]**. The module's own verdict downgrades from "image tokens
+carry LITTLE" to "**a MODERATE share**". A third of the image-driven difference is still recoverable
+from image tokens at layers 18–28.
+
+- §6.3's "image-token recovery falls to $9\\%$" becomes $31\\%$, and the bolded $\\mathbf{9\\%}$ in
+  Table 4 goes with it.
+- "We interpret this as the visual valence signal **moving** from image tokens into text-token
+  states over depth" should soften — the signal becomes *additionally* readable from text states
+  while remaining partly readable from image tokens. It is a broadening, not a handoff.
+- The "concrete site where the two cues can compete" argument is unaffected: text positions still
+  recover 63% late, which is all that claim requires.
+
+## A caveat the published table could not show
+
+In the 13–17 band the two readouts disagree about which group dominates, with non-overlapping CIs:
+
+| 13–17 | image | non-image text |
+|---|---|---|
+| probe (L18) | 75% [71, 79] | 87% [86, 89] |
+| behavioural valence | 96% [92, 100] | 74% [66, 82] |
+
+Both are raw HF, so this is not bridge damage — it is a real difference between reading at L18 and
+reading at the output, with 16 layers of re-mixing in between. The published mid-band row (66 / 65)
+presented the two groups as comparable; the honest statement is that their ordering depends on where
+you read. Report the mid band on both readouts rather than picking the flattering one.
+
+## Not re-run
+
+The confirmatory fixed-negative-context run (image-driven gap shrinking 0.87 → 0.08, mid-band 85%
+CI [51, 150]) is a separate doc-only number and was not part of this sweep. It stays flagged.
+
+---
+
+# Verdict on §6
+
+**The mechanism section survives.** Both experiments reproduce their qualitative claims on raw HF,
+and each loses one sharp quantitative claim:
+
+- §6.2 keeps *image tokens are causally inert for the text-context effect* (0%, three runs) and loses
+  *the carrier is concentrated at the assistant-turn boundary*.
+- §6.3 keeps *visual valence is readable from image tokens early and from text states late* and loses
+  *image-token recovery falls to 9%*.
+
+So the rewrite is a retraction of §5 and §7.2/§7.3 plus a numbers pass over §6 — not the deletion of
+§6. Under the outcome table above, this is the "both survive" branch.
