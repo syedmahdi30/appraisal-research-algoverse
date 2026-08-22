@@ -224,13 +224,84 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
     return out
 
 
+def layer_scan(model_name: str, device: str = "cuda", layer: int = 18) -> dict:
+    """Where in the stack do the two forwards diverge? Compares resid_post at EVERY layer.
+
+    Motivated by a sharp asymmetry in the re-runs: Stage C, which reads the probe at layer 18, is
+    IDENTICAL across stacks (rho +0.507 bridge vs +0.510 raw HF over 7,280 images), while the final
+    logits differ by 6.15 nats and flip the argmax. That places the defect DOWNSTREAM of the probe
+    site — which would mean probe-read mechanism results survive and only behaviour-read ones die.
+    This locates the onset layer instead of inferring it.
+    """
+    import numpy as np
+    from transformers import AutoModelForImageTextToText, AutoProcessor
+    from ..bridge.boot import boot_gemma
+    from ..bridge.hooks import keep_language_taps
+    from ..bridge.multimodal import build_image_inputs
+
+    sentence = NEGATIVE_CONTEXTS[0]
+    prompt = context_prompt(sentence)
+    sel = select_extreme_images(4)
+    img = Image.open(sel["image_path"].iloc[0]).convert("RGB")
+
+    processor = AutoProcessor.from_pretrained(model_name)
+    hf = AutoModelForImageTextToText.from_pretrained(
+        model_name, dtype=torch.bfloat16, device_map="auto").eval()
+    bridge = boot_gemma(model_name, device=device)
+
+    enc = processor(text=prompt, images=[img], return_tensors="pt")
+    with torch.no_grad():
+        out_h = hf(**{k: v.to(hf.device) for k, v in enc.items()}, output_hidden_states=True)
+    br_in = build_image_inputs(bridge, img, prompt=prompt)
+    with torch.no_grad():
+        _, cache = bridge.run_with_cache(br_in["input_ids"], pixel_values=br_in["pixel_values"],
+                                         names_filter=keep_language_taps(("hook_resid_post",)))
+
+    n = len(out_h.hidden_states) - 1
+    print(f"\n=== (D) layer scan: resid_post divergence, {n} layers ===")
+    print(f"  {'layer':>5s}  {'max|Δ|':>10s}  {'rel':>8s}   (rel = max|Δ| / RMS of the HF activation)")
+    rows, onset = [], None
+    for i in range(n):
+        name = f"blocks.{i}.hook_resid_post"
+        if name not in cache:
+            continue
+        b = cache[name][0, -1].detach().float().cpu().numpy()
+        h = out_h.hidden_states[i + 1][0, -1].detach().float().cpu().numpy()
+        md = float(np.abs(b - h).max())
+        rel = md / (float(np.sqrt((h ** 2).mean())) + 1e-9)
+        rows.append({"layer": i, "max_abs_diff": md, "relative": rel})
+        if onset is None and rel > 0.05:
+            onset = i
+        mark = "  <-- probe site" if i == layer else ("  <-- divergence onset" if i == onset else "")
+        if i < 3 or i % 4 == 0 or i in (layer, onset) or i >= n - 3:
+            print(f"  {i:>5d}  {md:>10.4f}  {rel:>8.4f}{mark}")
+
+    at_probe = next((r for r in rows if r["layer"] == layer), None)
+    print(f"\n  divergence onset (rel > 5%): layer {onset}")
+    if at_probe:
+        print(f"  at the probe site (L{layer}): rel = {at_probe['relative']:.4f}")
+        if at_probe["relative"] < 0.05:
+            print("  -> the two stacks AGREE at the probe site, so probe-read results (Stage C, and")
+            print("     any mechanism recovery scored on the L18 probe) are trustworthy; only")
+            print("     behaviour-read results (logits, argmax, behavioural valence) are affected.")
+        else:
+            print("  -> the stacks already differ AT the probe site; probe-read results are affected too.")
+    return {"onset_layer": onset, "layers": rows, "probe_layer": layer}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--model", default="google/gemma-3-4b-it")
     ap.add_argument("--n-images", type=int, default=1)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--layer-scan", action="store_true",
+                    help="locate the layer where the two forwards start to diverge")
+    ap.add_argument("--probe-layer", type=int, default=18)
     a = ap.parse_args()
-    compare(a.model, a.n_images, a.device)
+    if a.layer_scan:
+        layer_scan(a.model, a.device, a.probe_layer)
+    else:
+        compare(a.model, a.n_images, a.device)
 
 
 if __name__ == "__main__":
