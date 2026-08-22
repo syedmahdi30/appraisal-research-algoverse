@@ -31,9 +31,11 @@ def _paired_d(piv: pd.DataFrame) -> tuple[float, float, int]:
     return float(diff.mean()), float(diff.mean() / sd) if sd > 0 else float("nan"), len(diff)
 
 
-def run(config_path: str | None = None) -> dict:
+def run(config_path: str | None = None, parquet: str | None = None) -> dict:
     ensure_dirs()
-    pq = STAGE_F_DIR / "layerwise.parquet"
+    # A custom parquet writes a stem-matched *_normalized.json so a raw-HF re-score never clobbers
+    # the original analysis — the same per-run-path discipline the runners use.
+    pq = STAGE_F_DIR / (parquet or "layerwise.parquet")
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run stage_f_layerwise first.")
     df = pd.read_parquet(pq)
@@ -83,7 +85,7 @@ def run(config_path: str | None = None) -> dict:
         "peak_over_entry": float(amp) if not np.isnan(amp) else None, "summary": summary,
     }
     onset_layer = entry_layer  # back-compat name used in the print loop
-    save_json(metrics, STAGE_F_DIR / "layerwise_normalized.json")
+    save_json(metrics, STAGE_F_DIR / f"{pq.stem}_normalized.json")
 
     print(f"\nStage F layerwise (scale-free) — {len(layers)} layers, paired over "
           f"{ns.get(peak_layer)} images.\n")
@@ -92,15 +94,17 @@ def run(config_path: str | None = None) -> dict:
         mark = "  <- onset" if L == onset_layer else "  <- peak |d|" if L == peak_layer else ""
         print(f"  {L:>3d} {raw_sep[L]:>+11.3f} {eff_d[L]:>+9.2f}{mark}")
     print(f"\n  {summary}")
-    print(f"  metrics -> {STAGE_F_DIR/'layerwise_normalized.json'}")
+    print(f"  metrics -> {STAGE_F_DIR / f'{pq.stem}_normalized.json'}")
     return metrics
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage F — scale-free layerwise re-localization (CPU)")
     ap.add_argument("--config", default="config/stage_f.yaml")
-    ap.parse_args()
-    run()
+    ap.add_argument("--parquet", default=None,
+                    help="alternate layerwise parquet under results/stage_f (e.g. layerwise_hf.parquet)")
+    args = ap.parse_args()
+    run(args.config, parquet=args.parquet)
 
 
 if __name__ == "__main__":
