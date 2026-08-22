@@ -71,8 +71,22 @@ exactly why Stage C reproduces. **Representations are sound; the corruption is a
 | **Intact — text path exact** | Stage A: probes, layer selection, text steering |
 | **Intact — verified this session** | Stage C read-out transfer (re-run, see §4) |
 | **Intact — never used the bridge** | Qwen, LLaVA-1.5, LLaVA-NeXT (all raw HF) |
-| **Likely intact — probe-scored at L18** | same-image patching recovery (57–65% turn boundary); layerwise onset. *Not yet re-confirmed.* |
-| **Dead — behaviour-scored** | Gemma conflict override rates; arbitration steering; cross-image patching (scored on valence); Stage D (injects at L18, reads behaviour) |
+| **Intact — verified this session** | Stage D causal steering (re-run, see §4) |
+| **Likely intact — DIFFERENTIAL measures** | same-image patching recovery (a ratio of differences, probe-scored at L18); layerwise onset; arbitration slope. *Not yet re-confirmed.* |
+| **Dead — ABSOLUTE / categorical measures** | Gemma conflict override rates; cell means; the mirror contrast |
+
+### The organising principle
+
+Stage D reproduced its slopes to within 2–3% **even though the base valence differs between stacks**
+(+0.0987 raw HF vs +0.1799 published). That is the key:
+
+* **Differential measurements survive.** Correlations (Stage C), slopes (Stage D), and ratios of
+  differences (patching recovery) subtract off the systematic offset the bug introduces.
+* **Absolute / categorical measurements die.** An override rate asks "did the argmax cross a
+  category boundary", which depends on exactly where the model sits — precisely what the bug moves.
+
+This narrows the damage considerably: it is the conflict override rates specifically, not the
+mechanism work.
 
 ## 4. Re-runs completed
 
@@ -89,6 +103,22 @@ Full test split, 7,280 images, 0 skipped, tap `post_attention_layernorm`:
 | retention | 0.660 | 0.663 |
 
 **The shared-channel foundation holds.** Cross-modal read-out transfer is not a bridge artefact.
+
+### Stage D — SURVIVES (`a0c93b2`, `ba979d3`)
+
+150 EMOTIC test images, resid_post L18, 1,200 direction examples. Site verified first: Δμ norms
+352.314 / 358.223 / 195.938 vs published 352.819 / 358.377 / 194.937 (worst rel err **0.51%**).
+
+| direction | raw HF slope | published |
+|---|---|---|
+| pleasantness | **+0.3360** | +0.3293 |
+| unpleasantness | **−0.3156** | −0.3087 |
+| suddenness (specificity) | −0.0776 | −0.0726 |
+| random (null) | −0.0350 | −0.0270 |
+
+Ratios: 9.6× the random null (published ~12×), 4.3× the specificity control (published ~4.5×).
+**The causal capstone survives** — a text-derived direction injected under image input still shifts
+the model's output, which no captioning account explains.
 
 ### Tap verification — a trap avoided
 
@@ -185,9 +215,7 @@ clobbering that previously destroyed three published numbers.
 
 ## 8. Next steps
 
-1. **Stage D re-run** (`a0c93b2`): `--verify-dirs` then the sweep. Injects at a faithful site but
-   scores corrupted behaviour, so the published slope **+0.329** must be re-measured. This is the
-   causal capstone — the strongest anti-captioning argument.
+1. ~~Stage D re-run~~ — **done, survives** (+0.336 vs +0.329). See §4.
 2. **Re-score same-image patching on raw HF** to confirm the 57–65% turn-boundary result. Expected to
    survive (probe-scored), but confirm rather than assume.
 3. **Paper**: retract the +65%, promote Qwen to primary, drop "1.8×" from the abstract, rewrite §7.1
