@@ -97,3 +97,68 @@ tokens kills the hypothesis just as cleanly — but the stated evidence needs up
 
 - Title and framing are Gemma-first (`Negative Words Defeat Positive Images`); both need to change.
 - `results/` is git-ignored and this session's raw-HF outputs live **only on the Colab runtime**.
+
+---
+
+# Re-score results — §6.2 same-image patching (raw HF, 2026-08-22)
+
+Tap gate passed first: mean probe gap (positive-context − negative-context) **+1.830** against a 0.05
+threshold, segmentation OK 8/8. `post_attention_layernorm` reads the signal the bridge-fitted probe
+was trained on.
+
+Three runs, 60 positive images each, resid_post patched over layers 13–17, probe read-out at L18.
+
+| group | Pair 1 (0,2) published | Pair 1 raw HF | Pair 2 (4,0) published | Pair 2 raw HF | (1,0) raw HF |
+|---|---|---|---|---|---|
+| image | −1% | **0%** | +1% | **−0%** | **−0%** |
+| BOS | 0% | **0%** | −1% | **0%** | **0%** |
+| prefix delimiters | 0% | **0%** | −1% | **0%** | **0%** |
+| question | 22% | **47%** | 32% | **54%** | **46%** |
+| assistant-turn boundary | **65%** | **46%** | **57%** | **40%** | **41%** |
+| all aligned text | 85% | **93%** | 87% | **88%** | **82%** |
+
+_Pair 1's published column is doc-only provenance (its run was overwritten). Pair 2 is
+artifact-backed against `results/stage_f/patching_metrics.json`. (1,0) is an unpublished third pair,
+run by mistake, kept because it replicates the pattern._
+
+## Survives
+
+1. **Image tokens are causally inert — 0%, −0%, −0%.** Three runs, two published pairs. This is the
+   load-bearing mechanism claim and it reproduces exactly.
+2. **BOS is inert (0%), and so are the user-turn prefix delimiters.** The "it is the turn scaffold,
+   *not* BOS" split holds.
+3. **The text stream carries essentially all of it: 82–93%**, against a published 85–87%.
+4. **Additivity holds** — the sink parts sum to the structure total in every run.
+
+## Does not survive: the turn-boundary *concentration*
+
+The published result had the assistant-turn boundary dominating the question by 1.8–3× (65 vs 22,
+57 vs 32). On raw HF the ordering flattens, and in Pair 2 it **reverses**:
+
+| | question | turn boundary |
+|---|---|---|
+| Pair 1 shift | 22% → 47% (**+25**) | 65% → 46% (**−19**) |
+| Pair 2 shift | 32% → 54% (**+22**) | 57% → 40% (**−17**) |
+
+A systematic, reproducible re-attribution *within* the text stream: the bridge over-credited the turn
+boundary and under-credited the question by a near-identical margin in both pairs, with the total
+conserved. This is not noise and not the pair mixup — Pair 1 compares like with like.
+
+### What has to change in the paper
+
+- Table 3's bolded **65% / 57%** becomes **46% / 40%**; the question row becomes **47% / 54%**.
+- Delete "especially the tokens immediately before the model's answer" from the §6.2 caption and the
+  sentence after it. The carrier is the text stream; the *concentration* at the turn boundary was a
+  bridge artefact.
+- The attention-sink framing in Related Work (`xiao2024`, `activedormant2024`, `zhang2026anydepth`)
+  loses its main support and should be demoted to a possibility, not an interpretation.
+- This is, if anything, *more* consistent with §6.1's own attribution result — the last token sends
+  88% of its attention to "prompt-template **and question** tokens".
+
+### What it does not change
+
+The Gemma-vs-Qwen mechanism contrast in §7.1 survives, though it needs re-wording. Raw-HF Gemma
+remains **additive** (47 + 46 ≈ 93 recovered by all text), while Qwen is **superadditive** — its
+parts sum to 18% against a 65% whole (`patching_qwen_metrics.json`: question 12%, turn markers 6%,
+all text 65%), i.e. genuinely redundant across positions. Gemma moves toward Qwen but the kinds still
+differ. Do not write that the contrast dissolves.
