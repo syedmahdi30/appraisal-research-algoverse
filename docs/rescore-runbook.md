@@ -3,18 +3,40 @@
 Everything below runs on the Colab runtime with `HF_TOKEN` set and EMOTIC mounted. Nothing here needs
 TransformerBridge; that is the point. Order matters only for step 0 and the `--verify-tap` gate.
 
-## 0. Back up the existing artifacts FIRST — before anything else touches `results/`
+## 0. Back up the existing artifacts FIRST — and do NOT run `--drive` blind
 
-`results/` is git-ignored, so last session's raw-HF outputs exist only on that runtime. This machine
-has nothing newer than **Aug 18** — `results/stage_c/` and `results/stage_d/` are empty locally.
-If the runtime is recycled, the Stage C and Stage D re-verification is gone and has to be re-run.
+`scripts/colab_bootstrap.py --drive` **symlinks** `results/` to
+`/content/drive/MyDrive/algoverse-appraisal/results`. Two cases, and they differ a lot:
+
+- If last session ran with `--drive`, `results/` is already a symlink and every output went straight
+  to Drive. Nothing is at risk.
+- If it did not, `results/` is a real directory on the runtime — and `link_drive()` does
+  `shutil.rmtree(link)` on any non-symlink `results/` before creating the link. Its comment says
+  "replace the empty local dir", but it does not check that the dir is empty.
+  **Running `--drive` now would delete last session's Stage C/D re-verification.**
+
+So check first, in a notebook cell:
+
+```python
+import os, pathlib
+p = pathlib.Path("results")
+print("symlink:", p.is_symlink(), "->", os.readlink(p) if p.is_symlink() else "(real dir)")
+print(sorted(x.name for x in p.iterdir()) if p.exists() else "MISSING")
+```
+
+If it is **already a symlink**: you are fine, skip to step 1 (and use `--skip-deps --drive` freely).
+
+If it is a **real directory**: copy it out before running the bootstrap with `--drive` at all.
 
 ```bash
 DEST=/content/drive/MyDrive/algoverse-results-2026-08-22
 mkdir -p "$DEST"
-cp -r results/stage_a results/stage_c results/stage_d results/stage_e results/stage_f "$DEST"/
+cp -r results/* "$DEST"/
 ls -R "$DEST" | head -50
 ```
+
+This machine has nothing newer than **Aug 18** — `results/stage_c/` and `results/stage_d/` are empty
+locally — so if that runtime is recycled, the Stage C and Stage D re-verification is gone.
 
 ## 1. Verify the read-out tap before spending a sweep on it
 
@@ -81,6 +103,8 @@ Read the **probe and valence columns side by side**. For 0–12 and 13–17 both
 That comparison is the actual deliverable of step 3, not any single percentage.
 
 ## 4. Back up again
+
+Only needed if `results/` is a real directory rather than a Drive symlink:
 
 ```bash
 cp -r results/stage_f "$DEST"/stage_f-after-rescore
