@@ -414,3 +414,52 @@ four models and let the disagreement stand; it is a real property of the data.
 
 Also corrected by the re-clustering: LLaVA-1.5's mirror contrast is $+0.016$, not $-0.018$. It was
 never a reversal — it is a null sitting essentially on zero, which is the cleaner claim anyway.
+
+---
+
+# Minimal-pair bank on \qwen{} — the control that rescues the crossed intervals (2026-08-22)
+
+Run with the new `--bank minimal` path on raw HF; analysed with the same
+`analyze_stage_f` / `analyze_stage_f_unbounded` definitions as every other run.
+
+| | full bank | minimal pairs |
+|---|---|---|
+| override gap | $+39.4\%$ | $+40.8\%$ |
+| \quad photo-clustered | [+29.5, +49.0] | [+31.3, +49.0] |
+| \quad **crossed** | [+6.4, +66.5] ✓ | **[+16.7, +63.2]** ✓ |
+| mirror contrast | $+0.409$ | $+0.496$ |
+| \quad photo-clustered | [+0.23, +0.59] | [+0.31, +0.67] |
+| \quad **crossed** | [−0.16, +0.91] ✗ | **[+0.11, +0.83]** ✓ |
+| unbounded margin | $-1.81$ | $-1.13$ (straddles, both) |
+| $\beta_{txt}/\beta_{img}$ | 1.14 | **1.97** (text-led) |
+
+**The minimal bank converts the mirror contrast from straddling zero to clearing it**, and tightens
+the override gap's crossed interval from a 60-point span to 46. The mechanism is straightforward:
+resampling six *unrelated events* perturbs the estimate far more than resampling six sentences that
+differ only in one valence word. This is the strongest argument available that the effect is not an
+artefact of which six sentences were chosen.
+
+Within-item contrast (same photo, same event, one word flipped): **$+1.148$** [+0.94, +1.34],
+Wilcoxon $p < 0.001$, $n = 62$ images $\times$ 6 pairs. All six pairs agree, at $+1.10$ to $+1.29$
+(ratios 4.3–5.5). The superseded Gemma version of this test was $+0.166$, $p = 0.052$, with one pair
+reversing — so this went from the paper's weakest claim to its strongest.
+
+The unbounded margin stays negative on both banks ($-1.81$, $-1.13$). That is Qwen's saturation
+property (documented in the four-model table), not a failure of this control.
+
+## What this does and does not license
+
+It licenses: "the asymmetry does not depend on which of these six events is used, and survives
+resampling sentences." It does **not** license "generalizes to arbitrary context sentences" — every
+sentence in both banks follows the frame *"This photo was taken \ldots"*. Widening across sentence
+*forms*, not merely adding more of the same frame, is the remaining gap and is now stated that way in
+Limitations.
+
+## Two bugs found via this run
+
+1. `analyze_stage_f` attached `arbitration_pilot.parquet` (a Gemma-only steering sweep at a fixed
+   path) to **every** model's analysis, so the Qwen run reported Gemma's $+0.215$ slope as its own and
+   `_verdict` repeated it in prose. Fixed to attach only to the runs it was measured alongside.
+2. The two neutral contexts are **not interchangeable**: on positive images "taken on a weekday"
+   gives $+0.914$ and "taken indoors" gives $+0.344$ — a $0.57$ spread in the baseline every effect is
+   measured against. We average over both; recorded as a caveat in §5.3. Neutral framing is not inert.
