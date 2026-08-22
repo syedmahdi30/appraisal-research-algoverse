@@ -376,6 +376,96 @@ def reanalyze(model_name: str, max_side: int | None) -> dict:
 
 
 # --------------------------------------------------------------------------- aggregation
+def _trends(tab: pd.DataFrame) -> dict:
+    """Within-model and cross-model evidence on the token-budget hypothesis, kept strictly separate.
+
+    A single correlation over every row is worse than useless here, for three reasons this function
+    exists to avoid:
+
+      1. POOLING. A within-model resolution sweep (same weights, budget varied) and a cross-model
+         comparison (everything varies at once) answer different questions. Pooling them lets three
+         clustered points from one model plus one distant point from another produce r = -0.99 that
+         means nothing.
+      2. IGNORED UNCERTAINTY. Correlation uses point estimates only. Four gaps that sit inside
+         mutually overlapping 95% CIs are a flat line, however neatly ordered they happen to be.
+      3. SILENT EXCLUSION. Runs from the older fixed-path runner carry no image-token count and drop
+         out of any correlation without comment — and those were exactly the models that break the
+         pattern. Missing rows are now named, not dropped quietly.
+
+    Within-model verdict is CI-based: if every sweep CI shares a common intersection, no effect of the
+    budget is detectable regardless of the ordering of the point estimates.
+    """
+    out: dict = {}
+    have = tab.dropna(subset=["image_tokens", "override_gap"])
+    missing = tab[tab["image_tokens"].isna()]
+    if len(missing):
+        out["excluded_missing_image_tokens"] = [
+            {"model": r["model"], "source": r["source"], "override_gap": r["override_gap"]}
+            for _, r in missing.iterrows()]
+
+    # ---- within-model: one entry per model that was swept over >=2 distinct budgets
+    within = []
+    for model, g in have.groupby("model"):
+        if g["image_tokens"].nunique() < 2:
+            continue
+        lo, hi = float(g["ci_lo"].max()), float(g["ci_hi"].min())   # common intersection of all CIs
+        flat = lo <= hi
+        within.append({
+            "model": model, "n_runs": int(len(g)),
+            "tokens_min": float(g["image_tokens"].min()), "tokens_max": float(g["image_tokens"].max()),
+            "fold_range": float(g["image_tokens"].max() / g["image_tokens"].min()),
+            "gap_min": float(g["override_gap"].min()), "gap_max": float(g["override_gap"].max()),
+            "all_cis_overlap": bool(flat),
+            "discriminability_auc_range": [float(g["auc"].min()), float(g["auc"].max())]
+                                          if g["auc"].notna().any() else None,
+            "verdict": ("FLAT — every CI overlaps, so no effect of the token budget is detectable "
+                        "over this range" if flat else
+                        "MOVES — at least two CIs are disjoint across the budget range")})
+    if within:
+        out["within_model"] = within
+
+    # ---- cross-model: exactly one representative run per model (the largest budget measured)
+    reps = have.sort_values("image_tokens").groupby("model", as_index=False).last()
+    if len(reps) >= 3:
+        t, gp = reps["image_tokens"].to_numpy(float), reps["override_gap"].to_numpy(float)
+        r = float(np.corrcoef(t, gp)[0, 1])
+        loo = [float(np.corrcoef(np.delete(t, i), np.delete(gp, i))[0, 1]) for i in range(len(t))]
+        out["cross_model"] = {
+            "n_models": int(len(reps)), "models": reps["model"].tolist(),
+            "pearson_tokens_vs_gap": r, "leave_one_out_range": [min(loo), max(loo)],
+            "caveat": (f"n={len(reps)} models: a correlation this small is descriptive only, ignores "
+                       f"every CI, and confounds the budget with everything else that differs "
+                       f"between checkpoints."
+                       + (" Runs are missing image-token counts (see excluded_missing_image_tokens), "
+                          "so this omits models that may break the pattern."
+                          if "excluded_missing_image_tokens" in out else ""))}
+    elif len(reps):
+        out["cross_model"] = {"n_models": int(len(reps)),
+                              "note": "fewer than 3 models with measured image tokens — no trend reported"}
+    return out
+
+
+def _print_trends(t: dict) -> None:
+    for w in t.get("within_model", []):
+        auc = w["discriminability_auc_range"]
+        print(f"\n  WITHIN {w['model']}  ({w['n_runs']} runs, {w['tokens_min']:.0f}->{w['tokens_max']:.0f} "
+              f"tokens = {w['fold_range']:.1f}x)")
+        print(f"    gap {w['gap_min']:+.0%}..{w['gap_max']:+.0%}   {w['verdict']}")
+        if auc:
+            print(f"    discriminability AUC {auc[0]:.3f}..{auc[1]:.3f} "
+                  f"({'held — clean test' if auc[0] > 0.9 else 'DEGRADED — budget confounded with image quality'})")
+    c = t.get("cross_model")
+    if c and "pearson_tokens_vs_gap" in c:
+        print(f"\n  CROSS-MODEL  n={c['n_models']} models: r = {c['pearson_tokens_vs_gap']:+.3f}  "
+              f"(leave-one-out {c['leave_one_out_range'][0]:+.3f}..{c['leave_one_out_range'][1]:+.3f})")
+        print(f"    {c['caveat']}")
+    elif c:
+        print(f"\n  CROSS-MODEL  {c['note']}")
+    for e in t.get("excluded_missing_image_tokens", []):
+        print(f"  [!] excluded (no image-token count): {e['model']} gap {e['override_gap']:+.0%} "
+              f"-- re-run with this runner to include it")
+
+
 def aggregate() -> dict:
     """Collect every token-budget run into the trend table: image tokens vs override gap.
 
@@ -416,20 +506,11 @@ def aggregate() -> dict:
     out = {"run": run_stamp(), "git": git_hash(), "n_runs": len(tab),
            "rows": tab.to_dict(orient="records")}
 
-    known = tab.dropna(subset=["image_tokens", "override_gap"])
-    if len(known) >= 3:
-        r = float(np.corrcoef(known["image_tokens"], known["override_gap"])[0, 1])
-        out["trend"] = {"n": int(len(known)), "pearson_tokens_vs_gap": r,
-                        "reading": ("more image tokens -> smaller override gap (supports the budget "
-                                    "hypothesis)" if r < 0 else
-                                    "more image tokens -> LARGER override gap (contradicts the budget "
-                                    "hypothesis)")}
+    out.update(_trends(tab))
     save_json(out, STAGE_F_DIR / "token_budget_trend.json")
     if len(tab):
         print(tab.to_string(index=False))
-    if "trend" in out:
-        print(f"\n  pearson(image_tokens, override_gap) = {out['trend']['pearson_tokens_vs_gap']:+.3f} "
-              f"over n={out['trend']['n']} runs\n  {out['trend']['reading']}")
+    _print_trends(out)
     print(f"\n  data -> {STAGE_F_DIR/'token_budget_trend.json'}")
     return out
 
