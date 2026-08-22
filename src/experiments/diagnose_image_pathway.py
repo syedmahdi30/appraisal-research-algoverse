@@ -86,7 +86,31 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
         diff = {w: (tok_hf[w], tok_br[w]) for w in EMOTION_LABELS if tok_hf[w] != tok_br[w]}
         print(f"  [!] DIFFERING IDS (hf, bridge): {diff}")
 
-    out: dict = {"model": model_name, "token_ids_match": tok_hf == tok_br, "images": []}
+    # ---------------- (A) TEXT-ONLY PARITY — the scoping test.
+    # Inputs are already known to be byte-identical while the answers differ, so the bridge's FORWARD
+    # differs from raw HF. This asks whether that is image-specific. If the two stacks agree with no
+    # image, the language path is sound and only image-conditioned results are affected (Stages C, D,
+    # E and the Gemma half of F). If they disagree here too, the bridge is wrong for text as well and
+    # the text-side Stage A probes/steering are implicated on top.
+    print("\n=== (A) text-only parity (no image at all) ===")
+    ctx = f"Context: {sentence} "
+    text_prompt = (f"<start_of_turn>user\n{ctx}What single emotion is this person feeling?"
+                   f"<end_of_turn>\n<start_of_turn>model\n")
+    ids_t = processor.tokenizer(text_prompt, return_tensors="pt")["input_ids"]
+    with torch.no_grad():
+        lt_b = bridge.run_with_hooks(ids_t.to(device), fwd_hooks=[])[0, -1]
+        lt_h = hf(input_ids=ids_t.to(hf.device)).logits[0, -1]
+    lpt_b, lpt_h = emotion_logprobs(lt_b, tok_br), emotion_logprobs(lt_h, tok_hf)
+    tb, th = max(lpt_b, key=lpt_b.get), max(lpt_h, key=lpt_h.get)
+    mdt = max(abs(lpt_b[w] - lpt_h[w]) for w in EMOTION_LABELS)
+    text_ok = tb == th and mdt < 0.05
+    print(f"  bridge -> {tb:9s}   hf -> {th:9s}   max|Δ logprob| = {mdt:.4f}")
+    print(f"  VERDICT: {'text path AGREES — bug is image-specific' if text_ok else 'text path DIFFERS TOO — bridge is wrong for text as well (Stage A implicated)'}")
+
+    out: dict = {"model": model_name, "token_ids_match": tok_hf == tok_br,
+                 "text_only": {"argmax_bridge": tb, "argmax_hf": th,
+                               "max_logprob_diff": float(mdt), "agree": bool(text_ok)},
+                 "images": []}
     for i, path in enumerate(paths):
         img = Image.open(path).convert("RGB")
         print(f"\n--- image {i+1}/{len(paths)}: {path.split('/')[-1]}  (size {img.size}) ---")
@@ -126,17 +150,49 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
         rec.update({"argmax_bridge": top_b, "argmax_hf": top_h, "max_logprob_diff": float(md)})
         print(f"  answer:   bridge -> {top_b:9s}   hf -> {top_h:9s}   max|Δ logprob| = {md:.3f}"
               f"   {'AGREE' if top_b == top_h else '<-- DISAGREE'}")
+
+        # (C) HOW MUCH DOES THE IMAGE MOVE EACH STACK? Same text, image present vs absent.
+        # The published Gemma image separation was AUC 0.788 vs 0.982 on raw HF, so the bridge
+        # appears to under-weight the image rather than ignore it. This quantifies that directly:
+        # a small bridge shift next to a large HF shift means the image is being partially applied.
+        with torch.no_grad():
+            nb = bridge.run_with_hooks(ids_t.to(device), fwd_hooks=[])[0, -1]
+            nh = hf(input_ids=ids_t.to(hf.device)).logits[0, -1]
+        lpn_b, lpn_h = emotion_logprobs(nb, tok_br), emotion_logprobs(nh, tok_hf)
+        shift_b = max(abs(lp_b[w] - lpn_b[w]) for w in EMOTION_LABELS)
+        shift_h = max(abs(lp_h[w] - lpn_h[w]) for w in EMOTION_LABELS)
+        rec.update({"image_shift_bridge": float(shift_b), "image_shift_hf": float(shift_h)})
+        print(f"  image influence (max|Δ logprob| vs no-image, same text): "
+              f"bridge {shift_b:.3f}   hf {shift_h:.3f}"
+              + ("   <-- bridge under-weights the image" if shift_b < 0.5 * shift_h else ""))
         out["images"].append(rec)
 
     agree = sum(r["argmax_bridge"] == r["argmax_hf"] for r in out["images"])
     pix = [r.get("pixel_max_abs_diff") for r in out["images"] if r.get("pixel_max_abs_diff") is not None]
+    ids_ok = all(r["input_ids_identical"] for r in out["images"])
+    sb = np.mean([r["image_shift_bridge"] for r in out["images"]])
+    sh = np.mean([r["image_shift_hf"] for r in out["images"]])
     print(f"\n=== summary over {len(out['images'])} image(s) ===")
-    print(f"  stacks agree on the answer: {agree}/{len(out['images'])}")
-    if pix:
-        print(f"  pixel_values max|Δ| across images: {max(pix):.6f}")
-        print("  -> non-zero means the two stacks feed the model DIFFERENT images, which is the "
-              "leading explanation for the published Gemma run's degraded image separation "
-              "(AUC 0.788 vs 0.982).")
+    print(f"  input_ids identical:        {ids_ok}")
+    print(f"  pixel_values max|Δ|:        {max(pix) if pix else float('nan'):.6f}")
+    print(f"  text-only stacks agree:     {out['text_only']['agree']} "
+          f"(max|Δ| {out['text_only']['max_logprob_diff']:.4f})")
+    print(f"  image-conditioned agree:    {agree}/{len(out['images'])}")
+    print(f"  mean image influence:       bridge {sb:.3f}  vs  hf {sh:.3f}")
+
+    print("\n  READING:")
+    if ids_ok and (not pix or max(pix) < 1e-6):
+        print("   * inputs are byte-identical, so preprocessing is NOT the cause.")
+    if out["text_only"]["agree"] and agree < len(out["images"]):
+        print("   * the stacks agree with NO image and diverge WITH one: the defect is specific to")
+        print("     the bridge's multimodal path. Text-side results (Stage A) are unaffected;")
+        print("     every image-conditioned bridge result is (Stages C, D, E, and Gemma in F).")
+    elif not out["text_only"]["agree"]:
+        print("   * the stacks diverge even with no image: the bridge forward is wrong for text too,")
+        print("     which implicates the Stage A probes/steering in addition to the image results.")
+    if sb < 0.5 * sh:
+        print("   * the bridge under-weights the image relative to raw HF, which is exactly what")
+        print("     would depress image separation (AUC 0.788 vs 0.982) and inflate the override rate.")
     return out
 
 
