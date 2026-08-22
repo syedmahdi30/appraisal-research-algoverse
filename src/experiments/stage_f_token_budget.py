@@ -66,10 +66,12 @@ def _conditions():
             + [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)])
 
 
-def slug(model_name: str, max_side: int | None) -> str:
-    """Filesystem-safe run key: model slug plus the token-budget tag, so runs never collide."""
+def slug(model_name: str, max_side: int | None, style: str = "chat") -> str:
+    """Filesystem-safe run key: model slug + token-budget tag + prompt style, so runs never collide."""
     s = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
-    return f"{s}_px{max_side}" if max_side else s
+    if max_side:
+        s = f"{s}_px{max_side}"
+    return f"{s}_{style}" if style != "chat" else s
 
 
 # --------------------------------------------------------------------------- model dispatch
@@ -121,8 +123,25 @@ def _prep_image(img: Image.Image, max_side: int | None) -> Image.Image:
     return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.BICUBIC)
 
 
-def build_inputs(processor, image, context_sentence, family: str):
-    """Chat inputs for one image + context; image=None gives the text-only (image-ablated) form."""
+def build_inputs(processor, image, context_sentence, family: str, style: str = "chat"):
+    """Inputs for one image + context; image=None gives the text-only (image-ablated) form.
+
+    `style` selects the prompt construction, which is NOT a cosmetic choice:
+      * "chat"   — `processor.apply_chat_template(...)`, the portable path used for every raw-HF
+                   model (Qwen, LLaVA 1.5 / NeXT). LLaVA-1.5 reproduces its published numbers exactly
+                   through it.
+      * "legacy" — the hand-written Gemma scaffold in `conflict_contexts.context_prompt`, which is
+                   what the PUBLISHED Gemma run fed to TransformerBridge. Gemma is the one model whose
+                   published numbers came from the bridge path rather than this one, and it does not
+                   reproduce under "chat" (+12% vs the published +65%), so this flag exists to isolate
+                   the template from the model stack. Gemma-specific: the scaffold hardcodes
+                   `<start_of_turn>` / `<start_of_image>`.
+    """
+    if style == "legacy":
+        from ..data.conflict_contexts import context_prompt
+        text = context_prompt(context_sentence)
+        imgs = [image] if image is not None else None
+        return processor(text=text, images=imgs, return_tensors="pt")
     if family == "qwen":
         content = ([{"type": "image", "image": image}] if image is not None else [])
         content.append({"type": "text", "text": _user_text(context_sentence)})
@@ -137,7 +156,7 @@ def build_inputs(processor, image, context_sentence, family: str):
     return processor(return_tensors="pt", **kw)
 
 
-def count_image_tokens(processor, image, family: str) -> dict:
+def count_image_tokens(processor, image, family: str, style: str = "chat") -> dict:
     """Measure how many sequence positions the image actually occupies, empirically.
 
     Length of the prompt WITH the image minus the same prompt WITHOUT it. This is processor-level and
@@ -145,8 +164,8 @@ def count_image_tokens(processor, image, family: str) -> dict:
     processors leave a single unexpanded placeholder and expand inside the model instead; that shows up
     as a delta of ~1 and is flagged rather than silently reported as a one-token image.
     """
-    with_img = build_inputs(processor, image, None, family)["input_ids"].shape[-1]
-    without = build_inputs(processor, None, None, family)["input_ids"].shape[-1]
+    with_img = build_inputs(processor, image, None, family, style)["input_ids"].shape[-1]
+    without = build_inputs(processor, None, None, family, style)["input_ids"].shape[-1]
     delta = int(with_img - without)
     return {"image_tokens": delta, "prompt_tokens_with_image": int(with_img),
             "prompt_tokens_text_only": int(without),
@@ -212,10 +231,10 @@ def _print(m: dict) -> None:
 
 # --------------------------------------------------------------------------- base pass
 def run_base(config_path: str, model_name: str, max_side: int | None,
-             limit_override: int | None = None, force: bool = False) -> dict:
+             limit_override: int | None = None, force: bool = False, style: str = "chat") -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, max_side)
+    key = slug(model_name, max_side, style)
     out_pq = STAGE_F_DIR / f"conflict_{key}.parquet"
     if out_pq.exists() and not force:
         raise FileExistsError(
@@ -237,9 +256,9 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
             n_skip += 1
             continue
         if tokens is None:            # measured on the first real image, at the resolution actually used
-            tokens = count_image_tokens(processor, img, family)
+            tokens = count_image_tokens(processor, img, family, style)
         for cond, cid, sentence in _conditions():
-            val, lp = readout(model, build_inputs(processor, img, sentence, family), tok_ids)
+            val, lp = readout(model, build_inputs(processor, img, sentence, family, style), tok_ids)
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
                          "context": sentence or "", "text_code": TEXT_CODE[cond],
@@ -249,6 +268,7 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
     df = pd.DataFrame(rows)
     df.to_parquet(out_pq)
     metrics = _analyze(df, model_name, tokens or {}, max_side, multi=multi, n_skipped=n_skip)
+    metrics["prompt_style"] = style
     save_json(metrics, STAGE_F_DIR / f"conflict_{key}_metrics.json")
     _print(metrics)
     print(f"  data -> {out_pq}")
@@ -274,7 +294,7 @@ def _amplification(img_ratio: float | None, ref: float) -> str:
     return "image dampens (reversed)"
 
 
-def run_text_only(config_path: str, model_name: str, force: bool = False) -> dict:
+def run_text_only(config_path: str, model_name: str, force: bool = False, style: str = "chat") -> dict:
     """The image-ablated stimulus control: every context sentence with NO image.
 
     Isolates whether the negativity asymmetry is a property of the SENTENCES (the banks are simply
@@ -288,7 +308,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False) -> dic
     """
     load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, None)          # deliberately budget-free; see docstring
+    key = slug(model_name, None, style)   # deliberately budget-free; see docstring
     out_pq = STAGE_F_DIR / f"text_only_{key}.parquet"
     if out_pq.exists() and not force:
         raise FileExistsError(f"{out_pq} already exists — pass --force to replace it.")
@@ -300,7 +320,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False) -> dic
 
     rows = []
     for cond, cid, sentence in _conditions():
-        val, lp = readout(model, build_inputs(processor, None, sentence, family), tok_ids)  # image=None
+        val, lp = readout(model, build_inputs(processor, None, sentence, family, style), tok_ids)  # image=None
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
                      "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": max(lp, key=lp.get),
                      **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
@@ -515,6 +535,54 @@ def aggregate() -> dict:
     return out
 
 
+def show_prompt(model_name: str, max_side: int | None = None) -> dict:
+    """Print the exact prompt each style produces, side by side. Processor only — no model, no GPU.
+
+    The fast first step when a model fails to reproduce its published numbers: it shows whether the
+    two paths differ in scaffolding, image-token count, or total length before spending a GPU session
+    on a full 2,250-forward run.
+    """
+    from transformers import AutoProcessor
+    processor = AutoProcessor.from_pretrained(model_name)
+    family = "qwen" if "qwen" in model_name.lower() else "llava"
+    img = Image.new("RGB", (640, 480), (127, 127, 127))
+    if max_side:
+        img = _prep_image(img, max_side)
+    sentence = NEGATIVE_CONTEXTS[0]
+
+    out = {"model": model_name, "family": family, "styles": {}}
+    for style in ("chat", "legacy"):
+        try:
+            enc = build_inputs(processor, img, sentence, family, style)
+            text = processor.tokenizer.decode(enc["input_ids"][0])
+            tok = count_image_tokens(processor, img, family, style)
+            rec = {"total_prompt_tokens": int(enc["input_ids"].shape[-1]),
+                   "image_tokens": tok["image_tokens"],
+                   "text_scaffold_tokens": int(enc["input_ids"].shape[-1]) - tok["image_tokens"],
+                   "decoded": text}
+        except Exception as e:                       # legacy is Gemma-specific; other models will fail
+            rec = {"error": f"{type(e).__name__}: {e}"}
+        out["styles"][style] = rec
+        print(f"\n=== style={style} ===")
+        if "error" in rec:
+            print(f"  unavailable: {rec['error']}")
+            continue
+        print(f"  total {rec['total_prompt_tokens']} tokens = {rec['image_tokens']} image "
+              f"+ {rec['text_scaffold_tokens']} text scaffold")
+        shown = re.sub(r"(<image_soft_token>|<start_of_image>)(\1)+", r"\1...[image]...",
+                       rec["decoded"])
+        print(f"  {shown[:600]}")
+
+    a, b = out["styles"]["chat"], out["styles"]["legacy"]
+    if "error" not in a and "error" not in b:
+        print(f"\n  DIFF  image tokens {a['image_tokens']} vs {b['image_tokens']}   |   "
+              f"text scaffold {a['text_scaffold_tokens']} vs {b['text_scaffold_tokens']}   |   "
+              f"total {a['total_prompt_tokens']} vs {b['total_prompt_tokens']}")
+        print("  If the scaffolds differ, re-run the base pass with --prompt-style legacy to test "
+              "whether the template explains a reproduction gap.")
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Stage F — visual token budget vs textual override")
     ap.add_argument("--config", default="config/stage_f.yaml")
@@ -526,19 +594,27 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
     ap.add_argument("--text-only", action="store_true",
                     help="image-ablated stimulus control (keyed by model; ignores --max-side)")
+    ap.add_argument("--prompt-style", choices=("chat", "legacy"), default="chat",
+                    help="chat = processor.apply_chat_template (portable); legacy = the hand-written "
+                         "Gemma scaffold used for the PUBLISHED Gemma run (Gemma only)")
+    ap.add_argument("--show-prompt", action="store_true",
+                    help="print both prompt styles side by side and exit (processor only, no GPU)")
     ap.add_argument("--reanalyze", action="store_true", help="recompute from the saved parquet (CPU)")
     ap.add_argument("--aggregate", action="store_true", help="build the cross-run trend table (CPU)")
     a = ap.parse_args()
-    if a.aggregate:
+    if a.show_prompt:
+        show_prompt(a.model, a.max_side)
+    elif a.aggregate:
         aggregate()
     elif a.text_only:
         if a.max_side:
             print("  [note] --max-side ignored: the text-only control has no image.")
-        run_text_only(a.config, a.model, force=a.force)
+        run_text_only(a.config, a.model, force=a.force, style=a.prompt_style)
     elif a.reanalyze:
         reanalyze(a.model, a.max_side)
     else:
-        run_base(a.config, a.model, a.max_side, limit_override=a.limit, force=a.force)
+        run_base(a.config, a.model, a.max_side, limit_override=a.limit, force=a.force,
+                 style=a.prompt_style)
 
 
 if __name__ == "__main__":
