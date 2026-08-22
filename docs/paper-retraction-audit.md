@@ -371,3 +371,46 @@ the conflict pass.
 `analyze_stage_f._flip_override` and `analyze_stage_f_unbounded` disagree slightly (Qwen +39.4 vs
 +39.8; NeXT +18.7 vs +16.2; Gemma +12.2 vs +9.6; LLaVA-1.5 −12.6 vs −17.6) because they subset
 conditions differently. Pick one definition for the paper and state it; do not mix them across tables.
+
+---
+
+# Correction: the crossed bootstrap was clustering on the wrong unit (2026-08-22)
+
+`analyze_stage_f_unbounded._img` was `(condition == "none").cumsum()`, which counts
+**person-annotations** — 150 units over 121 distinct photos. But EMOTIC annotates each person while
+the model is shown the whole image with no bounding box, so two annotated people in one photo produce
+**byte-identical forward passes**. Those 29 extra rows are duplicates, not independent observations,
+and counting them as independent narrows every interval.
+
+Fixed to cluster on `image_path`, the unit `analyze_stage_f._flip_override` already used. The two
+tools now agree exactly on the override gap and its image-clustered CI (+39.4 / +18.7 / +12.2 / −12.6),
+which confirms the diagnosis — the earlier few-point discrepancy was entirely this.
+
+## Corrected cross-model table (raw HF, photo-clustered)
+
+| model | override gap | image-only | crossed | mirror contrast | crossed | unbounded margin | crossed |
+|---|---|---|---|---|---|---|---|
+| \qwen{} | **+39.4%** | [+29.5, +49.0] | **[+6.4, +66.5]** ✓ | +0.409 | [−0.16, +0.91] | −1.81 | [−5.47, +1.80] |
+| LLaVA-NeXT | +18.7% | [+7.8, +30.0] | [−1.9, +40.2] | +0.413 | **[+0.23, +0.59]** ✓ | +1.00 | **[+0.50, +1.50]** ✓ |
+| \gemma{} | +12.2% | [−0.4, +23.7] | [−11.4, +36.9] | +0.405 | **[+0.06, +0.77]** ✓ | +4.64 | **[+3.05, +6.29]** ✓ |
+| LLaVA-1.5 | −12.6% | [−22.0, −2.8] | [−42.6, +21.6] | **+0.016** | [−0.37, +0.42] | +0.05 | [−1.03, +1.13] |
+
+**This is a better picture than the mis-clustered version gave.** Three of four models now clear zero
+on at least one readout under the crossed bootstrap — Gemma and LLaVA-NeXT on two each — and
+LLaVA-1.5 clears none.
+
+## The headline should be the mirror contrast, not the override gap
+
+The three positive models have **nearly identical** bounded mirror contrasts — $+0.409$, $+0.413$,
+$+0.405$ — against LLaVA-1.5's $+0.016$. On this readout the effect looks like a shared, similarly
+sized property of three architectures with one clean exception, whereas the override gap varies
+three-fold across the same models ($+39\%$ / $+19\%$ / $+12\%$).
+
+Two cautions before leaning on it. The three-way agreement to within $0.008$ is closer than the CIs
+warrant and is probably partly coincidence — report the intervals, not the point agreement. And
+Qwen's mirror contrast is the one that does *not* clear zero crossed, so the measure that looks most
+stable across models is not the one that is most robust within Qwen. Report both readouts for all
+four models and let the disagreement stand; it is a real property of the data.
+
+Also corrected by the re-clustering: LLaVA-1.5's mirror contrast is $+0.016$, not $-0.018$. It was
+never a reversal — it is a null sitting essentially on zero, which is the cleaner claim anyway.

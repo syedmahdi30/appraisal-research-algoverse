@@ -56,7 +56,13 @@ def add_readouts(df: pd.DataFrame) -> pd.DataFrame:
     d = df.copy()
     lp = d[LP].to_numpy(dtype=float)
     d["margin"] = logsumexp(lp[:, _POS_IDX], axis=1) - logsumexp(lp[:, _NEG_IDX], axis=1)
-    d["_img"] = (d["condition"] == "none").cumsum()
+    # Cluster by PHOTO, not by person-annotation. EMOTIC annotates each person, but the model is shown
+    # the whole image with no bounding box, so two annotated people in one photo yield byte-identical
+    # forward passes — duplicate rows, not independent observations. The previous
+    # `(condition == "none").cumsum()` counted person-annotations (150 units over 121 distinct photos),
+    # which treats those 29 duplicates as independent and narrows every interval. `image_path` is also
+    # the unit `analyze_stage_f._flip_override` clusters on, so the two tools now agree.
+    d["_img"] = d["image_path"]
     return d
 
 
