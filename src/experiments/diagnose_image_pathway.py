@@ -34,7 +34,8 @@ from PIL import Image
 
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, context_prompt
 from ..data.labels import EMOTION_LABELS
-from .stage_f_qwen import emotion_logprobs, emotion_token_ids, select_extreme_images
+from .stage_f_qwen import (emotion_logprobs, emotion_token_ids, select_extreme_images,
+                           valence_score)
 
 
 def _versions() -> None:
@@ -103,13 +104,22 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
     lpt_b, lpt_h = emotion_logprobs(lt_b, tok_br), emotion_logprobs(lt_h, tok_hf)
     tb, th = max(lpt_b, key=lpt_b.get), max(lpt_h, key=lpt_h.get)
     mdt = max(abs(lpt_b[w] - lpt_h[w]) for w in EMOTION_LABELS)
-    text_ok = tb == th and mdt < 0.05
+    # Grade on the quantity the paper actually reports, not on a raw logprob threshold. `max|Δ
+    # logprob|` over 13 labels is dominated by the LEAST likely label, where a tiny probability change
+    # is a large log change, so it overstates disagreement. Behavioural valence (P(pos) − P(neg)) is
+    # what every Stage A/C/D/F number is built from, and the argmax is what the override rate uses.
+    vb, vh = valence_score(lt_b, tok_br), valence_score(lt_h, tok_hf)
+    dv = abs(vb - vh)
+    text_ok = tb == th and dv < 0.05
     print(f"  bridge -> {tb:9s}   hf -> {th:9s}   max|Δ logprob| = {mdt:.4f}")
-    print(f"  VERDICT: {'text path AGREES — bug is image-specific' if text_ok else 'text path DIFFERS TOO — bridge is wrong for text as well (Stage A implicated)'}")
+    print(f"  behavioural valence: bridge {vb:+.4f}   hf {vh:+.4f}   |Δ| = {dv:.4f}")
+    print(f"  VERDICT: {'text path AGREES on argmax AND valence — bug is image-specific' if text_ok else ('argmax agrees but valence differs by %.3f — text path is approximate, not exact' % dv if tb == th else 'text path DISAGREES on the argmax — bridge is wrong for text too')}")
 
     out: dict = {"model": model_name, "token_ids_match": tok_hf == tok_br,
                  "text_only": {"argmax_bridge": tb, "argmax_hf": th,
-                               "max_logprob_diff": float(mdt), "agree": bool(text_ok)},
+                               "max_logprob_diff": float(mdt), "valence_bridge": float(vb),
+                               "valence_hf": float(vh), "valence_diff": float(dv),
+                               "argmax_agree": bool(tb == th), "agree": bool(text_ok)},
                  "images": []}
     for i, path in enumerate(paths):
         img = Image.open(path).convert("RGB")
@@ -147,9 +157,13 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
         lp_b, lp_h = emotion_logprobs(lg_b, tok_br), emotion_logprobs(lg_h, tok_hf)
         top_b, top_h = max(lp_b, key=lp_b.get), max(lp_h, key=lp_h.get)
         md = max(abs(lp_b[w] - lp_h[w]) for w in EMOTION_LABELS)
-        rec.update({"argmax_bridge": top_b, "argmax_hf": top_h, "max_logprob_diff": float(md)})
+        ivb, ivh = valence_score(lg_b, tok_br), valence_score(lg_h, tok_hf)
+        rec.update({"argmax_bridge": top_b, "argmax_hf": top_h, "max_logprob_diff": float(md),
+                    "valence_bridge": float(ivb), "valence_hf": float(ivh),
+                    "valence_diff": float(abs(ivb - ivh))})
         print(f"  answer:   bridge -> {top_b:9s}   hf -> {top_h:9s}   max|Δ logprob| = {md:.3f}"
               f"   {'AGREE' if top_b == top_h else '<-- DISAGREE'}")
+        print(f"  behavioural valence: bridge {ivb:+.4f}   hf {ivh:+.4f}   |Δ| = {abs(ivb-ivh):.4f}")
 
         # (C) HOW MUCH DOES THE IMAGE MOVE EACH STACK? Same text, image present vs absent.
         # The published Gemma image separation was AUC 0.788 vs 0.982 on raw HF, so the bridge
@@ -187,9 +201,16 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
         print("   * the stacks agree with NO image and diverge WITH one: the defect is specific to")
         print("     the bridge's multimodal path. Text-side results (Stage A) are unaffected;")
         print("     every image-conditioned bridge result is (Stages C, D, E, and Gemma in F).")
-    elif not out["text_only"]["agree"]:
-        print("   * the stacks diverge even with no image: the bridge forward is wrong for text too,")
-        print("     which implicates the Stage A probes/steering in addition to the image results.")
+    elif out["text_only"]["argmax_agree"]:
+        dvt = out["text_only"]["valence_diff"]
+        dvi = np.mean([r["valence_diff"] for r in out["images"]])
+        print(f"   * TEXT: same argmax, valence differs by {dvt:.3f}. IMAGE: valence differs by "
+              f"{dvi:.3f} ({dvi/max(dvt,1e-9):.0f}x larger).")
+        print("     The text path is approximate but broadly consistent; the multimodal path is not.")
+        print("     Stage A is likely recoverable, image-conditioned bridge results are not.")
+    else:
+        print("   * the stacks disagree on the ARGMAX even with no image: the bridge forward is wrong")
+        print("     for text too, implicating the Stage A probes/steering as well.")
     if sb < 0.5 * sh:
         print("   * the bridge under-weights the image relative to raw HF, which is exactly what")
         print("     would depress image separation (AUC 0.788 vs 0.982) and inflate the override rate.")
