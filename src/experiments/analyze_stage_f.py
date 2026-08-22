@@ -377,9 +377,13 @@ def run(config_path: str | None = None, base_pq=None) -> dict:
     if minimal:
         metrics["minimal_pair_asymmetry"] = minimal
 
+    # Arbitration is a Gemma-only steering sweep at a FIXED path, so attaching it to an arbitrary
+    # base parquet silently reports Gemma's steering slope inside (say) a Qwen or LLaVA analysis —
+    # and `_verdict` then repeats it as though it belonged to that model. Only attach it to the run
+    # it was actually measured alongside.
     arb_pq = STAGE_F_DIR / "arbitration_pilot.parquet"
     arb = None
-    if arb_pq.exists():
+    if arb_pq.exists() and base_pq.stem in ("conflict_pilot", "conflict_minimal"):
         adf = pd.read_parquet(arb_pq)
         betas = sorted(int(b) for b in adf["beta"].unique() if b != 0)
         arb = _arbitration(adf, betas)
