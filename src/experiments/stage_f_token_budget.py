@@ -51,6 +51,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
+                                      build_conditions,
                                       TEXT_CODE)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_F_DIR, ensure_dirs
@@ -58,20 +59,36 @@ from .common import git_hash, load_config, run_stamp, save_json
 from .stage_f_qwen import (_user_text, emotion_token_ids, readout, select_extreme_images)
 
 
-def _conditions():
-    """The full context bank, identical to the Gemma/Qwen/LLaVA base passes (15 conditions)."""
-    return ([("none", "none", None)]
-            + [("positive", f"p{i}", c) for i, c in enumerate(POSITIVE_CONTEXTS)]
-            + [("negative", f"n{i}", c) for i, c in enumerate(NEGATIVE_CONTEXTS)]
-            + [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)])
+def _conditions(bank: str = "full"):
+    """Context bank for the base pass, delegated to the shared builder.
+
+    Previously this duplicated the full bank inline, which meant the raw-HF runner could not reproduce
+    the minimal-pair control at all --- the only runner that could was the bridge-based
+    `stage_f_conflict`, so the minimal-pair numbers had no raw-HF counterpart. Delegating to
+    `build_conditions` keeps the ids identical across stacks (`p{i}`/`n{i}`/`z{i}` for the full bank,
+    a SHARED `mp{i}` on both members of each minimal pair), which is what lets
+    `analyze_stage_f._minimal_pair_asymmetry` recover the within-item flip by grouping on
+    `context_id`.
+    """
+    return build_conditions(bank)
 
 
-def slug(model_name: str, max_side: int | None, style: str = "chat") -> str:
-    """Filesystem-safe run key: model slug + token-budget tag + prompt style, so runs never collide."""
+def slug(model_name: str, max_side: int | None, style: str = "chat", bank: str = "full") -> str:
+    """Filesystem-safe run key: model + token-budget tag + prompt style + bank, so runs never collide.
+
+    `bank` is part of the key for the same reason the others are: a minimal-pair run and a full-bank
+    run of the same model are different experiments, and a shared path would silently overwrite one
+    with the other --- the failure mode that destroyed three published numbers before per-run paths
+    were introduced.
+    """
     s = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
     if max_side:
         s = f"{s}_px{max_side}"
-    return f"{s}_{style}" if style != "chat" else s
+    if style != "chat":
+        s = f"{s}_{style}"
+    if bank != "full":
+        s = f"{s}_{bank}"
+    return s
 
 
 # --------------------------------------------------------------------------- model dispatch
@@ -231,10 +248,11 @@ def _print(m: dict) -> None:
 
 # --------------------------------------------------------------------------- base pass
 def run_base(config_path: str, model_name: str, max_side: int | None,
-             limit_override: int | None = None, force: bool = False, style: str = "chat") -> dict:
+             limit_override: int | None = None, force: bool = False, style: str = "chat",
+             bank: str = "full") -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, max_side, style)
+    key = slug(model_name, max_side, style, bank)
     out_pq = STAGE_F_DIR / f"conflict_{key}.parquet"
     if out_pq.exists() and not force:
         raise FileExistsError(
@@ -257,7 +275,7 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
             continue
         if tokens is None:            # measured on the first real image, at the resolution actually used
             tokens = count_image_tokens(processor, img, family, style)
-        for cond, cid, sentence in _conditions():
+        for cond, cid, sentence in _conditions(bank):
             val, lp = readout(model, build_inputs(processor, img, sentence, family, style), tok_ids)
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
@@ -594,6 +612,10 @@ def main() -> None:
     ap.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
     ap.add_argument("--text-only", action="store_true",
                     help="image-ablated stimulus control (keyed by model; ignores --max-side)")
+    ap.add_argument("--bank", choices=("full", "minimal"), default="full",
+                    help="context bank: 'full' (6 pos / 6 neg / 2 neutral) or 'minimal' (6 "
+                         "token-matched valence-only pairs, the valence-vs-event-content control). "
+                         "The bank is part of the run key, so the two never overwrite each other.")
     ap.add_argument("--prompt-style", choices=("chat", "legacy"), default="chat",
                     help="chat = processor.apply_chat_template (portable); legacy = the hand-written "
                          "Gemma scaffold used for the PUBLISHED Gemma run (Gemma only)")
@@ -614,7 +636,7 @@ def main() -> None:
         reanalyze(a.model, a.max_side)
     else:
         run_base(a.config, a.model, a.max_side, limit_override=a.limit, force=a.force,
-                 style=a.prompt_style)
+                 style=a.prompt_style, bank=a.bank)
 
 
 if __name__ == "__main__":
