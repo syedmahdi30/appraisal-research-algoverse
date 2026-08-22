@@ -232,3 +232,67 @@ and each loses one sharp quantitative claim:
 
 So the rewrite is a retraction of §5 and §7.2/§7.3 plus a numbers pass over §6 — not the deletion of
 §6. Under the outcome table above, this is the "both survive" branch.
+
+---
+
+# Provenance check — every number verified against artifacts (2026-08-22, post-Drive-sync)
+
+`results/` now holds the full Drive tree at canonical paths (`results/stage_f/...`); the old nested
+`results/results/` copy is gone. Bridge and raw-HF artifacts coexist, so every claim below is
+re-derivable locally. All figures previously read off terminal output were re-checked against JSON
+and match exactly.
+
+## Conflict override gaps — all raw HF, all artifact-backed
+
+Source: `results/stage_f/conflict_<model>_metrics.json`, key `flip_override`. n = 121 images
+(62 positive, 60 negative) per model.
+
+| model | neg overrides pos img | pos overrides neg img | gap | 95% CI | image AUC |
+|---|---|---|---|---|---|
+| \qwen{} | 76.3% | 36.9% | **+39.4%** | [+29.5, +49.0] | — |
+| LLaVA-NeXT | 37.9% | 19.2% | **+18.7%** | [+7.8, +30.0] | 0.998 |
+| \gemma{} | 43.5% | 31.4% | **+12.2%** | **[−0.4, +23.7]** | 0.982 |
+| \gemma{} (legacy prompt) | 44.4% | 31.9% | +12.4% | [−0.5, +24.3] | 0.981 |
+| LLaVA-1.5 | 27.7% | 40.3% | **−12.6%** | [−22.0, −2.8] | 0.989 |
+
+Confirms **2 of 4 clear zero**. Gemma's CI touches zero on both prompt styles, and its image
+discriminability (0.982) is healthy — so the weak gap is not a degraded-image artefact this time.
+
+Qwen resolution sweep, same weights: 128 tok **+41.8%** [+32.1, +50.8]; 262 tok **+37.4%**
+[+27.5, +47.0] and **+38.6%** [+28.6, +48.1]. Flat, AUC 0.983–0.986. Token budget stays falsified.
+
+## Stage C and Stage D
+
+`results/stage_c/metrics_hf.json`: pleasantness ρ **+0.50994**, AUC **0.91178**, unpleasantness
+ρ **−0.44784**, retention 0.6633, 7,280 scored / 0 skipped. *Note for the write-up:* the polarity AUC
+is computed on **440** single-label polar images (384 pos / 56 neg), not on all 7,280 — state both
+denominators rather than letting "7,280" attach to the AUC.
+
+`results/stage_d/steering_metrics_hf.json`: slopes pleasantness **+0.33602**, unpleasantness
+**−0.31563**, suddenness **−0.07757**, random **−0.03495** (published +0.3293 / −0.3087 / −0.0726 /
+−0.0270). `site_check.ok = true`, worst relative error **0.51%**. Base valence +0.0987.
+
+## Patching — raw HF vs bridge, both on disk
+
+Same-image (probe read-out), `patching_hf_pair1_metrics.json` / `patching_hf_metrics.json` vs
+`patching_metrics.json`:
+
+| | image | BOS | prefix | question | turn boundary | all text |
+|---|---|---|---|---|---|---|
+| Pair 1 (0,2) raw HF | 0.000 | 0.000 | 0.000 | **0.473** | **0.464** | 0.932 |
+| Pair 2 (4,0) raw HF | −0.001 | 0.004 | 0.000 | **0.543** | **0.398** | 0.883 |
+| Pair 2 (4,0) bridge | 0.007 | −0.008 | −0.011 | **0.320** | **0.566** | 0.867 |
+
+Cross-image, `cross_patching_hf_{band}.json`: 0–12 image val 1.001 / probe 1.008, text 0.017 / 0.083;
+13–17 image 0.960 / 0.749, text 0.741 / 0.874; 18–28 image **0.311**, text 0.634, all 0.899.
+
+## Two published bridge numbers remain doc-only — and no longer matter
+
+- **Same-image Pair 1 (championship/funeral, 22% / 65%).** The surviving
+  `patching_metrics.json` is Pair 2 (pos 4, neg 0). Pair 1's bridge run is still lost.
+- **Cross-image neutral-context three-band table (80/10/100 · 66/65/91 · 9/68/79).** The surviving
+  `cross_patching_metrics.json` is the *confirmatory* run instead — band 18–28, **negative** context,
+  n=60, image 0.076 / text 0.925 / all 1.068.
+
+Neither gap blocks anything now: both tables are being replaced by the raw-HF sweeps above, which are
+fully artifact-backed. The bridge numbers only appear in the paper as the values being retracted.
