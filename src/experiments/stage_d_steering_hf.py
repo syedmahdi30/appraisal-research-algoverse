@@ -53,7 +53,7 @@ REFERENCE_DMU_NORM = {"pleasantness": 352.8188, "unpleasantness": 358.3771, "sud
 @contextmanager
 def resid_capture(model, layer: int):
     """Capture the LAST-token output of decoder `layer` — the raw-HF `hook_resid_post` equivalent."""
-    layers = find_lm_layers(model)
+    layers = find_lm_layers(model, verbose=False)
     store: list = [None]
 
     def hook(_m, _i, out):
@@ -75,7 +75,7 @@ def steer(model, layer: int, z: torch.Tensor, beta: float):
     bf16 stays bf16. The layer's output is cloned rather than modified in place, and the tuple shape
     is preserved for transformers versions whose decoder layers return `(hidden, ...)`.
     """
-    layers = find_lm_layers(model)
+    layers = find_lm_layers(model, verbose=False)
 
     def hook(_m, _i, out):
         tup = isinstance(out, tuple)

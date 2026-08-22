@@ -61,13 +61,24 @@ DEFAULT_MODEL = "google/gemma-3-4b-it"
 
 
 # --------------------------------------------------------------------------- module plumbing
-def find_lm_layers(model) -> torch.nn.ModuleList:
+# Resolved layer lists, keyed by id(model). The lookup walks every named module, and steering
+# re-enters its context manager once per (direction, beta) per image — 24x per image on the Stage D
+# sweep — so without a cache this repeats a full module walk thousands of times and prints on each.
+_LAYER_CACHE: dict = {}
+
+
+def find_lm_layers(model, verbose: bool = True) -> torch.nn.ModuleList:
     """Locate the LANGUAGE-model decoder layer list, never the vision tower.
 
     Gemma-3's wrapper nests the LM differently across transformers versions
     (`model.language_model.layers` vs `model.model.language_model.layers`), and the SigLIP tower has
     its own `.layers`, so this searches by name and excludes vision paths rather than hardcoding.
+    Result is cached per model instance; the cache is NOT stored on the module itself, since
+    assigning a ModuleList to an attribute would re-register it as a submodule.
     """
+    key = id(model)
+    if key in _LAYER_CACHE:
+        return _LAYER_CACHE[key]
     best = None
     for name, mod in model.named_modules():
         if not isinstance(mod, torch.nn.ModuleList) or not name.endswith("layers"):
@@ -80,7 +91,9 @@ def find_lm_layers(model) -> torch.nn.ModuleList:
                 break
     if best is None:
         raise RuntimeError("could not locate the language-model decoder layers on this model")
-    print(f"  language-model layers: {best[0]}  ({len(best[1])} layers)")
+    if verbose:
+        print(f"  language-model layers: {best[0]}  ({len(best[1])} layers)")
+    _LAYER_CACHE[key] = best[1]
     return best[1]
 
 
