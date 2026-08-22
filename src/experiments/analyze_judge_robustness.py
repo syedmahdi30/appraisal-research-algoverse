@@ -178,15 +178,24 @@ def anchor_check(df: pd.DataFrame, published_gap: float | None = None, tol: floa
 
 
 def _published_gap_beside(parquet: Path) -> float | None:
-    """The stored flip_override/dominance_gap from conflict_analysis.json, if it sits beside the parquet."""
-    cand = parquet.parent / "conflict_analysis.json"
-    if not cand.exists():
-        return None
-    try:
-        j = json.loads(cand.read_text())
-        return float(j["flip_override"]["dominance_gap"])
-    except (KeyError, ValueError, json.JSONDecodeError):
-        return None
+    """The stored flip_override/dominance_gap for THIS parquet's run, if it sits beside the parquet.
+
+    The sibling JSON is derived from the parquet stem, not hardcoded: when several models' parquets
+    share one directory (as in the collected `results/` tree) a fixed `conflict_analysis.json` would
+    silently anchor every model to Gemma's published gap.
+    """
+    stem = parquet.stem
+    names = (["conflict_analysis.json"] if stem == "conflict_pilot"      # Gemma full bank
+             else [f"{stem}_analysis.json", f"{stem}_metrics.json"])
+    for name in names:
+        cand = parquet.parent / name
+        if not cand.exists():
+            continue
+        try:
+            return float(json.loads(cand.read_text())["flip_override"]["dominance_gap"])
+        except (KeyError, ValueError, json.JSONDecodeError):
+            continue
+    return None
 
 
 # --------------------------------------------------------------------------- driver
