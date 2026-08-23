@@ -216,13 +216,18 @@ Use the `/update-memory` skill to add entries.
 
 ## LLaVA complete-label scoring (verified 2026-08-23)
 - Verified: LLaVA-1.5's first-subtoken null is a scoring artifact. Exact teacher-forced sequence sums
-  give corrected override gap +63.9% (crossed CI +42.5% to +83.5%), bounded mirror contrast +0.673
+  give corrected override gap +63.9% (crossed CI +44.0% to +83.3%), bounded mirror contrast +0.673
   (+0.452 to +0.884), and unbounded margin +1.430 (+0.776 to +2.085); all crossed intervals clear 0.
-- Verified: the sequence-sum text-only bank is balanced (raw |negative|/|positive| = 1.04), so the
-  image-conditioned effect is not explained by stronger negative sentences in isolation.
-- Avoid: treating content-token mean as a second probability rule. It is highly label-length biased
-  (r=0.926 here) and saturates LLaVA-1.5 near negative valence; keep it as a disclosed sensitivity only.
-- Decision: retract the LLaVA-1.5 null and ``three of four'' architecture claim, but wait to rewrite the
-  four-model table until LLaVA-NeXT receives the same complete-label re-score.
-- Canonical artifacts: `results/stage_f/conflict_llava_sequence{.parquet,_metrics.json}` and
-  `text_only_llava_sequence{.parquet,_metrics.json}`, produced from commit `abb831a`.
+- Verified: LLaVA-1.5's sequence-sum text-only bank is balanced (raw bounded ratio 1.04; raw
+  unbounded ratio 0.89), so stronger negative sentences do not explain the image-conditioned effect.
+- Verified: LLaVA-NeXT's complete-label sum weakens its legacy result: corrected override $-11.2\%$
+  (crossed CI $-34.9\%$ to $+11.9\%$), bounded mirror $+0.125$ ($-0.051$ to $+0.307$), and unbounded
+  margin $+0.497$ ($+0.018$ to $+0.982$). Only the unbounded crossed interval clears zero.
+- Verified: LLaVA-NeXT's sequence-sum text-only raw unbounded ratio is 0.39, so stronger negative
+  sentences do not explain its remaining image-conditioned asymmetry.
+- Decision: the four-model table uses complete-label sums for both LLaVA models. Retract the old
+  LLaVA-NeXT-strongest/LLaVA-1.5-null ordering and any clean three-versus-one architecture boundary.
+- Avoid: content-token means as probabilities; they correlate with label length ($r=0.93$ for
+  LLaVA-1.5, $0.91$ for LLaVA-NeXT) and collapse categorical predictions.
+- Canonical artifacts: `results/stage_f/{conflict,text_only}_llava_sequence*` (LLaVA-1.5, commit
+  `abb831a`) and `{conflict,text_only}_llava-v1-6-mistral-7b-hf_sequence*` (LLaVA-NeXT, `062c377`).

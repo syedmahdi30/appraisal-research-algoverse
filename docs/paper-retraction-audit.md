@@ -531,7 +531,7 @@ skipped images, and metadata exactly matching the first-subtoken parquet.
 | LLaVA-1.5 readout | first content subtoken | complete sequence sum |
 |---|---:|---:|
 | corrected override gap | $-10.0\%$ | **$+63.9\%$** |
-| crossed 95\% CI | $[-40.4,+20.9]\%$ | **$[+42.5,+83.5]\%$** |
+| crossed 95\% CI | $[-40.4,+20.9]\%$ | **$[+44.0,+83.3]\%$** |
 | bounded mirror contrast | $+0.016$ | **$+0.673$** |
 | crossed 95\% CI | $[-0.37,+0.42]$ | **$[+0.452,+0.884]$** |
 | unbounded margin | $+0.05$ | **$+1.430$** |
@@ -552,6 +552,43 @@ the time, and neutral-baseline correction reduces that categorical gap to zero. 
 unbounded neutral-relative contrasts remain positive, but the exact sequence sum is the primary rule.
 
 **Paper consequence.** The LLaVA-1.5 null, the ``three of four'' claim, and every explanation built on
-that exception are invalid under complete-label scoring. Do not rewrite the four-model table yet:
-LLaVA-NeXT also has multi-token labels and still needs the same sequence re-score. Report scoring-rule
-dependence rather than selecting whichever readout supports the preferred architectural story.
+that exception are invalid under complete-label scoring. This result triggered the same re-score for
+LLaVA-NeXT below. Report scoring-rule dependence rather than selecting whichever readout supports a
+preferred architectural story.
+
+---
+
+# LLaVA-NeXT complete-label re-score weakens the earlier positive result (2026-08-23)
+
+The LLaVA-NeXT run used commit `062c377` and the same 150 EMOTIC person-annotations, 121 distinct
+photographs and 15 conditions as the legacy run. It completed all 2,250 rows with no skips. Image,
+group, context and sentence metadata match the first-subtoken parquet exactly.
+
+| LLaVA-NeXT readout | first content subtoken | complete sequence sum |
+|---|---:|---:|
+| corrected override gap | $+20.5\%$ | **$-11.2\%$** |
+| crossed 95\% CI | $[+1.0,+41.0]\%$ | **$[-34.9,+11.9]\%$** |
+| bounded mirror contrast | $+0.413$ | **$+0.125$** |
+| crossed 95\% CI | $[+0.232,+0.593]$ | **$[-0.051,+0.307]$** |
+| unbounded margin | $+1.000$ | **$+0.497$** |
+| crossed 95\% CI | $[+0.501,+1.497]$ | **$[+0.018,+0.982]$** |
+
+Complete-label scoring therefore changes LLaVA-NeXT from three crossed tests clearing zero to one.
+The categorical point estimate reverses, the bounded contrast remains positive but becomes uncertain
+over sentences, and only the unbounded margin retains a crossed interval above zero. The score does
+not create a stimulus confound: without an image, the raw unbounded negative/positive ratio is
+$0.39$, so the negative sentences are substantially weaker than the positives in isolation.
+
+The content-token mean is again not a viable probability rule. Its label-length/mean-score
+correlation is $r=0.915$, and it selects sadness on 2,235 of 2,250 image-conditioned rows. Its raw
+categorical gap is $+100\%$ only because neutral baselines are already pinned to the same negative
+category; neutral correction reduces the categorical gap to zero.
+
+**Paper consequence.** The former ordering --- LLaVA-NeXT strongest, LLaVA-1.5 null --- is a
+first-subtoken artifact. Under the primary complete-sequence score, LLaVA-1.5 clears all three crossed
+tests and LLaVA-NeXT clears only the unbounded test. The paper can support a valence asymmetry and
+measurement sensitivity, but not a clean three-model-versus-one-model architecture boundary.
+
+Stored artifacts:
+`conflict_llava-v1-6-mistral-7b-hf_sequence{.parquet,_metrics.json}` and
+`text_only_llava-v1-6-mistral-7b-hf_sequence{.parquet,_metrics.json}`.
