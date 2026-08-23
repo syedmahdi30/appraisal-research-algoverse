@@ -37,6 +37,7 @@ overwrite an existing parquet.
   python -m src.experiments.stage_f_token_budget --model llava-hf/llava-v1.6-mistral-7b-hf
   python -m src.experiments.stage_f_token_budget --model <id> --text-only   # stimulus control
   python -m src.experiments.stage_f_token_budget --model <id> --text-only --bank minimal
+  python -m src.experiments.stage_f_token_budget --model <id> --text-only --bank minimal --reanalyze
   python -m src.experiments.stage_f_token_budget --aggregate      # CPU: build the trend table
 """
 from __future__ import annotations
@@ -425,6 +426,91 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     return metrics
 
 
+def _text_only_readouts(df: pd.DataFrame) -> dict:
+    """Both scales for a text-only run: the bounded valence score and an unbounded log-odds margin.
+
+    The bounded score is the paper's primary readout, but with no image some models pin it to a
+    bound: Qwen3-VL reads a bare neutral sentence as sadness at -0.996, so every sentence lands
+    at +/-1 and the |neg|/|pos| ratio comes out at 1.00 no matter what the sentences do. A ratio
+    computed from two saturated constants is not evidence that the sets are balanced; it is evidence
+    that the readout cannot see. The margin (best positive-valence label minus best negative-valence
+    label, in log-odds) has no bounds and answers the question the control is actually asking.
+
+    Two references are reported per scale. `raw` compares each polarity against zero and is the one
+    to trust when the neutral baseline is itself pinned; `vs_neutral` subtracts the neutral-sentence
+    baseline and is the one to trust when it is not. `saturation` says which situation you are in.
+    """
+    from .analyze_stage_f import _POSITIVE, _NEGATIVE
+    d = df.copy()
+    d["margin"] = [max(r["lp_" + w] for w in _POSITIVE) - max(r["lp_" + w] for w in _NEGATIVE)
+                   for _, r in d.iterrows()]
+    out = {"saturation_frac": float((d["valence"].abs() >= 0.999).mean()), "n_rows": int(len(d))}
+    for scale, col in (("bounded_valence", "valence"), ("unbounded_margin", "margin")):
+        g = lambda c: d[d["condition"] == c][col]
+        pos, neg, neu = float(g("positive").mean()), float(g("negative").mean()), float(g("neutral").mean())
+        pe, ne = pos - neu, neg - neu
+        out[scale] = {
+            "pos_raw": pos, "neg_raw": neg, "neutral_baseline": neu,
+            "ratio_raw": abs(neg) / abs(pos) if pos else float("nan"),
+            "pos_vs_neutral": pe, "neg_vs_neutral": ne,
+            "ratio_vs_neutral": abs(ne) / abs(pe) if pe else float("nan"),
+            "mirror_contrast_raw": abs(neg) - abs(pos),
+        }
+    return out
+
+
+def reanalyze_text_only(model_name: str, style: str = "chat", bank: str = "full") -> dict:
+    """Recompute a text-only control from its saved parquet (CPU, no model load).
+
+    Exists because the GPU pass reports only the bounded readout, and on a saturating model that
+    number is uninformative --- see `_text_only_readouts`. This rereads the same parquet, adds the
+    unbounded margin, and rewrites the metrics file in place.
+    """
+    ensure_dirs()
+    key = slug(model_name, None, style, bank)
+    pq = STAGE_F_DIR / f"text_only_{key}.parquet"
+    if not pq.exists():
+        raise FileNotFoundError(f"{pq} missing — run --text-only first.")
+    df = pd.read_parquet(pq)
+    r = _text_only_readouts(df)
+
+    mpath = STAGE_F_DIR / f"text_only_{key}_metrics.json"
+    m = json.loads(mpath.read_text()) if mpath.exists() else {"model": model_name, "bank": bank}
+    m["readouts"] = r
+    m["reanalyzed"] = run_stamp()
+    save_json(m, mpath)
+
+    b, u = r["bounded_valence"], r["unbounded_margin"]
+    print(f"\nText-only readouts [{model_name}] bank={bank} — {r['n_rows']} rows")
+    print(f"  bounded valence saturated on {r['saturation_frac']:.0%} of rows"
+          + ("   <- the bounded ratio below is an artifact; read the margin instead"
+             if r["saturation_frac"] >= 0.5 else ""))
+    for name, x in (("bounded valence", b), ("unbounded margin", u)):
+        print(f"  {name:17s} pos {x['pos_raw']:+8.3f}  neg {x['neg_raw']:+8.3f}  neutral "
+              f"{x['neutral_baseline']:+8.3f}")
+        print(f"  {'':17s} raw |neg|/|pos| = {x['ratio_raw']:.2f}   "
+              f"vs-neutral |neg|/|pos| = {x['ratio_vs_neutral']:.2f}")
+    print("  reading these: >1 means the negative sentences are stronger in isolation, which is the "
+          "stimulus")
+    print("  confound the control tests for; ~1 means matched; <1 means the positives are stronger.")
+    print("  Neither ratio is unconditionally the right one, so both confounds are stated:")
+    if r["saturation_frac"] >= 0.5:
+        print(f"    - the bounded ratios are artifacts here ({r['saturation_frac']:.0%} of rows sit on "
+              f"a bound); use the margin")
+    if abs(b["neutral_baseline"]) >= 0.2:
+        print(f"    - the neutral baseline is off-centre ({b['neutral_baseline']:+.2f} of a possible "
+              f"+/-1), so with no image the model")
+        print(f"      already leans "
+              f"{'negative' if b['neutral_baseline'] < 0 else 'positive'} and the vs-neutral ratios "
+              f"understate that side. Prefer the raw ones.")
+    if r["saturation_frac"] < 0.5 and abs(b["neutral_baseline"]) < 0.2:
+        print("    - neither applies: the scale is unsaturated and the neutral baseline is near "
+              "centre, so")
+        print("      the bounded vs-neutral ratio is the directly comparable one.")
+    print(f"  data -> {mpath}")
+    return m
+
+
 def reanalyze(model_name: str, max_side: int | None, bank: str = "full") -> dict:
     """Recompute metrics from a saved parquet (CPU, no model load).
 
@@ -660,7 +746,9 @@ def main() -> None:
                          "Gemma scaffold used for the PUBLISHED Gemma run (Gemma only)")
     ap.add_argument("--show-prompt", action="store_true",
                     help="print both prompt styles side by side and exit (processor only, no GPU)")
-    ap.add_argument("--reanalyze", action="store_true", help="recompute from the saved parquet (CPU)")
+    ap.add_argument("--reanalyze", action="store_true",
+                    help="recompute from the saved parquet (CPU). With --text-only, recomputes the "
+                         "stimulus control on both the bounded and the unbounded scale.")
     ap.add_argument("--aggregate", action="store_true", help="build the cross-run trend table (CPU)")
     a = ap.parse_args()
     if a.show_prompt:
@@ -670,7 +758,10 @@ def main() -> None:
     elif a.text_only:
         if a.max_side:
             print("  [note] --max-side ignored: the text-only control has no image.")
-        run_text_only(a.config, a.model, force=a.force, style=a.prompt_style, bank=a.bank)
+        if a.reanalyze:
+            reanalyze_text_only(a.model, style=a.prompt_style, bank=a.bank)
+        else:
+            run_text_only(a.config, a.model, force=a.force, style=a.prompt_style, bank=a.bank)
     elif a.reanalyze:
         reanalyze(a.model, a.max_side, bank=a.bank)
     else:
