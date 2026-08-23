@@ -36,6 +36,7 @@ overwrite an existing parquet.
   python -m src.experiments.stage_f_token_budget --model Qwen/Qwen3-VL-8B-Instruct --max-side 896
   python -m src.experiments.stage_f_token_budget --model llava-hf/llava-v1.6-mistral-7b-hf
   python -m src.experiments.stage_f_token_budget --model <id> --text-only   # stimulus control
+  python -m src.experiments.stage_f_token_budget --model <id> --text-only --bank minimal
   python -m src.experiments.stage_f_token_budget --aggregate      # CPU: build the trend table
 """
 from __future__ import annotations
@@ -73,6 +74,21 @@ def _conditions(bank: str = "full"):
     return build_conditions(bank)
 
 
+def _key_suffix(style: str = "chat", bank: str = "full") -> str:
+    """The style/bank tail of a run key, without the model or budget parts.
+
+    Split out of `slug` so that code needing to *glob* across token budgets can rebuild the tail
+    exactly. The budget tag sits before this tail, so `f"{slug(...)}_px*"` looks for a filename that
+    can never exist; `_base_runs_for` needs the pieces, not the finished key.
+    """
+    s = ""
+    if style != "chat":
+        s += f"_{style}"
+    if bank != "full":
+        s += f"_{bank}"
+    return s
+
+
 def slug(model_name: str, max_side: int | None, style: str = "chat", bank: str = "full") -> str:
     """Filesystem-safe run key: model + token-budget tag + prompt style + bank, so runs never collide.
 
@@ -84,11 +100,7 @@ def slug(model_name: str, max_side: int | None, style: str = "chat", bank: str =
     s = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
     if max_side:
         s = f"{s}_px{max_side}"
-    if style != "chat":
-        s = f"{s}_{style}"
-    if bank != "full":
-        s = f"{s}_{bank}"
-    return s
+    return s + _key_suffix(style, bank)
 
 
 # --------------------------------------------------------------------------- model dispatch
@@ -287,6 +299,7 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
     df.to_parquet(out_pq)
     metrics = _analyze(df, model_name, tokens or {}, max_side, multi=multi, n_skipped=n_skip)
     metrics["prompt_style"] = style
+    metrics["bank"] = bank
     save_json(metrics, STAGE_F_DIR / f"conflict_{key}_metrics.json")
     _print(metrics)
     print(f"  data -> {out_pq}")
@@ -294,11 +307,22 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
 
 
 # --------------------------------------------------------------------------- text-only control
-def _base_runs_for(model_slug: str) -> list[Path]:
-    """Every base-run metrics file for this model, across token budgets (natural + each --max-side)."""
-    exact = STAGE_F_DIR / f"conflict_{model_slug}_metrics.json"
+def _base_runs_for(model_name: str, style: str = "chat", bank: str = "full") -> list[Path]:
+    """Every base-run metrics file for this model AND bank, across token budgets.
+
+    Must match on bank: a minimal-pair text-only control compared against a full-bank base run would
+    be comparing different sentences, which is precisely the confound the control exists to test.
+    The glob is assembled from key parts because the budget tag precedes the style/bank tail.
+    """
+    core = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
+    tail = _key_suffix(style, bank)
+    exact = STAGE_F_DIR / f"conflict_{core}{tail}_metrics.json"
     runs = [exact] if exact.exists() else []
-    return runs + sorted(STAGE_F_DIR.glob(f"conflict_{model_slug}_px*_metrics.json"))
+    # The glob alone is not enough: for the full bank `tail` is empty, so `_px*_metrics.json` also
+    # swallows `_px448_minimal_metrics.json`. Anchor the budget tag to digits and the tail to the end.
+    pat = re.compile(rf"^conflict_{re.escape(core)}_px\d+{re.escape(tail)}_metrics\.json$")
+    return runs + sorted(p for p in STAGE_F_DIR.glob(f"conflict_{core}_px*_metrics.json")
+                         if pat.match(p.name))
 
 
 def _amplification(img_ratio: float | None, ref: float) -> str:
@@ -312,13 +336,16 @@ def _amplification(img_ratio: float | None, ref: float) -> str:
     return "image dampens (reversed)"
 
 
-def run_text_only(config_path: str, model_name: str, force: bool = False, style: str = "chat") -> dict:
+def run_text_only(config_path: str, model_name: str, force: bool = False, style: str = "chat",
+                  bank: str = "full") -> dict:
     """The image-ablated stimulus control: every context sentence with NO image.
 
     Isolates whether the negativity asymmetry is a property of the SENTENCES (the banks are simply
-    unbalanced in strength) or genuinely cross-modal (it needs the image). Keyed by MODEL ONLY, with
-    no token-budget tag: there is no image in this pass, so `--max-side` cannot affect it and running
-    it once per resolution would burn compute re-deriving identical numbers.
+    unbalanced in strength) or genuinely cross-modal (it needs the image). Keyed by MODEL AND BANK,
+    with no token-budget tag: there is no image in this pass, so `--max-side` cannot affect it and
+    running it once per resolution would burn compute re-deriving identical numbers. The bank does
+    matter, because it selects which sentences are being ablated --- the matched pairs and the varied
+    set are different stimulus sets and can be imbalanced to different degrees.
 
     Because the text-only ratio is fixed per model while the image-conditioned ratio is measured per
     token budget, the comparison is reported against EVERY base run of this model — so cross-modal
@@ -326,7 +353,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     """
     load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, None, style)   # deliberately budget-free; see docstring
+    key = slug(model_name, None, style, bank)   # budget-free but bank-aware; see docstring
     out_pq = STAGE_F_DIR / f"text_only_{key}.parquet"
     if out_pq.exists() and not force:
         raise FileExistsError(f"{out_pq} already exists — pass --force to replace it.")
@@ -337,7 +364,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
              if not r["single_token"]}
 
     rows = []
-    for cond, cid, sentence in _conditions():
+    for cond, cid, sentence in _conditions(bank):
         val, lp = readout(model, build_inputs(processor, None, sentence, family, style), tok_ids)  # image=None
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
                      "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": max(lp, key=lp.get),
@@ -358,7 +385,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     ref = raw_ratio if np.isfinite(raw_ratio) else text_ratio
 
     per_base = []
-    for bp in _base_runs_for(key):
+    for bp in _base_runs_for(model_name, style, bank):
         j = json.loads(bp.read_text())
         a = j.get("asymmetry_vs_floor", {})
         dn, dp = a.get("drop_pos_img_neg_ctx"), a.get("congruent_pos_img_pos_ctx")
@@ -368,15 +395,15 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
                          "image_conditioned_ratio": img_ratio,
                          "verdict": _amplification(img_ratio, ref)})
 
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "keyed_by": "model only (no image in this pass; --max-side cannot affect it)",
+    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "bank": bank,
+               "keyed_by": "model + bank (no image in this pass; --max-side cannot affect it)",
                "neutral_baseline": neu, "none_baseline": none_v, "pos_effect": pe, "neg_effect": ne,
                "pos_raw": pr, "neg_raw": nr, "text_only_ratio_vs_neutral": text_ratio,
                "text_only_ratio_raw": raw_ratio, "reference_ratio": ref,
                "per_base_run": per_base, "tokenization_multi_token": multi}
     save_json(metrics, STAGE_F_DIR / f"text_only_{key}_metrics.json")
 
-    print(f"\nStage F text-only [{model_name}] — {len(rows)} forwards (no images).")
+    print(f"\nStage F text-only [{model_name}] bank={bank} — {len(rows)} forwards (no images).")
     if multi:
         print(f"  [!] multi-token labels (first sub-token scored): {list(multi)}")
     for _, r in df.iterrows():
@@ -398,10 +425,14 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     return metrics
 
 
-def reanalyze(model_name: str, max_side: int | None) -> dict:
-    """Recompute metrics from a saved parquet (CPU, no model load)."""
+def reanalyze(model_name: str, max_side: int | None, bank: str = "full") -> dict:
+    """Recompute metrics from a saved parquet (CPU, no model load).
+
+    Takes `bank` because it is part of the run key: without it, `--reanalyze --bank minimal` would
+    silently recompute the full-bank parquet and overwrite the full-bank metrics.
+    """
     ensure_dirs()
-    key = slug(model_name, max_side)
+    key = slug(model_name, max_side, bank=bank)
     pq = STAGE_F_DIR / f"conflict_{key}.parquet"
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run the base pass first.")
@@ -520,15 +551,22 @@ def aggregate() -> dict:
         f, t, d = j.get("flip_override", {}), j.get("image_tokens", {}), j.get("image_discriminability", {})
         if not f:
             continue
-        # the model's text-only reference ratio, if that control has been run (keyed by model alone)
-        tpath = STAGE_F_DIR / f"text_only_{slug(j.get('model', ''), None)}_metrics.json"
+        # the model's text-only reference ratio, if that control has been run. Must be looked up at
+        # the SAME bank: reading the full-bank control for a minimal-bank run would compare a ratio
+        # to sentences it was never measured on. Older metrics files predate the field, so fall back
+        # to the filename, which is the run key and always carries the suffix.
+        bank = j.get("bank") or ("minimal" if mp.name.endswith("_minimal_metrics.json") else "full")
+        tpath = STAGE_F_DIR / (
+            f"text_only_{slug(j.get('model', ''), None, j.get('prompt_style', 'chat'), bank)}"
+            "_metrics.json")
         text_ratio = None
         if tpath.exists():
             try:
                 text_ratio = json.loads(tpath.read_text()).get("reference_ratio")
             except json.JSONDecodeError:
                 pass
-        rows.append({"source": mp.name, "model": j.get("model", "?"), "max_side": j.get("max_side"),
+        rows.append({"source": mp.name, "model": j.get("model", "?"), "bank": bank,
+                     "max_side": j.get("max_side"),
                      "image_tokens": t.get("image_tokens"),
                      "image_token_fraction": t.get("image_token_fraction"),
                      "discriminability_gap": d.get("discriminability_gap"), "auc": d.get("auc"),
@@ -536,7 +574,7 @@ def aggregate() -> dict:
                      "override_gap": f.get("dominance_gap"),
                      "ci_lo": f.get("dominance_gap_ci95", [None, None])[0],
                      "ci_hi": f.get("dominance_gap_ci95", [None, None])[1]})
-    cols = ["source", "model", "max_side", "image_tokens", "image_token_fraction",
+    cols = ["source", "model", "bank", "max_side", "image_tokens", "image_token_fraction",
             "discriminability_gap", "auc", "text_only_ratio", "override_gap", "ci_lo", "ci_hi"]
     tab = pd.DataFrame(rows, columns=cols)
     if len(tab):
@@ -611,7 +649,8 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
     ap.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
     ap.add_argument("--text-only", action="store_true",
-                    help="image-ablated stimulus control (keyed by model; ignores --max-side)")
+                    help="image-ablated stimulus control (keyed by model and --bank; ignores "
+                         "--max-side)")
     ap.add_argument("--bank", choices=("full", "minimal"), default="full",
                     help="context bank: 'full' (6 pos / 6 neg / 2 neutral) or 'minimal' (6 "
                          "token-matched valence-only pairs, the valence-vs-event-content control). "
@@ -631,9 +670,9 @@ def main() -> None:
     elif a.text_only:
         if a.max_side:
             print("  [note] --max-side ignored: the text-only control has no image.")
-        run_text_only(a.config, a.model, force=a.force, style=a.prompt_style)
+        run_text_only(a.config, a.model, force=a.force, style=a.prompt_style, bank=a.bank)
     elif a.reanalyze:
-        reanalyze(a.model, a.max_side)
+        reanalyze(a.model, a.max_side, bank=a.bank)
     else:
         run_base(a.config, a.model, a.max_side, limit_override=a.limit, force=a.force,
                  style=a.prompt_style, bank=a.bank)
