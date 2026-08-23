@@ -2,10 +2,13 @@ import pandas as pd
 
 from src.data.labels import EMOTION_LABELS
 from src.experiments.stage_f_llava import (
+    DEFAULT_MODEL,
     _artifact_paths,
     _content_mean_frame,
     _sequence_columns,
 )
+
+NEXT_MODEL = "llava-hf/llava-v1.6-mistral-7b-hf"
 
 
 def test_sequence_artifacts_cannot_overwrite_first_subtoken_results():
@@ -18,6 +21,19 @@ def test_sequence_artifacts_cannot_overwrite_first_subtoken_results():
     assert sequence[0].name == "conflict_llava_sequence.parquet"
     assert sequence[1].name == "conflict_llava_sequence_metrics.json"
     assert legacy != sequence
+
+
+def test_nondefault_model_artifacts_cannot_overwrite_default_model_results():
+    """Running LLaVA-NeXT must not replace the completed LLaVA-1.5 sequence experiment."""
+    default = _artifact_paths("sequence", text_only=False, model_name=DEFAULT_MODEL)
+    next_model = _artifact_paths("sequence", text_only=False, model_name=NEXT_MODEL)
+    next_text = _artifact_paths("sequence", text_only=True, model_name=NEXT_MODEL)
+
+    assert default[0].name == "conflict_llava_sequence.parquet"
+    assert next_model[0].name == "conflict_llava-v1-6-mistral-7b-hf_sequence.parquet"
+    assert next_model[1].name == "conflict_llava-v1-6-mistral-7b-hf_sequence_metrics.json"
+    assert next_text[0].name == "text_only_llava-v1-6-mistral-7b-hf_sequence.parquet"
+    assert len({default, next_model, next_text}) == 3
 
 
 def test_sequence_columns_keep_sum_primary_and_mean_separate():

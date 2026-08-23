@@ -11,7 +11,8 @@ The legacy read-out scores the first content sub-token at the first answer posit
 LLaVA-1.5 emotion label spans 2--4 tokens, `--score-mode sequence` instead teacher-forces each complete
 label and sums its conditional token log probabilities. The same forwards also produce a
 content-token-mean sensitivity analysis for label-length bias. Sequence runs use distinct output
-paths, so they cannot overwrite the published first-subtoken artifacts.
+paths, keyed by model for non-default checkpoints, so they cannot overwrite first-subtoken artifacts
+or another LLaVA-family run.
 
 Reuses the model-agnostic scoring/selection from `stage_f_qwen` (emotion_token_ids, readout,
 select_extreme_images, _user_text); only the model load and the chat template are LLaVA-specific.
@@ -39,16 +40,18 @@ from ..paths import STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
 from .multitoken_scoring import score_label_sequences
 from .stage_f_qwen import _user_text, emotion_token_ids, readout, select_extreme_images
+from .stage_f_token_budget import slug
 
 DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
 
 
-def _artifact_paths(score_mode: str, *, text_only: bool):
+def _artifact_paths(score_mode: str, *, text_only: bool, model_name: str = DEFAULT_MODEL):
     if score_mode not in {"first-subtoken", "sequence"}:
         raise ValueError(f"unknown score mode: {score_mode}")
     prefix = "text_only" if text_only else "conflict"
     suffix = "" if score_mode == "first-subtoken" else "_sequence"
-    stem = f"{prefix}_llava{suffix}"
+    model_key = "llava" if model_name == DEFAULT_MODEL else slug(model_name, None)
+    stem = f"{prefix}_{model_key}{suffix}"
     return STAGE_F_DIR / f"{stem}.parquet", STAGE_F_DIR / f"{stem}_metrics.json"
 
 
@@ -139,7 +142,7 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0,
             "asymmetry_vs_floor": _asymmetry_vs_floor(mean_df),
             "flip_override": _flip_override(mean_df),
         }
-    _, metrics_path = _artifact_paths(score_mode, text_only=False)
+    _, metrics_path = _artifact_paths(score_mode, text_only=False, model_name=model_name)
     save_json(metrics, metrics_path)
 
     print(f"\nStage F [LLaVA: {model_name}] — {metrics['n_images']} images, {len(df)} rows "
@@ -222,7 +225,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
                          **readout_columns})
 
     df = pd.DataFrame(rows)
-    out_pq, _ = _artifact_paths(score_mode, text_only=False)
+    out_pq, _ = _artifact_paths(score_mode, text_only=False, model_name=model_name)
     df.to_parquet(out_pq)
     metrics = _analyze_and_print(df, model_name, multi=multi, n_skipped=n_skip,
                                  score_mode=score_mode)
@@ -232,16 +235,17 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
     return metrics
 
 
-def reanalyze(config_path: str, score_mode: str = "first-subtoken") -> dict:
+def reanalyze(config_path: str, model_name: str = DEFAULT_MODEL,
+              score_mode: str = "first-subtoken") -> dict:
     ensure_dirs()
-    pq, mpath = _artifact_paths(score_mode, text_only=False)
+    pq, mpath = _artifact_paths(score_mode, text_only=False, model_name=model_name)
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run the LLaVA base pass first.")
     previous = load_config(mpath) if mpath.exists() else {}
-    model_name = previous.get("model", "unknown")
+    recorded_model = previous.get("model", model_name)
     return _analyze_and_print(
         pd.read_parquet(pq),
-        model_name,
+        recorded_model,
         multi=previous.get("tokenization_multi_token", {}),
         score_mode=score_mode,
     )
@@ -285,7 +289,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
                      "text_code": TEXT_CODE[cond], "argmax_emotion": max(lp, key=lp.get),
                      **readout_columns})
     df = pd.DataFrame(rows)
-    out_pq, out_metrics = _artifact_paths(score_mode, text_only=True)
+    out_pq, out_metrics = _artifact_paths(score_mode, text_only=True, model_name=model_name)
     df.to_parquet(out_pq)
 
     neu = float(df[df["condition"] == "neutral"]["valence"].mean())
@@ -297,7 +301,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
     text_ratio = abs(ne) / abs(pe) if pe else float("nan")
 
     img_ratio = None
-    _, bpath = _artifact_paths(score_mode, text_only=False)
+    _, bpath = _artifact_paths(score_mode, text_only=False, model_name=model_name)
     if bpath.exists():
         a = load_config(bpath).get("asymmetry_vs_floor", {})
         dn, dp = a.get("drop_pos_img_neg_ctx"), a.get("congruent_pos_img_pos_ctx")
@@ -367,7 +371,7 @@ def main() -> None:
                     help="number of teacher-forced labels per forward under --score-mode sequence")
     args = ap.parse_args()
     if args.reanalyze:
-        reanalyze(args.config, score_mode=args.score_mode)
+        reanalyze(args.config, args.model, score_mode=args.score_mode)
     elif args.text_only:
         run_text_only(args.config, args.model, score_mode=args.score_mode,
                       label_batch_size=args.label_batch_size)
