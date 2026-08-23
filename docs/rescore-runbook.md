@@ -170,6 +170,47 @@ The probe slope should come out at ~0. That is not a bug: the probe tap (`post_a
 inside layer 18) is upstream of the `resid_post` injection at the same layer, so it is invariant to
 steering by construction. It is recorded to demonstrate that, not to score.
 
+## 7. Text-only matched-set control on Qwen (the panel's shared CRITICAL)
+
+The largest untested alternative explanation in the paper: the matched-set result may reflect the
+sentences being imbalanced in isolation rather than anything cross-modal. Appendix B currently
+reports a text-only imbalance of **1.25** for the matched set — worse than the varied set's 1.06 —
+but that figure comes from the **retracted Gemma bridge run** (`text_only_minimal.parquet`, Aug 18).
+No text-only matched-set measurement exists for Qwen at all.
+
+15 forwards, no images, seconds of GPU. `--bank` now reaches `run_text_only`, so this writes to its
+own key and cannot overwrite the full-bank control.
+
+```bash
+# the varied-set control, if it has not been run on this checkpoint
+python -m src.experiments.stage_f_token_budget --model Qwen/Qwen3-VL-8B-Instruct --text-only
+
+# the one that is actually missing
+python -m src.experiments.stage_f_token_budget --model Qwen/Qwen3-VL-8B-Instruct \
+    --text-only --bank minimal
+
+python -m src.experiments.stage_f_token_budget --aggregate   # CPU; pairs each run with its own bank
+```
+
+Writes `results/stage_f/text_only_qwen3-vl-8b-instruct_minimal{.parquet,_metrics.json}`. The runner
+compares against `conflict_qwen3-vl-8b-instruct_minimal_metrics.json` — the matched-set base run,
+not the varied-set one. Read `reference_ratio` (the raw |neg|/|pos| ratio) and the `per_base_run`
+verdict.
+
+What each outcome means:
+
+- **`STIMULUS confound (ratios match)`** — the text-only ratio lands near the image-conditioned
+  ratio. The matched-set asymmetry is a property of the six sentences, not of the conflict. This is
+  the outcome that costs the paper its strongest result, and it must be reported as such.
+- **`CROSS-MODAL amplification`** — the image inflates the ratio well past the text-only reference.
+  The control passes and the within-item contrast survives.
+- **`image dampens (reversed)`** — report it; do not fold it into either verdict above.
+
+Report the text-only mirror contrast beside the conflict one in §5 either way. Note that a ratio is
+not the mirror contrast, and the paper already warns (§3, last paragraph) that ratios can mislead on
+their own — LLaVA reaches 3.05× purely through the score's bounds. Read this control as a check on
+the stimulus set, not as a second effect size.
+
 ## Not ported: the attention analysis (§6.1, second paragraph)
 
 The $88\%$ / $3.5\%$ attention shares and the $6\%$ knockout are the one piece still on the old stack.
