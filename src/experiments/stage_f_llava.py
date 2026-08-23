@@ -7,13 +7,15 @@ all three turns "two architectures" into "the dominant VLM unification designs" 
 stronger generality claim than another checkpoint from a family already covered.
 
 Raw HuggingFace, NO TransformerBridge and NO probe (the Gemma probe lives in Gemma's activation space).
-Read-out = BEHAVIORAL VALENCE only, the closed-vocab P(positive) − P(negative) at the first answer
-token — identical to the Qwen port, so the shared CPU analyzer (`analyze_stage_f`) consumes the output
-unchanged and the numbers are directly comparable to Gemma + Qwen.
+The legacy read-out scores the first content sub-token at the first answer position. Because every
+LLaVA-1.5 emotion label spans 2--4 tokens, `--score-mode sequence` instead teacher-forces each complete
+label and sums its conditional token log probabilities. The same forwards also produce a
+content-token-mean sensitivity analysis for label-length bias. Sequence runs use distinct output
+paths, so they cannot overwrite the published first-subtoken artifacts.
 
-Reuses the model-agnostic scoring/selection from `stage_f_qwen` (valence_score, emotion_logprobs,
-emotion_token_ids, readout, select_extreme_images, _user_text); only the model load and the chat
-template are LLaVA-specific. Run in the `requirements-qwen.txt` env (recent transformers with
+Reuses the model-agnostic scoring/selection from `stage_f_qwen` (emotion_token_ids, readout,
+select_extreme_images, _user_text); only the model load and the chat template are LLaVA-specific.
+Run in the `requirements-qwen.txt` env (recent transformers with
 `AutoModelForImageTextToText` + llava-hf support). Needs the EMOTIC test parquet staged.
 
   base        — 75 high + 75 low EMOTIC-valence images × full context bank → override rate + asymmetry.
@@ -35,10 +37,47 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
-from .stage_f_qwen import (_user_text, emotion_logprobs, emotion_token_ids, readout,
-                           select_extreme_images, valence_score)
+from .multitoken_scoring import score_label_sequences
+from .stage_f_qwen import _user_text, emotion_token_ids, readout, select_extreme_images
 
 DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
+
+
+def _artifact_paths(score_mode: str, *, text_only: bool):
+    if score_mode not in {"first-subtoken", "sequence"}:
+        raise ValueError(f"unknown score mode: {score_mode}")
+    prefix = "text_only" if text_only else "conflict"
+    suffix = "" if score_mode == "first-subtoken" else "_sequence"
+    stem = f"{prefix}_llava{suffix}"
+    return STAGE_F_DIR / f"{stem}.parquet", STAGE_F_DIR / f"{stem}_metrics.json"
+
+
+def _sequence_columns(result: dict) -> dict:
+    summed = result["sequence_sum"]
+    mean = result["content_mean"]
+    columns = {"valence": summed["valence"], "valence_content_mean": mean["valence"]}
+    for label in EMOTION_LABELS:
+        columns[f"lp_{label}"] = summed["logprobs"][label]
+        columns[f"lp_content_mean_{label}"] = mean["logprobs"][label]
+        columns[f"score_sequence_sum_{label}"] = summed["scores"][label]
+        columns[f"score_content_mean_{label}"] = mean["scores"][label]
+    return columns
+
+
+def _content_mean_frame(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    out["valence"] = out["valence_content_mean"]
+    for label in EMOTION_LABELS:
+        out[f"lp_{label}"] = out[f"lp_content_mean_{label}"]
+    return out
+
+
+def _pad_token_id(processor) -> int:
+    tok = processor.tokenizer
+    pad = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
+    if pad is None:
+        raise ValueError("tokenizer defines neither pad_token_id nor eos_token_id")
+    return int(pad)
 
 
 def _conditions():
@@ -76,7 +115,8 @@ def build_inputs(processor, image, context_sentence):
 
 
 # --------------------------------------------------------------------------- analysis (shared metrics)
-def _analyze_and_print(df, model_name, multi=None, n_skipped=0) -> dict:
+def _analyze_and_print(df, model_name, multi=None, n_skipped=0,
+                       score_mode: str = "first-subtoken") -> dict:
     """Compute + save + print the override rate (primary) and graded asymmetry (secondary).
 
     Uses the SHARED `analyze_stage_f` metrics so LLaVA lands in the same table as Gemma + Qwen. Also
@@ -86,15 +126,26 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0) -> dict:
     asym = _asymmetry_vs_floor(df) if len(df) else {}
     flip = _flip_override(df) if len(df) else {}
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
+               "score_mode": score_mode,
+               "score_rule": ("sum of teacher-forced conditional token log probabilities"
+                              if score_mode == "sequence" else "first content sub-token"),
                "read_out": "behavioral_valence", "n_images": int(df["image_path"].nunique()) if len(df) else 0,
                "n_skipped": n_skipped, "n_rows": int(len(df)),
                "asymmetry_vs_floor": asym, "flip_override": flip, "tokenization_multi_token": multi or {}}
-    save_json(metrics, STAGE_F_DIR / "conflict_llava_metrics.json")
+    if score_mode == "sequence" and len(df):
+        mean_df = _content_mean_frame(df)
+        metrics["sensitivity_content_mean"] = {
+            "score_rule": "mean conditional log probability over content tokens after shared prefix",
+            "asymmetry_vs_floor": _asymmetry_vs_floor(mean_df),
+            "flip_override": _flip_override(mean_df),
+        }
+    _, metrics_path = _artifact_paths(score_mode, text_only=False)
+    save_json(metrics, metrics_path)
 
     print(f"\nStage F [LLaVA: {model_name}] — {metrics['n_images']} images, {len(df)} rows "
           f"({n_skipped} skipped). Read-out: behavioral valence.")
     if multi:
-        print(f"  multi-token labels (first sub-token scored): {list(multi)}")
+        print(f"  multi-token labels ({metrics['score_rule']}): {list(multi)}")
     print("  RAW mean valence per cell (does the image move it?):")
     for grp in ("positive", "negative"):
         g = df[df["image_group"] == grp]
@@ -110,19 +161,38 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0) -> dict:
         print(f"  [graded valence] |drop|-|rise| {asym['asymmetry_index']:+.3f} "
               f"CI [{asym['asymmetry_ci95'][0]:+.3f},{asym['asymmetry_ci95'][1]:+.3f}]  head-room pull "
               f"drop {asym['headroom_norm_pull_drop']:.2f} vs rise {asym['headroom_norm_pull_rise']:.2f}")
+    sensitivity = metrics.get("sensitivity_content_mean")
+    if sensitivity:
+        sa = sensitivity["asymmetry_vs_floor"]
+        sf = sensitivity["flip_override"]
+        print("  [content-mean sensitivity]")
+        if sf:
+            print(f"    override gap {sf['dominance_gap']:+.1%}  CI "
+                  f"[{sf['dominance_gap_ci95'][0]:+.1%},{sf['dominance_gap_ci95'][1]:+.1%}]")
+        if sa:
+            print(f"    mirror contrast {sa['asymmetry_index']:+.3f}  CI "
+                  f"[{sa['asymmetry_ci95'][0]:+.3f},{sa['asymmetry_ci95'][1]:+.3f}]")
     return metrics
 
 
 # --------------------------------------------------------------------------- base pass
-def run_base(config_path: str, model_name: str, limit_override: int | None = None) -> dict:
+def run_base(config_path: str, model_name: str, limit_override: int | None = None,
+             score_mode: str = "first-subtoken", label_batch_size: int = 4) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     n_images = limit_override or int(cfg.get("n_images", 150))
     sel = select_extreme_images(n_images)
     model, processor = load_llava(model_name)
-    tok_ids = emotion_token_ids(processor)
-    multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
-             if not r["single_token"]}
+    token_report = verify_label_tokenization(processor.tokenizer)
+    multi = {w: r for w, r in token_report.items() if not r["single_token"]}
+    if score_mode == "sequence":
+        tok_ids = None
+        label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
+        pad_token_id = _pad_token_id(processor)
+    else:
+        tok_ids = emotion_token_ids(processor)
+        label_ids = None
+        pad_token_id = None
 
     rows, n_skip = [], 0
     for _, r in tqdm(list(sel.iterrows()), desc="stage-f llava base"):
@@ -132,49 +202,91 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
             n_skip += 1
             continue
         for cond, cid, sentence in _conditions():
-            val, lp = readout(model, build_inputs(processor, img, sentence), tok_ids)
+            inputs = build_inputs(processor, img, sentence)
+            if score_mode == "sequence":
+                scored = score_label_sequences(
+                    model,
+                    inputs,
+                    label_ids,
+                    pad_token_id=pad_token_id,
+                    label_batch_size=label_batch_size,
+                )
+                readout_columns = _sequence_columns(scored)
+            else:
+                val, lp = readout(model, inputs, tok_ids)
+                readout_columns = {"valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}}
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
                          "context": sentence or "", "text_code": TEXT_CODE[cond],
                          "probe_readout": float("nan"),  # no probe on LLaVA; column kept for schema
-                         "valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
+                         **readout_columns})
 
     df = pd.DataFrame(rows)
-    out_pq = STAGE_F_DIR / "conflict_llava.parquet"
+    out_pq, _ = _artifact_paths(score_mode, text_only=False)
     df.to_parquet(out_pq)
-    metrics = _analyze_and_print(df, model_name, multi=multi, n_skipped=n_skip)
+    metrics = _analyze_and_print(df, model_name, multi=multi, n_skipped=n_skip,
+                                 score_mode=score_mode)
     print(f"  data -> {out_pq}")
-    print(f"  NEXT: python -m src.experiments.stage_f_llava --text-only --model {model_name}")
+    print(f"  NEXT: python -m src.experiments.stage_f_llava --text-only --model {model_name} "
+          f"--score-mode {score_mode}")
     return metrics
 
 
-def reanalyze(config_path: str) -> dict:
+def reanalyze(config_path: str, score_mode: str = "first-subtoken") -> dict:
     ensure_dirs()
-    pq = STAGE_F_DIR / "conflict_llava.parquet"
+    pq, mpath = _artifact_paths(score_mode, text_only=False)
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run the LLaVA base pass first.")
-    mpath = STAGE_F_DIR / "conflict_llava_metrics.json"
-    model_name = load_config(mpath).get("model", "unknown") if mpath.exists() else "unknown"
-    return _analyze_and_print(pd.read_parquet(pq), model_name)
+    previous = load_config(mpath) if mpath.exists() else {}
+    model_name = previous.get("model", "unknown")
+    return _analyze_and_print(
+        pd.read_parquet(pq),
+        model_name,
+        multi=previous.get("tokenization_multi_token", {}),
+        score_mode=score_mode,
+    )
 
 
 # --------------------------------------------------------------------------- text-only control
-def run_text_only(config_path: str, model_name: str) -> dict:
+def run_text_only(config_path: str, model_name: str, score_mode: str = "first-subtoken",
+                  label_batch_size: int = 4) -> dict:
     load_config(config_path)
     ensure_dirs()
     model, processor = load_llava(model_name)
-    tok_ids = emotion_token_ids(processor)
-    multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
-             if not r["single_token"]}
+    token_report = verify_label_tokenization(processor.tokenizer)
+    multi = {w: r for w, r in token_report.items() if not r["single_token"]}
+    if score_mode == "sequence":
+        tok_ids = None
+        label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
+        pad_token_id = _pad_token_id(processor)
+    else:
+        tok_ids = emotion_token_ids(processor)
+        label_ids = None
+        pad_token_id = None
 
     rows = []
     for cond, cid, sentence in _conditions():
-        val, lp = readout(model, build_inputs(processor, None, sentence), tok_ids)  # image=None
+        inputs = build_inputs(processor, None, sentence)
+        if score_mode == "sequence":
+            scored = score_label_sequences(
+                model,
+                inputs,
+                label_ids,
+                pad_token_id=pad_token_id,
+                label_batch_size=label_batch_size,
+            )
+            readout_columns = _sequence_columns(scored)
+            val = readout_columns["valence"]
+            lp = {label: readout_columns[f"lp_{label}"] for label in EMOTION_LABELS}
+        else:
+            val, lp = readout(model, inputs, tok_ids)
+            readout_columns = {"valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}}
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
-                     "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": max(lp, key=lp.get),
-                     **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
+                     "text_code": TEXT_CODE[cond], "argmax_emotion": max(lp, key=lp.get),
+                     **readout_columns})
     df = pd.DataFrame(rows)
-    df.to_parquet(STAGE_F_DIR / "text_only_llava.parquet")
+    out_pq, out_metrics = _artifact_paths(score_mode, text_only=True)
+    df.to_parquet(out_pq)
 
     neu = float(df[df["condition"] == "neutral"]["valence"].mean())
     pe = float((df[df["condition"] == "positive"]["valence"] - neu).mean())
@@ -185,22 +297,42 @@ def run_text_only(config_path: str, model_name: str) -> dict:
     text_ratio = abs(ne) / abs(pe) if pe else float("nan")
 
     img_ratio = None
-    bpath = STAGE_F_DIR / "conflict_llava_metrics.json"
+    _, bpath = _artifact_paths(score_mode, text_only=False)
     if bpath.exists():
         a = load_config(bpath).get("asymmetry_vs_floor", {})
         dn, dp = a.get("drop_pos_img_neg_ctx"), a.get("congruent_pos_img_pos_ctx")
         if dn is not None and dp:
             img_ratio = abs(dn) / abs(dp)
 
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "neutral_baseline": neu,
+    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
+               "score_mode": score_mode,
+               "score_rule": ("sum of teacher-forced conditional token log probabilities"
+                              if score_mode == "sequence" else "first content sub-token"),
+               "neutral_baseline": neu,
                "pos_effect": pe, "neg_effect": ne, "pos_raw": pr, "neg_raw": nr,
                "text_only_ratio_vs_neutral": text_ratio, "text_only_ratio_raw": raw_ratio,
                "image_conditioned_ratio": img_ratio, "tokenization_multi_token": multi}
-    save_json(metrics, STAGE_F_DIR / "text_only_llava_metrics.json")
+    if score_mode == "sequence":
+        mean_df = _content_mean_frame(df)
+        mneu = float(mean_df[mean_df["condition"] == "neutral"]["valence"].mean())
+        mpe = float((mean_df[mean_df["condition"] == "positive"]["valence"] - mneu).mean())
+        mne = float((mean_df[mean_df["condition"] == "negative"]["valence"] - mneu).mean())
+        mpr = float(mean_df[mean_df["condition"] == "positive"]["valence"].mean())
+        mnr = float(mean_df[mean_df["condition"] == "negative"]["valence"].mean())
+        metrics["sensitivity_content_mean"] = {
+            "neutral_baseline": mneu,
+            "pos_effect": mpe,
+            "neg_effect": mne,
+            "pos_raw": mpr,
+            "neg_raw": mnr,
+            "text_only_ratio_vs_neutral": abs(mne) / abs(mpe) if mpe else float("nan"),
+            "text_only_ratio_raw": abs(mnr) / abs(mpr) if mpr else float("nan"),
+        }
+    save_json(metrics, out_metrics)
 
-    print(f"\nStage F [LLaVA: {model_name}] text-only — {len(rows)} forwards (no images).")
+    print(f"\nStage F [LLaVA: {model_name}] text-only — {len(rows)} contexts (no images).")
     if multi:
-        print(f"  multi-token labels (first sub-token scored): {list(multi)}")
+        print(f"  multi-token labels ({metrics['score_rule']}): {list(multi)}")
     print("  per-context (no image): valence | argmax emotion")
     for _, r in df.iterrows():
         print(f"    {r['context_id']:5s} {r['valence']:+6.3f}  {r['argmax_emotion']:9s}  \"{r['context'][:42]}\"")
@@ -214,7 +346,11 @@ def run_text_only(config_path: str, model_name: str) -> dict:
         print(f"  image-conditioned |neg|/|pos| = {img_ratio:.2f}  vs raw text-only {ref:.2f}  →  {verdict}")
     else:
         print("  (run the base pass first to auto-compare against the image-conditioned ratio)")
-    print(f"  data -> {STAGE_F_DIR/'text_only_llava.parquet'}")
+    if "sensitivity_content_mean" in metrics:
+        m = metrics["sensitivity_content_mean"]
+        print(f"  content-mean sensitivity: pos {m['pos_raw']:+.3f}  neg {m['neg_raw']:+.3f}  "
+              f"raw |neg|/|pos| = {m['text_only_ratio_raw']:.2f}")
+    print(f"  data -> {out_pq}")
     return metrics
 
 
@@ -225,13 +361,19 @@ def main() -> None:
     ap.add_argument("--text-only", action="store_true", help="run the image-ablated context control")
     ap.add_argument("--reanalyze", action="store_true", help="recompute metrics from the saved parquet (CPU)")
     ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count (base pass)")
+    ap.add_argument("--score-mode", choices=("first-subtoken", "sequence"), default="first-subtoken",
+                    help="legacy first-content-token scoring or full teacher-forced label sequences")
+    ap.add_argument("--label-batch-size", type=int, default=4,
+                    help="number of teacher-forced labels per forward under --score-mode sequence")
     args = ap.parse_args()
     if args.reanalyze:
-        reanalyze(args.config)
+        reanalyze(args.config, score_mode=args.score_mode)
     elif args.text_only:
-        run_text_only(args.config, args.model)
+        run_text_only(args.config, args.model, score_mode=args.score_mode,
+                      label_batch_size=args.label_batch_size)
     else:
-        run_base(args.config, args.model, limit_override=args.limit)
+        run_base(args.config, args.model, limit_override=args.limit, score_mode=args.score_mode,
+                 label_batch_size=args.label_batch_size)
 
 
 if __name__ == "__main__":
