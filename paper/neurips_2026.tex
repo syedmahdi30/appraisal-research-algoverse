@@ -106,11 +106,19 @@ Two choices matter for interpreting the results. First, we measure every effect 
 \paragraph{Models.}
 We evaluate four VLMs spanning distinct vision-language designs. \qwen{} (native dynamic-resolution ViT) is our primary behavioral model: it is the only one of the four that weights the two cues comparably, so its conflict results are not confounded by it under-using one modality. \gemma{} (34 layers, $d_{\text{model}}{=}2560$; SigLIP vision tower pooled to 256 image tokens) is our primary \emph{mechanism} model, because the frozen text-trained probe of \S\ref{sec:foundations} was fit on its activations. \llava{} (frozen CLIP ViT through a linear projector, unpooled patch tokens) and \llavanext{} (the same projector family at a much larger token budget) complete the comparison. All models are run in bf16 through the standard HuggingFace implementation, with no intermediate wrapper. All measurements are single forward passes; nothing is generated. Compute details are in Appendix~\ref{app:compute}.
 
-\paragraph{Behavioral readouts.}
-We read the model's judgment from the probabilities it assigns to 13 emotion words at the last prompt token (\emph{joy}, \emph{sadness}, \emph{fear}, and others listed in Appendix~\ref{app:contexts}). \emph{Behavioral valence} is $P(\text{positive labels}) - P(\text{negative labels})$, a graded score in $[-1, 1]$. For comparisons across models, we also use the \emph{override rate}: the fraction of conflict trials in which the top emotion label follows the text rather than the image. This categorical measure is easier to compare across models because each model uses the bounded valence scale differently. When a score is near its floor or ceiling, we also divide the shift by the remaining room in that direction. We interpret only relative shifts; repeating the analysis with an unbounded difference between positive and negative logits remains future work (\S\ref{sec:limitations}).
+\paragraph{How we measure the model's answer.}
+We never sample text. We read the model's judgment from the probabilities it assigns to 13 emotion words at the last prompt token (\emph{joy}, \emph{sadness}, \emph{fear}, and the rest listed in Appendix~\ref{app:contexts}), and summarize those probabilities three ways. Each is defined here and used consistently for the rest of the paper.
+
+\begin{itemize}
+  \item \textbf{Override rate.} The fraction of conflict trials on which the single most probable emotion word matches the \emph{text}'s valence rather than the \emph{image}'s. Categorical, so it is comparable across models that use a graded scale differently.
+  \item \textbf{Valence score.} $P(\text{positive words}) - P(\text{negative words})$, a graded number in $[-1, 1]$. Sensitive to how far a cue moves the judgment, but compressed near its ends.
+  \item \textbf{Log-odds score.} $\log P(\text{positive words}) / P(\text{negative words})$. The same comparison without the bounds, so a shift near the extremes is not flattened.
+\end{itemize}
+
+We report all three throughout rather than choosing one, because they do not always agree and the disagreement is informative (\S\ref{sec:models}). Two derived quantities recur, and we name them here since they are our own shorthand rather than standard terms. The \textbf{mirror contrast} is how much further a negative sentence pulls a positive image than a positive sentence pulls a negative image --- the asymmetry itself, in whichever units the underlying score uses. The \textbf{within-item contrast} is the same comparison holding the photograph and the described event fixed, so that only the valence word differs (\S\ref{sec:minimal}).
 
 \paragraph{Internal readout.}
-Alongside behavior, we read the model's internal state with a linear \emph{pleasantness} probe. Following \citet{tak2025}, we train a ridge regression on text-only activations from crowd-enVENT \citep{troiano2023} at the last token of \texttt{attn\_out} layer 18. We then freeze the probe and apply it to image inputs without re-fitting it. Its performance under image input therefore tests whether a text-learned readout transfers across modalities. The probe tracks EMOTIC ground-truth valence at $\rho = 0.510$ (\S\ref{sec:foundations}). We call the feature it reads \emph{valence-sensitive}, rather than claiming it is the model's only valence representation. The probe direction can read valence but cannot steer it; a difference-of-means direction in the same activation space can.
+Alongside behavior, we read the model's internal state with a linear \emph{pleasantness} probe. Linear probes are a standard tool for testing what a representation makes linearly available \citep{alain2016}; we follow \citet{tak2025}'s appraisal-probe setup specifically, training a ridge regression on text-only activations from crowd-enVENT \citep{troiano2023} at the last token of the layer-18 attention output. We then freeze the probe and apply it to image inputs without re-fitting it. Its performance under image input therefore tests whether a text-learned readout transfers across modalities. The probe tracks EMOTIC ground-truth valence at $\rho = 0.510$ (\S\ref{sec:foundations}). We call the feature it reads \emph{valence-sensitive}, rather than claiming it is the model's only valence representation. Reading and steering need different objects: the probe direction can read valence but does not move it, whereas the difference between the mean activation of high- and low-valence examples does. That contrast --- a linear direction estimated as a difference of class means and then added back into the residual stream --- is the standard construction in the steering literature \citep{turner2023, zou2023, marks2023, li2023iti, rimsky2024, arditi2024}. We adopt it unchanged; our contribution is to estimate the direction on \emph{text} and apply it under \emph{image} input, not the technique itself.
 
 \section{Reading and steering valence across modalities}
 \label{sec:foundations}
@@ -121,40 +129,24 @@ Before studying conflicts, we establish a cross-modal valence readout and show t
 
 \textbf{Second, the probe transfers to images.} Applied unchanged to image-conditioned activations, it tracks EMOTIC valence at Spearman $\rho = +0.510$ ($n{=}7{,}280$ images scored; polarity AUC $0.912$ on the 440 single-label polar images) and beats all 100 norm-matched random directions ($p{=}0.010$). After accounting for neutral and detailed captions, the image readout still explains unique variation in valence (semipartial $\rho = +0.201$, $p{<}0.001$). Thus, ordinary captioning does not fully explain the transferred signal.
 
-\textbf{Third, a text-derived direction changes image-conditioned behavior.} We estimate the mean activation difference between high- and low-pleasantness text examples and inject that direction at layer 18 under image input. Behavioral valence moves monotonically with the intervention (slope $+0.336$), about $9.6\times$ the norm-matched random control ($-0.035$) and $4.3\times$ the non-valence specificity control ($-0.078$). Together, these results support a valence-sensitive activation space that both modalities can influence. They do not imply that vision and language use the same upstream computation \citep{nikankin2025}.
+\textbf{Third, a text-derived direction changes image-conditioned behavior.} Following the difference-of-means construction described above \citep{turner2023, marks2023, arditi2024}, we estimate the mean activation difference between high- and low-pleasantness text examples and add that direction into the residual stream at layer 18 under image input. Behavioral valence moves monotonically with the intervention (slope $+0.336$), about $9.6\times$ the norm-matched random control ($-0.035$) and $4.3\times$ the non-valence specificity control ($-0.078$). Together, these results support a valence-sensitive activation space that both modalities can influence. They do not imply that vision and language use the same upstream computation \citep{nikankin2025}.
 
 \section{Valence-asymmetric conflict resolution}
 \label{sec:conflict}
 
-\subsection{Do both cues matter? Integration across four models}
+\subsection{Both cues matter, but not equally}
 \label{sec:integration}
 
-Before asking which cue wins, we check that both cues affect the model. We regress behavioral valence on image valence and context polarity after standardizing both predictors, using only conditions that contain a sentence (Table~\ref{tab:integration}).
+Before asking which cue wins, we check that both cues affect the model at all. Regressing the valence score on image valence and context polarity, with both predictors standardized and using only trials that contain a sentence, gives positive weights for both in all four models: none of them ignores a modality, so the conflicts below are genuine competitions rather than one cue being unread.
 
-Both predictors carry the expected sign in every model, so no model ignores a modality. They differ sharply in balance. \qwen{} is the only model that weights text slightly above image ($|\betatxt|/|\betaimg| = 1.14$); the other three are image-led, at $0.44$ to $0.55$. This matters for interpretation: an override asymmetry in an image-led model is harder to read, because the text is starting from a weaker position. \qwen{} is therefore our primary behavioral model --- its asymmetry cannot be explained by it under-using the image. This balance applies only to the affective task studied here.
-
-\begin{table}[t]
-  \caption{Modality integration under conflict (full bank, sentence-bearing conditions only). Both cues act in the expected direction in every model. Only \qwen{} weights them comparably; the rest are image-led.}
-  \label{tab:integration}
-  \centering
-  \begin{tabular}{lrrr}
-    \toprule
-    Model & $\betaimg$ & $\betatxt$ & $|\betatxt|/|\betaimg|$ \\
-    \midrule
-    \qwen{}      & $+0.510$ & $+0.584$ & $\mathbf{1.14}$ \\
-    \gemma{}     & $+0.723$ & $+0.321$ & $0.44$ \\
-    \llavanext{} & $+0.828$ & $+0.364$ & $0.44$ \\
-    \llava{}     & $+0.749$ & $+0.414$ & $0.55$ \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+The models differ in balance, and the difference matters for interpretation. \qwen{} weights the text slightly above the image ($|\betatxt|/|\betaimg| = 1.14$); the other three are image-led, between $0.44$ and $0.55$ (last row of Table~\ref{tab:models}). An override asymmetry is harder to read in an image-led model, because the text starts from a weaker position. \qwen{} is therefore our primary model for the behavioral results: whatever asymmetry it shows cannot be explained by it under-using the image. This balance is a property of the affective task studied here, not a general claim about these models.
 
 \subsection{The asymmetry: the full factorial picture}
 \label{sec:asymmetry}
 
 Table~\ref{tab:factorial} reports every combination of image and context polarity for \qwen{}. Our primary comparison is between the two conflict conditions. A negative sentence moves positive-image judgments by $-1.156$. The reverse conflict, a positive sentence on negative images, moves judgments by $+0.762$. We call the difference between these magnitudes the \emph{mirror contrast}. Computed per image against that image's own neutral baseline and then averaged, it is $+0.409$ (bootstrap 95\% CI clustered over images $[+0.230, +0.588]$). Taking it instead as the difference of the cell means in Table~\ref{tab:factorial} gives $+0.394$; we report the per-image form throughout because it is the quantity the confidence intervals are computed on.
 
-Negative images begin closer to the lower bound of the score, so they have less room to move. We account for this by dividing each shift by the available room in that direction. The normalized pulls remain unequal ($0.714$ vs.\ $0.394$, difference $+0.320$), so the result is not produced by the score's lower bound. The categorical result agrees: negative context overrides a positive image on $76\%$ of trials, whereas positive context overrides a negative image on $37\%$, a gap of $+39\%$ (95\% CI clustered over images $[+30, +49]$).
+Negative images start closer to the bottom of the valence scale, so they have less room to move; the asymmetry could in principle be that geometry rather than an effect of valence. The log-odds score removes the bounds entirely, and the asymmetry does not vanish under it (\S\ref{sec:models}). Appendix~\ref{app:headroom} reports a second, cruder correction that divides each shift by the room remaining in its direction, and reaches the same conclusion. The categorical result agrees: negative context overrides a positive image on $76\%$ of trials, whereas positive context overrides a negative image on $37\%$, a gap of $+39\%$ (95\% CI clustered over images $[+30, +49]$).
 
 Figure~\ref{fig:conflict} shows this pattern against \llava{}, where the same two conflict directions are symmetric. A second comparison uses only positive images. On these, negative and positive contexts differ by $3.64\times$ in their distance from neutral ($-1.156$ vs.\ $+0.317$). This ratio compares a conflicting context with an \emph{agreeing} context on the same image; it is not the mirror contrast, and we report it separately. On its own it can mislead: \llava{} reaches $3.05\times$ purely through the score's bounds even though its mirror contrast is null (\S\ref{sec:models}). We therefore never use this ratio as evidence on its own.
 
@@ -172,8 +164,8 @@ Figure~\ref{fig:conflict} shows this pattern against \llava{}, where the same tw
   \end{tabular}
 \end{table}
 
-\paragraph{A caveat that applies to every number in this subsection.}
-The confidence intervals above are clustered over images, which treats the six sentences per polarity as fixed. Resampling sentences as well (\S\ref{sec:models}, Table~\ref{tab:models}) widens \qwen{}'s mirror-contrast interval to $[-0.16, +0.91]$, which includes zero; its override gap survives at $[+6, +67]$. With six sentences per polarity the design is well powered for generalization across images and weakly powered for generalization across sentences, because resampling six \emph{unrelated events} perturbs the estimate heavily. The token-matched bank of \S\ref{sec:minimal} removes that event variance and recovers a crossed interval excluding zero on both the override gap and the mirror contrast. We report both intervals everywhere rather than choosing the narrower one.
+\paragraph{Which sources of variation the intervals cover.}
+The confidence intervals above are clustered over photographs, which treats the six sentences per polarity as a fixed set. Treating stimulus items as fixed when one intends to generalize over them is a long-recognized error --- \citet{clark1973} named it the language-as-fixed-effect fallacy, and it remains the standard argument for modeling items and subjects as crossed random effects \citep{baayen2008, westfall2014}. Our contexts are exactly such items: we want claims about negative \emph{sentences}, not about these six. Resampling sentences as well (\S\ref{sec:models}, Table~\ref{tab:models}) widens \qwen{}'s mirror-contrast interval to $[-0.16, +0.91]$, which includes zero; its override gap survives at $[+6, +67]$. With six sentences per polarity the design is well powered for generalization across images and weakly powered for generalization across sentences, because resampling six \emph{unrelated events} perturbs the estimate heavily. The token-matched bank of \S\ref{sec:minimal} removes that event variance and recovers a crossed interval excluding zero on both the override gap and the mirror contrast. We report both intervals everywhere rather than choosing the narrower one.
 
 \subsection{Valence, not event semantics: token-matched minimal pairs}
 \label{sec:minimal}
@@ -195,7 +187,6 @@ We therefore built six \emph{minimal pairs}. Each pair uses the same sentence an
     \quad photo-clustered / crossed & $[+29.5,+49.0]$ / $[+6.4,+66.5]$ & $[+31.3,+49.0]$ / $\mathbf{[+16.7,+63.2]}$ \\
     Mirror contrast $|$drop$|-|$rise$|$ & $+0.409$ & $+0.496$ \\
     \quad photo-clustered / crossed & $[+0.23,+0.59]$ / $[-0.16,+0.91]$ & $[+0.31,+0.67]$ / $\mathbf{[+0.11,+0.83]}$ \\
-    Head-room-normalized pull (drop / rise) & $0.714$ / $0.394$ & $0.924$ / $0.518$ \\
     $|\betatxt|/|\betaimg|$ & $1.14$ & $1.97$ \\
     \bottomrule
   \end{tabular}
@@ -248,17 +239,10 @@ Two caveats. Ratios on a bounded scale are inflated when the positive member has
 \section{Mechanism: where the two signals travel}
 \label{sec:mechanism}
 
-\subsection{The difference emerges in the middle layers}
-\label{sec:layerwise}
-
-Where in the network do positive- and negative-context runs begin to differ? At each layer we project the last-token state onto the frozen probe direction, and summarize the gap between the two context polarities as a paired effect size over images, $d(L)$, which removes the growth in residual-stream norm with depth.
-
-The separation first clears the pre-divergence noise floor at layer 12 of 34, and it arrives already large: $|d| = 3.9$ there, against a floor set at three times the median absolute separation over the first eight layers. It does not then amplify --- $|d|$ is $2.0$ at the readout layer 18 and $3.0$ at layer 28, with no late peak. In \emph{raw} projection units the separation does grow by more than an order of magnitude over the same span ($-0.39$ at layer 12 to $-6.27$ at layer 28), but that growth tracks the residual-stream norm rather than the consistency of the effect, which is why we report the scale-free form. We therefore locate the entry of the context signal in the mid band and make no claim that it strengthens with depth. This shows where the difference becomes legible to this probe; it does not show where the signal is created.
-
-The context's effect on the final token need not be direct: the final token could read the context words itself, or the context could first reshape other token positions that the final token then reads. The next experiment settles this causally.
-
 \subsection{Same-image patching: where the context-polarity signal is carried}
 \label{sec:patching}
+
+Before asking \emph{where} the context signal is carried, we located \emph{when} it appears. Projecting the last-token state onto the frozen probe direction at every layer, the gap between positive- and negative-context runs first clears the noise of the early layers around layer 12 of 34, and is already a large, consistent effect there (Appendix~\ref{app:layerwise}). We therefore intervene just downstream of that, over layers 13--17.
 
 Which token positions carry the context's valence signal? We hold the image constant and compare a positive-context run with a negative-context run. For one group of token positions at a time, we replace the negative-context activations over layers 13--17 with the corresponding activations from the positive-context run. We then measure how much the readout moves toward the positive-context value. The final token whose state we score is excluded from every patched group, so the experiment does not recover the answer by directly replacing that state. The result repeats across two context pairs (Table~\ref{tab:patching}); Appendix~\ref{app:patching} gives the full method.
 
@@ -319,7 +303,7 @@ The same downstream text states can therefore carry information about both the c
 
 Is the asymmetry a property of VLMs in general, or of particular designs? We run the same conflict experiment on four ways of connecting vision to language. \qwen{} uses a native vision transformer accepting varying resolutions. \gemma{} pools its SigLIP output to 256 image tokens. \llava{} passes unpooled patches from a frozen CLIP tower through a linear projection. \llavanext{} uses that same linear-projector design at a far larger token budget (2{,}147 image tokens).
 
-Because each model uses the bounded valence scale differently, no single readout is neutral. We therefore report three: the categorical \emph{override rate} (\S\ref{sec:setup}), the bounded \emph{mirror contrast}, and an \emph{unbounded log-odds margin}, $\log P(\text{pos})/P(\text{neg})$, which removes the scale's bounds entirely. For each we give an interval clustered over photographs and a crossed interval that resamples photographs \emph{and} context sentences (Table~\ref{tab:models}).
+Because each model uses the bounded valence scale differently, no single readout is neutral. We therefore report three: the categorical \emph{override rate} (\S\ref{sec:setup}), the bounded \emph{mirror contrast}, and an \emph{unbounded log-odds margin}, $\log P(\text{pos})/P(\text{neg})$, which removes the scale's bounds entirely. For each we give two intervals: one that resamples photographs only, and one that resamples photographs \emph{and} context sentences together, so that the sentences are treated as a sample rather than as fixed \citep{clark1973, westfall2014}. The second is the stricter test and the one that licenses claims about negative language in general (Table~\ref{tab:models}).
 
 \begin{table}[t]
   \caption{Four models $\times$ three readouts. Intervals are bootstrap 95\%; ``crossed'' resamples photographs and sentences jointly. Bold marks a crossed interval excluding zero. The asymmetry appears in three models and is absent in \llava{}; \emph{which} readout registers it depends on how each model uses the bounded scale.}
@@ -349,7 +333,7 @@ Because each model uses the bounded valence scale differently, no single readout
 
 Three results follow.
 
-\textbf{The asymmetry is present in three of four models, absent in the fourth.} \qwen{}, \llavanext{} and \gemma{} each clear zero on at least one readout under the crossed bootstrap, and their mirror contrasts are close in size ($+0.409$, $+0.413$, $+0.405$). \llava{} clears zero on none: its mirror contrast is $+0.016$ and its unbounded margin $+0.05$, both sitting essentially on zero. We describe \llava{} as a null rather than a reversal. Its negative override gap ($-12.6\%$) does not survive sentence resampling, and its two conflict directions have equal head-room-normalized shifts ($0.33/0.33$), so the apparent reversal is scale geometry.
+\textbf{The asymmetry is present in three of four models, absent in the fourth.} \qwen{}, \llavanext{} and \gemma{} each clear zero on at least one readout under the crossed bootstrap, and their mirror contrasts are close in size ($+0.409$, $+0.413$, $+0.405$). \llava{} clears zero on none: its mirror contrast is $+0.016$ and its unbounded margin $+0.05$, both sitting essentially on zero. We describe \llava{} as a null rather than a reversal. Its negative override gap ($-12.6\%$) does not survive sentence resampling, and and its two conflict directions move the judgment equally far once the room available in each direction is taken into account (Appendix~\ref{app:headroom}), so the apparent reversal is scale geometry.
 
 \textbf{No model shows it on all three readouts, and the disagreements are systematic.} \qwen{} clears only on the override rate: its bounded valence saturates at $\pm 1$, which compresses the graded readouts. \gemma{} shows the opposite pattern --- its unbounded margin is the largest of any model ($+4.64$ log-odds) while its override gap does not clear, because its positive-image baseline sits near the ceiling so a large log-odds move rarely crosses a category boundary. This is why we report all three rather than selecting one per model. It also means the size of the effect is not readout-independent, and we make no claim about its magnitude in absolute terms.
 
@@ -358,13 +342,6 @@ Three results follow.
 We therefore report the variation across models as \emph{unexplained}. Two candidate accounts have been tested and rejected; we prefer to say so rather than substitute a third. A caveat on \llavanext{}: it changes the language backbone (Mistral) relative to \llava{} (Vicuna), so backbone and token budget are not fully separated. The clean comparison, \texttt{llava-v1.6-vicuna-7b}, has not been run (\S\ref{sec:limitations}).
 
 \paragraph{Mechanism replication.} A coarse version of the patching result also replicates on \qwen{}: image tokens recover none of the context difference, while all text positions together recover $65\%$. \qwen{} spreads the information redundantly --- individual token groups recover little (question $12\%$, turn markers $6\%$) while their union recovers far more than their sum, which is not the case in \gemma{}, where the groups are close to additive (\S\ref{sec:patching}). We did not run mechanism experiments on \llava{}, where there is no asymmetry to explain.
-
-\subsection{Prompt robustness and scale}
-\label{sec:prompts}
-
-Two robustness experiments --- a six-way rephrasing sweep of the question and a within-family scale comparison from \gemma{} to \gemmabig{} --- were run on an inference stack we subsequently found computed a different multimodal forward pass from the reference implementation. Their results depended on absolute override rates, the quantity most affected, so we withdraw them rather than report them. Both are re-runs of existing code on the corrected stack and neither is conceptually novel; we report their absence rather than leaving stale numbers in place. \todo{Re-run the prompt sweep (13{,}500 forwards) and the \gemmabig{} scale comparison (2 $\times$ 2{,}250) on the corrected stack, or drop both subsections for the camera-ready.}
-
-What survives from the prompt work is the design point that motivated it: the sweep reuses a single context bank, so it could only ever establish robustness to phrasing of the \emph{question}, never to sampling of the \emph{context sentences}. The crossed intervals in Table~\ref{tab:models} address the latter directly and are the stronger control.
 
 \subsection{Steering causally shifts conflict outcomes}
 \label{sec:arbitration}
@@ -397,7 +374,7 @@ On the affect-sensitive task studied here, a single negative sentence overrides 
 
 \textbf{Statistics.} Our intervals are clustered over the 121 distinct photographs, and we additionally report crossed intervals that resample photographs and context sentences jointly (Table~\ref{tab:models}). The crossed intervals are the honest test of generalization to new sentences, and on the full bank, with six unrelated events per polarity, they are weak: no model clears zero on all three readouts there. The token-matched bank (\S\ref{sec:minimal}) addresses this directly --- removing event variance brings both the override gap and the mirror contrast to crossed intervals excluding zero, and all six pairs reproduce the effect individually. What remains unestablished is generalization beyond this \emph{style} of context sentence: every sentence in both banks follows the frame ``This photo was taken \ldots''. Widening the banks across sentence forms, not just adding more of the same frame, is the highest-value follow-up and requires no new method. One image appears in both polarity groups; removing it changes the contrast by $0.018$. All runs use a single seed.
 
-\textbf{Measurement.} Behavioral valence is bounded between $-1$ and $1$, and models use that range very differently: \qwen{} saturates it while \gemma{} sits near the ceiling on positive images. We therefore report an override rate and an unbounded log-odds margin alongside it, and we show that the three readouts do not agree about which models show the effect most strongly (\S\ref{sec:models}). We regard that disagreement as a finding about the measure rather than noise. EMOTIC labels people within images, whereas we provide the whole image without marking the target person; a rerun with marked or cropped people is the direct fix. Two subsections were measured on an inference stack we later found to compute a different multimodal forward pass, and are withdrawn rather than reported (\S\ref{sec:prompts}). Every other number in the paper was measured on the reference implementation.
+\textbf{Measurement.} Behavioral valence is bounded between $-1$ and $1$, and models use that range very differently: \qwen{} saturates it while \gemma{} sits near the ceiling on positive images. We therefore report an override rate and an unbounded log-odds margin alongside it, and we show that the three readouts do not agree about which models show the effect most strongly (\S\ref{sec:models}). We regard that disagreement as a finding about the measure rather than noise. EMOTIC labels people within images, whereas we provide the whole image without marking the target person; a rerun with marked or cropped people is the direct fix. Every number in this paper was measured through the models' standard implementations. Two further experiments --- a six-way rephrasing sweep of the question and a within-family scale comparison --- were run earlier through a wrapper library we subsequently found to compute a different multimodal forward pass from the reference implementation, and we do not report them. Both bore on absolute override rates, the quantity that discrepancy most affects. Question phrasing is therefore untested here, and is the most obvious control still missing (\S\ref{sec:conclusion}).
 
 \textbf{Scope.} We study one dataset, one task family (person-emotion labeling), one context style, and four model designs. The mechanism analysis is detailed for \gemma{} and coarse for \qwen{}. This is a real mismatch: \gemma{} carries our most detailed mechanism results while showing the weakest behavioral asymmetry of the three positive models, because the frozen text-trained probe the mechanism work depends on was fit on its activations. Replicating the full patching analysis on \qwen{} would require refitting that probe and is the natural next step. Our claims therefore concern controlled image-context emotion judgments in the tested models. Other conflict domains, tasks, and architectures remain open.
 
@@ -582,7 +559,23 @@ The readout position is the final prompt token, computed as \texttt{input\_ids.s
 \section{Prompt-variant details}
 \label{app:prompts}
 
-Withdrawn. The six-way prompt sweep was measured on the superseded inference stack and reported absolute override rates, so its numbers are not reported here (\S\ref{sec:prompts}). The six phrasings themselves are unchanged and listed in the released configuration.
+Withdrawn. The six-way prompt sweep was measured on the superseded inference stack and reported absolute override rates, so its numbers are not reported here. The six phrasings themselves are unchanged and listed in the released configuration.
+
+\section{Where in depth the context signal appears}
+\label{app:layerwise}
+
+Where in the network do positive- and negative-context runs begin to differ? At each layer we project the last-token state onto the frozen probe direction --- reading a fixed direction off every depth, in the manner of the logit lens and its successors \citep{nostalgebraist2020, belrose2023}, as a diagnostic rather than a re-fitted probe. We summarize the gap between the two context polarities as a paired effect size over images, $d(L)$, which removes the growth in residual-stream norm with depth.
+
+The separation first clears the pre-divergence noise floor at layer 12 of 34, and it arrives already large: $|d| = 3.9$ there, against a floor set at three times the median absolute separation over the first eight layers. It does not then amplify --- $|d|$ is $2.0$ at the readout layer 18 and $3.0$ at layer 28, with no late peak. In \emph{raw} projection units the separation does grow by more than an order of magnitude over the same span ($-0.39$ at layer 12 to $-6.27$ at layer 28), but that growth tracks the residual-stream norm rather than the consistency of the effect, which is why we report the scale-free form. We therefore locate the entry of the context signal in the mid band and make no claim that it strengthens with depth. This shows where the difference becomes legible to this probe; it does not show where the signal is created.
+
+The context's effect on the final token need not be direct: the final token could read the context words itself, or the context could first reshape other token positions that the final token then reads. The next experiment settles this causally.
+
+\section{Correcting for the scale's bounds}
+\label{app:headroom}
+
+The valence score is bounded in $[-1,1]$, and negative images start near its floor, so a negative sentence has less room to push them than a positive sentence has to pull them up. Two corrections are possible. The principled one is to drop the bounds: the log-odds score of \S\ref{sec:setup} does this, and is what the main text relies on. The cruder one, reported here for completeness, divides each shift by the room remaining in the direction it moves.
+
+Under that correction the asymmetry persists in \qwen{} (drop $0.714$ vs.\ rise $0.394$ on the full bank; $0.924$ vs.\ $0.518$ on the minimal-pair bank) and vanishes in \llava{} (drop $0.329$ vs.\ rise $0.332$), matching what the log-odds score shows. We prefer the log-odds score in the main text because dividing by remaining room is unstable when the denominator is small: \gemma{}'s positive-image baseline sits at $+0.905$, close enough to the ceiling that the ratio becomes meaningless. We do not report a head-room-corrected number for \gemma{} for that reason.
 
 \section{The no-context baseline confound}
 \label{app:nocontext}
@@ -627,12 +620,12 @@ For Qwen, we use raw HuggingFace hooks and behavioral-valence recovery on 60 pos
 \section{Scale details}
 \label{app:scale}
 
-Withdrawn. The \gemmabig{} comparison was measured on the superseded inference stack and reported absolute override rates (\S\ref{sec:prompts}). We do not report scale numbers.
+Withdrawn. The \gemmabig{} comparison was measured on the superseded inference stack and reported absolute override rates. We do not report scale numbers.
 
 \section{Compute}
 \label{app:compute}
 
-All experiments use inference-only forward passes in bf16 on one A100-class GPU with 40 GB of memory. They use no gradients and no generation. Each model's full-bank base run is 150 person-annotations $\times$ 15 conditions $=$ 2{,}250 forward passes, and the \qwen{} minimal-pair run is another 2{,}250; four models are run, each with a 15-pass text-only control. The conflict steering sweep is 150 incongruent cells $\times$ 7 steering strengths $=$ 1{,}050 passes. Layerwise localization is 60 positive-group images $\times$ 14 contexts $=$ 840 passes, each cached at every layer in a single forward. Same-image patching covers 60 images $\times$ 2 sentence pairs $\times$ (7 token groups $+$ 2 baselines); cross-image patching covers 60 image pairs $\times$ 3 layer bands $\times$ (6 token groups $+$ 2 baselines). The \qwen{} resolution sweep repeats the base run at three image resolutions. Counts here cover the experiments reported; the two withdrawn subsections (\S\ref{sec:prompts}) consumed a further 13{,}500 and 4{,}500 passes that we do not report results from. \todo{Add wall-clock totals per run from the session logs for camera-ready; the full project including preliminary and failed runs used more compute than the reported experiments.}
+All experiments use inference-only forward passes in bf16 on one A100-class GPU with 40 GB of memory. They use no gradients and no generation. Each model's full-bank base run is 150 person-annotations $\times$ 15 conditions $=$ 2{,}250 forward passes, and the \qwen{} minimal-pair run is another 2{,}250; four models are run, each with a 15-pass text-only control. The conflict steering sweep is 150 incongruent cells $\times$ 7 steering strengths $=$ 1{,}050 passes. Layerwise localization is 60 positive-group images $\times$ 14 contexts $=$ 840 passes, each cached at every layer in a single forward. Same-image patching covers 60 images $\times$ 2 sentence pairs $\times$ (7 token groups $+$ 2 baselines); cross-image patching covers 60 image pairs $\times$ 3 layer bands $\times$ (6 token groups $+$ 2 baselines). The \qwen{} resolution sweep repeats the base run at three image resolutions. Counts here cover the experiments reported; the two withdrawn subsections consumed a further 13{,}500 and 4{,}500 passes that we do not report results from. \todo{Add wall-clock totals per run from the session logs for camera-ready; the full project including preliminary and failed runs used more compute than the reported experiments.}
 
 % ============================================================
 \newpage
