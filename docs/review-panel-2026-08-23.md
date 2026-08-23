@@ -113,3 +113,72 @@ The Perspective seat's `[CRITICAL]` on the label partition asserted the 4/7 spli
 rate. The neutral base rates refute that directly (97% correct in both directions for three models).
 The *asymmetric baseline* problem it points at is real and serious; the *label-count* mechanism it
 proposed is not.
+
+---
+
+## Correction to finding 2, recomputed 2026-08-23 (later session)
+
+I recomputed the baseline correction from the conflict parquets. **Two things in finding 2 above are
+wrong.**
+
+**(a) The wrong baseline was used.** The panel's base rates come from `condition == "none"` — no
+context sentence at all. But the published mirror contrast baselines against `condition == "neutral"`
+(the two neutral sentences `z0`/`z1`, "This photo was taken on a weekday / indoors"), precisely
+because Appendix F shows that *any* sentence shifts the readout. Correcting the override rate against
+the no-sentence condition would introduce the very confound §3 avoids. Everything below uses the
+neutral-sentence baseline.
+
+**(b) Gemma's reported gap was wrong.** The panel listed +9.6%. The published value is **+12.2%**
+(`conflict_gemma-3-4b-it_metrics.json`, `dominance_gap` 0.1216). My raw recomputation reproduces every
+published gap and crossed interval to within bootstrap noise, so the corrected column can be trusted.
+
+Neutral-sentence argmax base rates (per image):
+
+| model | pos image reads NEG | neg image reads POS |
+|---|---|---|
+| Qwen3-VL | 20.0% | 1.3% |
+| Gemma-3-4B | 2.7% | 7.3% |
+| LLaVA-NeXT | 2.7% | 4.0% |
+| LLaVA-1.5 | 2.7% | 6.0% |
+
+Override gap, raw vs. baseline-corrected (2000 resamples, seed 0 — the published settings):
+
+| model | raw gap | photo-clustered | crossed | **corrected gap** | photo-clustered | crossed |
+|---|---|---|---|---|---|---|
+| Qwen3-VL | +39.4 | [+29,+49] | [+10,+66] | **+21.7** | [+10.9,+31.9] | [−8.6,+48.0] |
+| Gemma-3-4B | +12.2 | [+0,+24] | [−12,+37] | **+18.1** | [+7.5,+28.7] | [−5.4,+41.2] |
+| LLaVA-NeXT | +18.7 | [+7,+30] | [−2,+41] | **+20.5** | [+10.9,+30.8] | [+1.0,+41.0] |
+| LLaVA-1.5 | −12.6 | [−22,−2] | [−43,+18] | **−10.0** | [−18.7,−1.3] | [−40.4,+20.9] |
+| Qwen matched set | +40.8 | [+32,+49] | [+17,+63] | **+23.1** | [+12.6,+33.1] | [−2.6,+45.4] |
+| Qwen 128 img tok | +41.8 | | | **+25.8** | [+15.5,+36.2] | [−5.7,+52.9] |
+| Qwen 262 img tok (a) | +37.4 | | | **+20.6** | [+9.4,+30.8] | [−9.8,+46.7] |
+| Qwen 262 img tok (b) | +38.6 | | | **+20.9** | [+9.9,+31.0] | [−9.6,+47.9] |
+
+Corrected cell rates (neg-ctx override / pos-ctx override): Qwen 57.0/35.3, Gemma 40.3/22.2,
+LLaVA-NeXT 34.7/14.2, LLaVA-1.5 24.5/34.4, Qwen matched 74.2/51.1.
+
+### What this changes
+
+1. **The models converge.** +21.7 / +18.1 / +20.5 / −10.0. Three designs land within 3.6 points.
+   Qwen stops being dramatically the largest; Gemma's photo-clustered interval, which straddled zero
+   raw ([+0,+24]), now clears it ([+7.5,+28.7]). Correction *rescues* Gemma rather than deflating it —
+   it is image-led with a 7.3% neutral floor in the positive direction, which suppressed its raw gap.
+2. **The override gap stops clearing zero under sentence resampling.** Raw, Qwen's crossed interval
+   was [+10,+66] and the matched set's [+17,+63]; corrected they are [−8.6,+48.0] and [−2.6,+45.4].
+   Only LLaVA-NeXT's corrected crossed interval clears zero, marginally ([+1.0,+41.0]). Contribution
+   2's claim that on the matched set *both* the override gap and the mirror contrast clear zero under
+   resampling is **false once the override gap is baselined the same way the mirror contrast is.**
+   The mirror contrast still clears zero there ([+0.11,+0.83]); the override gap does not.
+3. **The "27 points in the opposite direction" budget argument dies.** Budget-matched Gemma (256 img
+   tokens) and Qwen (262) are +12.2 vs +39.4 raw, but +18.1 vs +21.7 corrected — a 3.6-point gap in
+   the *same* direction. The token-budget hypothesis still fails, but for the opposite reason: across
+   a 17-fold range in image tokens (128 → 2,147) and three model families, every corrected gap sits
+   between +18 and +26. Budget predicts nothing because nothing varies.
+
+### Why subtractive and not headroom-normalized
+
+The mirror contrast is defined in §3 as "computed per image against that image's own neutral baseline
+and then averaged" — subtractive, per image. The subtractive correction is the exact categorical
+analogue. Headroom division is the correction Appendix H already calls "cruder" and unstable at small
+denominators, and it is not what the graded readouts use. For the record, headroom-normalized gaps
+against the no-sentence baseline were +35.2 / +18.9 / +20.5 / −14.0.
