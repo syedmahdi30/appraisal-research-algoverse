@@ -213,3 +213,16 @@ Use the `/update-memory` skill to add entries.
   Experiment framing: Exp 1 = appraisal geometry (this work), Exp 2 = recognition vs adoption (attribution).
 - Syed open TODOs: bigger/more models overnight; ideation -> Slack (next-experiments.md); ADD the Stage D
   cross-modal steering writeup to the SHARED team doc (repo docs done, shared doc pending).
+
+## LLaVA complete-label scoring (verified 2026-08-23)
+- Verified: LLaVA-1.5's first-subtoken null is a scoring artifact. Exact teacher-forced sequence sums
+  give corrected override gap +63.9% (crossed CI +42.5% to +83.5%), bounded mirror contrast +0.673
+  (+0.452 to +0.884), and unbounded margin +1.430 (+0.776 to +2.085); all crossed intervals clear 0.
+- Verified: the sequence-sum text-only bank is balanced (raw |negative|/|positive| = 1.04), so the
+  image-conditioned effect is not explained by stronger negative sentences in isolation.
+- Avoid: treating content-token mean as a second probability rule. It is highly label-length biased
+  (r=0.926 here) and saturates LLaVA-1.5 near negative valence; keep it as a disclosed sensitivity only.
+- Decision: retract the LLaVA-1.5 null and ``three of four'' architecture claim, but wait to rewrite the
+  four-model table until LLaVA-NeXT receives the same complete-label re-score.
+- Canonical artifacts: `results/stage_f/conflict_llava_sequence{.parquet,_metrics.json}` and
+  `text_only_llava_sequence{.parquet,_metrics.json}`, produced from commit `abb831a`.

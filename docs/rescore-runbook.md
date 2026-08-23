@@ -271,6 +271,45 @@ manuscript until the sum and mean results have both been analyzed. If both remai
 boundary survives this control. If either shows an asymmetry, report the scoring-rule dependence and
 revise the cross-model conclusion rather than selecting the favorable rule.
 
+### LLaVA-NeXT complete-label re-score
+
+LLaVA-NeXT also splits every label into multiple tokenizer tokens, so its first-subtoken result must
+receive the same treatment before the four-model table is revised. Non-default models now use their
+model slug in every artifact path; this run therefore cannot overwrite the completed LLaVA-1.5 files.
+
+Start with two images and two labels per microbatch:
+
+```bash
+python -m src.experiments.stage_f_llava \
+  --model llava-hf/llava-v1.6-mistral-7b-hf \
+  --score-mode sequence --label-batch-size 2 --limit 2
+```
+
+Expect 30 rows and no skipped images in
+`conflict_llava-v1-6-mistral-7b-hf_sequence.parquet`. If that passes, run the full image experiment
+and text-only control:
+
+```bash
+python -m src.experiments.stage_f_llava \
+  --model llava-hf/llava-v1.6-mistral-7b-hf \
+  --score-mode sequence --label-batch-size 4
+
+python -m src.experiments.stage_f_llava \
+  --model llava-hf/llava-v1.6-mistral-7b-hf --text-only \
+  --score-mode sequence --label-batch-size 4
+```
+
+The corresponding metrics are
+`conflict_llava-v1-6-mistral-7b-hf_sequence_metrics.json` and
+`text_only_llava-v1-6-mistral-7b-hf_sequence_metrics.json`. CPU reanalysis must specify the model so
+it selects those paths:
+
+```bash
+python -m src.experiments.stage_f_llava \
+  --model llava-hf/llava-v1.6-mistral-7b-hf \
+  --score-mode sequence --reanalyze
+```
+
 ## Not ported: the attention analysis (§6.1, second paragraph)
 
 The $88\%$ / $3.5\%$ attention shares and the $6\%$ knockout are the one piece still on the old stack.

@@ -518,3 +518,40 @@ from the requested count.
 Every number in the paper is now measured on the reference implementation, except the two subsections
 that are withdrawn rather than reported (§7.2). The §6.1 attention-share paragraph was dropped rather
 than ported.
+
+---
+
+# LLaVA-1.5 complete-label re-score overturns the null (2026-08-23)
+
+The paper's LLaVA-1.5 result scored only the first content subtoken, even though all 13 emotion labels
+span 2--4 tokenizer tokens. Commit `abb831a` added exact teacher-forced sequence scoring. The full run
+completed on the same 150 EMOTIC person-annotations (121 distinct photographs), with 2,250 rows, no
+skipped images, and metadata exactly matching the first-subtoken parquet.
+
+| LLaVA-1.5 readout | first content subtoken | complete sequence sum |
+|---|---:|---:|
+| corrected override gap | $-10.0\%$ | **$+63.9\%$** |
+| crossed 95\% CI | $[-40.4,+20.9]\%$ | **$[+42.5,+83.5]\%$** |
+| bounded mirror contrast | $+0.016$ | **$+0.673$** |
+| crossed 95\% CI | $[-0.37,+0.42]$ | **$[+0.452,+0.884]$** |
+| unbounded margin | $+0.05$ | **$+1.430$** |
+| crossed 95\% CI | $[-1.03,+1.13]$ | **$[+0.776,+2.085]$** |
+
+The crossed intervals use the paper's 2,000-resample, seed-0 procedure and resample the 121
+photographs and six context sentences per polarity. The text-only sequence-sum control is balanced
+(raw $|\text{negative}|/|\text{positive}|=1.04$), so sentence strength in isolation does not explain
+the image-conditioned result. Stored artifacts:
+`conflict_llava_sequence{.parquet,_metrics.json}` and
+`text_only_llava_sequence{.parquet,_metrics.json}`.
+
+The content-token mean is retained only as a sensitivity diagnostic, not as a probability of the
+complete label. It strongly rewards labels with more content subtokens (length/mean-score correlation
+$r=0.926$) and pushes nearly every trial to the negative end of the bounded scale. Its raw categorical
+gap is therefore meaningless: neutral positive-image trials are already classified negative 100\% of
+the time, and neutral-baseline correction reduces that categorical gap to zero. Its graded and
+unbounded neutral-relative contrasts remain positive, but the exact sequence sum is the primary rule.
+
+**Paper consequence.** The LLaVA-1.5 null, the ``three of four'' claim, and every explanation built on
+that exception are invalid under complete-label scoring. Do not rewrite the four-model table yet:
+LLaVA-NeXT also has multi-token labels and still needs the same sequence re-score. Report scoring-rule
+dependence rather than selecting whichever readout supports the preferred architectural story.
