@@ -463,3 +463,58 @@ Limitations.
 2. The two neutral contexts are **not interchangeable**: on positive images "taken on a weekday"
    gives $+0.914$ and "taken indoors" gives $+0.344$ — a $0.57$ spread in the baseline every effect is
    measured against. We average over both; recorded as a caveat in §5.3. Neutral framing is not inert.
+
+---
+
+# Round 2 re-scores — §6.1 layerwise and §7.4 conflict steering (2026-08-23)
+
+## Steering under conflict: survives, and is substantially stronger
+
+Site verified first: $\Delta\mu$(pleasantness) norm $352.314$ vs published $352.819$, relative error
+**0.14%**. 150 incongruent cells $\times$ 7 betas.
+
+| | published (bridge) | raw HF |
+|---|---|---|
+| conflict steering slope | $+0.215$ | **$+0.335$** |
+| no-conflict slope | $+0.329$ | $+0.336$ |
+| fraction of no-conflict | $65\%$ | **$100\%$** |
+| probe slope (upstream control) | ~0 | $+0.0000$ |
+
+**The claim gets stronger, not weaker.** The paper said steering retains about two-thirds of its
+effect under conflict; on the reference implementation it retains *all* of it. Conflict does not
+attenuate the intervention at all. The published $65\%$ was bridge attenuation, not a property of the
+model. The probe slope comes out at exactly $0.0000$, confirming the injection acts downstream of the
+probe tap as claimed.
+
+## Layerwise: the entry layer replicates, the amplification does not
+
+| | published (bridge) | raw HF |
+|---|---|---|
+| entry layer | L13 | **L12** |
+| $\|d\|$ at entry | $0.21$ | **$3.93$** |
+| peak $\|d\|$ | $1.47$ at L28 | $3.93$ at **L12** |
+| amplification (peak/entry) | **$7.0\times$** | **$1.0\times$** |
+
+The entry layer reproduces (L13 → L12). The **$7\times$ amplification does not, and the reason is the
+opposite of what the numbers first suggest**: the peak effect size did not shrink, it grew
+($1.47 \to 3.93$). What changed is the effect size *at entry*, which went from $0.21$ to $3.93$ — an
+18-fold increase in consistency across images. On the reference implementation the separation is
+already a large, stable effect the moment it clears the noise floor, so there is no room left to
+amplify. The bridge run's tiny entry-layer $d$ was image-to-image noise the bridge was adding.
+
+In **raw** projection units the separation still grows over an order of magnitude ($-0.39$ at L12 to
+$-6.27$ at L28), but that tracks residual-stream norm, which is exactly why the scale-free form exists.
+
+Retract: "grows by about $7\times$ through the second half of the network and peaks near layer 28."
+Keep: the context signal enters in the mid band, around layer 12–13. The patch band of §6.2 (13–17)
+still sits immediately after entry and needs no change.
+
+Note also that "60 images" resolves to **51 distinct photographs** — the EMOTIC per-person duplication
+again. The analyzer groups on `image_path`, so the pairing is correct; only the reported $n$ differs
+from the requested count.
+
+## Status
+
+Every number in the paper is now measured on the reference implementation, except the two subsections
+that are withdrawn rather than reported (§7.2). The §6.1 attention-share paragraph was dropped rather
+than ported.
