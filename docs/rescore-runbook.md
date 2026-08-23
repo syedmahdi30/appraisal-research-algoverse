@@ -273,9 +273,13 @@ revise the cross-model conclusion rather than selecting the favorable rule.
 
 ### LLaVA-NeXT complete-label re-score
 
-LLaVA-NeXT also splits every label into multiple tokenizer tokens, so its first-subtoken result must
-receive the same treatment before the four-model table is revised. Non-default models now use their
+LLaVA-NeXT also splits every label into multiple tokenizer tokens, so its first-subtoken result
+received the same treatment before the four-model table was revised. Non-default models use their
 model slug in every artifact path; this run therefore cannot overwrite the completed LLaVA-1.5 files.
+
+**Status (2026-08-23): complete.** The image run produced 2,250 rows over 121 photographs with zero
+skips, and the 15-context text-only control also completed. The paper-standard reanalysis is recorded
+in `docs/paper-retraction-audit.md`; the commands below remain the canonical reproduction procedure.
 
 Start with two images and two labels per microbatch:
 
