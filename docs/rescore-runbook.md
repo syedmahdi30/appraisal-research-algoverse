@@ -211,6 +211,66 @@ not the mirror contrast, and the paper already warns (§3, last paragraph) that 
 their own — LLaVA reaches 3.05× purely through the score's bounds. Read this control as a check on
 the stimulus set, not as a second effect size.
 
+## 8. LLaVA-1.5 multi-token label re-score
+
+Every LLaVA-1.5 emotion label spans 2--4 tokenizer tokens. The published run scores only the first
+content sub-token, so it cannot establish that LLaVA-1.5 is null under a complete-label scoring rule.
+The sequence mode teacher-forces every label and uses
+
+```text
+sum_j log P(label_token_j | prompt, earlier_label_tokens)
+```
+
+as the primary score. It also records the mean log probability over content tokens after the shared
+leading-space token. That second score is a sensitivity analysis for label-length bias. Both are
+normalized with a softmax over the same 13 labels before behavioral valence and override metrics are
+computed.
+
+First run a two-image smoke test. The scorer batches labels in groups of two here to keep the memory
+requirement conservative and writes to `_sequence` paths, leaving `conflict_llava.parquet` intact:
+
+```bash
+python -m src.experiments.stage_f_llava \
+  --model llava-hf/llava-1.5-7b-hf \
+  --score-mode sequence --label-batch-size 2 --limit 2
+```
+
+Expect 30 rows, no skipped images, `score_mode: sequence`, and both a primary result and a
+`sensitivity_content_mean` block in
+`results/stage_f/conflict_llava_sequence_metrics.json`. Inspect the parquet before scaling:
+
+```bash
+python - <<'PY'
+import pandas as pd
+p = "results/stage_f/conflict_llava_sequence.parquet"
+d = pd.read_parquet(p)
+print(d.shape)
+print(d[["valence", "valence_content_mean"]].describe())
+print(d.filter(regex=r"^score_(sequence_sum|content_mean)_").isna().sum().max())
+PY
+```
+
+The expected shape is `(30, 62)` and the final missing-value count is `0`. If the smoke test passes,
+run all 150 images. Start with four labels per microbatch on an A100-40GB; reduce to two if memory is
+tight:
+
+```bash
+python -m src.experiments.stage_f_llava \
+  --model llava-hf/llava-1.5-7b-hf \
+  --score-mode sequence --label-batch-size 4
+
+python -m src.experiments.stage_f_llava \
+  --model llava-hf/llava-1.5-7b-hf --text-only \
+  --score-mode sequence --label-batch-size 4
+```
+
+The full image run writes 2,250 rows to `conflict_llava_sequence.parquet`; the control writes 15 rows
+to `text_only_llava_sequence.parquet`. Preserve and compare all three rules: the existing
+first-subtoken run, sequence sum (primary), and content-token mean (sensitivity). Do not update the
+manuscript until the sum and mean results have both been analyzed. If both remain null, the LLaVA
+boundary survives this control. If either shows an asymmetry, report the scoring-rule dependence and
+revise the cross-model conclusion rather than selecting the favorable rule.
+
 ## Not ported: the attention analysis (§6.1, second paragraph)
 
 The $88\%$ / $3.5\%$ attention shares and the $6\%$ knockout are the one piece still on the old stack.
