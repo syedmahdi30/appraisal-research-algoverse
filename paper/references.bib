@@ -337,8 +337,10 @@
 }
 
 % ---------------------------------------------------------------------------
-% Methodology grounding added 2026-08-23. NOTE: these entries were written from
-% memory and MUST be verified against the published records before submission.
+% Methodology grounding added 2026-08-23. VERIFIED 2026-08-23 against the arXiv
+% API (id_list query), the ACL Anthology, and publisher records. Three entries
+% were wrong as written from memory and are corrected below; the errors are
+% named in the per-entry comments so they are not silently reintroduced.
 % ---------------------------------------------------------------------------
 
 % --- linear probing of internal representations
@@ -351,35 +353,44 @@
 
 % --- reading a direction off every layer (the lens family)
 @misc{nostalgebraist2020,
-  title  = {Interpreting {GPT}: The Logit Lens},
+  title  = {interpreting {GPT}: the logit lens},
   author = {{nostalgebraist}},
   year   = {2020},
-  note   = {LessWrong}
+  note   = {LessWrong, August 2020},
+  url    = {https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens}
 }
 
+% CORRECTED: the from-memory version had Ostrovsky and McKinney fifth and sixth;
+% they are second and third on the paper.
 @article{belrose2023,
   title   = {Eliciting Latent Predictions from Transformers with the Tuned Lens},
-  author  = {Belrose, Nora and Furman, Zach and Smith, Logan and Halawi, Danny and
-             Ostrovsky, Igor and McKinney, Lev and Biderman, Stella and Steinhardt, Jacob},
+  author  = {Belrose, Nora and Ostrovsky, Igor and McKinney, Lev and Furman, Zach and
+             Smith, Logan and Halawi, Danny and Biderman, Stella and Steinhardt, Jacob},
   journal = {arXiv preprint arXiv:2303.08112},
   year    = {2023}
 }
 
 % --- difference-of-means steering directions
+% CORRECTED: the from-memory title dropped "Representations of".
 @article{marks2023,
   title   = {The Geometry of Truth: Emergent Linear Structure in Large Language Model
-             True/False Datasets},
+             Representations of True/False Datasets},
   author  = {Marks, Samuel and Tegmark, Max},
   journal = {arXiv preprint arXiv:2310.06824},
   year    = {2023}
 }
 
+% CORRECTED twice over: the paper was retitled (the from-memory version used the
+% original "Activation Addition" title), and the author list omitted Vazquez and
+% swapped Leech with Udell.
 @article{turner2023,
-  title   = {Activation Addition: Steering Language Models Without Optimization},
-  author  = {Turner, Alexander Matt and Thiergart, Lisa and Udell, David and Leech, Gavin
-             and Mini, Ulisse and MacDiarmid, Monte},
+  title   = {Steering Language Models With Activation Engineering},
+  author  = {Turner, Alexander Matt and Thiergart, Lisa and Leech, Gavin and Udell, David
+             and Vazquez, Juan J. and Mini, Ulisse and MacDiarmid, Monte},
   journal = {arXiv preprint arXiv:2308.10248},
-  year    = {2023}
+  year    = {2023},
+  note    = {originally circulated as ``Activation Addition: Steering Language Models
+             Without Optimization''}
 }
 
 @article{zou2023,
@@ -398,7 +409,8 @@
   author    = {Li, Kenneth and Patel, Oam and Vi{\'e}gas, Fernanda and Pfister, Hanspeter
                and Wattenberg, Martin},
   booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
-  year      = {2023}
+  year      = {2023},
+  note      = {spotlight; arXiv:2306.03341}
 }
 
 @article{arditi2024,
@@ -409,13 +421,18 @@
   year    = {2024}
 }
 
+% Author list follows the ACL Anthology record. Note the first author publishes as
+% Nina Panickssery on the arXiv version and on arditi2024; if a camera-ready style
+% prefers current names over the name of record, change it in both places at once.
 @inproceedings{rimsky2024,
   title     = {Steering {L}lama 2 via Contrastive Activation Addition},
   author    = {Rimsky, Nina and Gabrieli, Nick and Schulz, Julian and Tong, Meg and
-               Hubinger, Evan and Turner, Alexander Matt},
-  booktitle = {Proceedings of the Annual Meeting of the Association for Computational
-               Linguistics (ACL)},
-  year      = {2024}
+               Hubinger, Evan and Turner, Alexander},
+  booktitle = {Proceedings of the 62nd Annual Meeting of the Association for Computational
+               Linguistics (Volume 1: Long Papers)},
+  pages     = {15504--15522},
+  year      = {2024},
+  doi       = {10.18653/v1/2024.acl-long.828}
 }
 
 % --- generalizing over stimulus items, not just subjects
@@ -427,7 +444,8 @@
   volume  = {12},
   number  = {4},
   pages   = {335--359},
-  year    = {1973}
+  year    = {1973},
+  doi     = {10.1016/S0022-5371(73)80014-3}
 }
 
 @article{baayen2008,
@@ -437,7 +455,8 @@
   volume  = {59},
   number  = {4},
   pages   = {390--412},
-  year    = {2008}
+  year    = {2008},
+  doi     = {10.1016/j.jml.2007.12.005}
 }
 
 @article{westfall2014,
@@ -448,5 +467,6 @@
   volume  = {143},
   number  = {5},
   pages   = {2020--2045},
-  year    = {2014}
+  year    = {2014},
+  doi     = {10.1037/xge0000014}
 }
