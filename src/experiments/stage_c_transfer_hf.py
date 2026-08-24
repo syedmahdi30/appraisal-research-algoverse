@@ -49,7 +49,14 @@ from ..data.emotic import load_split as load_emotic_split
 from ..paths import FIGURES_DIR, STAGE_A_DIR, STAGE_C_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer import _auc, _corr, _polarity, _random_controls, _shared_label, _verdict
+from .shared.reporting import (
+    correlation,
+    polarity_auc,
+    polarity_vector,
+    random_direction_controls,
+    shared_emotic_label,
+    transfer_verdict,
+)
 
 # Candidate raw-HF modules for the bridge's `hook_attn_out`, relative to a decoder layer.
 # Gemma applies `post_attention_layernorm` to the attention output BEFORE the residual add, so these
@@ -214,7 +221,7 @@ def verify_tap(model_name: str, layer: int, n_text: int, seed: int,
         try:
             X = text_activations(model, processor, tdf["text"].tolist(), layer, tap)
             r2 = _r2(predict(X, coef, inter), y)
-            c = _corr(predict(X, coef, inter), y)
+            c = correlation(predict(X, coef, inter), y)
             results[tap] = {"r2": r2, "spearman": c["spearman"], "d_model": int(X.shape[1])}
             print(f"  {tap:28s} r^2 = {r2:+.4f}   spearman = {c['spearman']:+.4f}   d={X.shape[1]}")
         except Exception as e:
@@ -288,8 +295,8 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
 
     valence = (df["valence"].to_numpy(dtype=np.float64) if "valence" in df.columns
                else np.full(len(df), np.nan))
-    shared = [_shared_label(c) for c in df["categories"]]
-    polarity = _polarity(shared, positive, negative)
+    shared = [shared_emotic_label(c) for c in df["categories"]]
+    polarity = polarity_vector(shared, positive, negative)
     n_single = int(sum(s is not None for s in shared))
 
     metrics = {
@@ -302,18 +309,18 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
         "image_readout": {}, "random_control": {}, "text_reference": {}, "transfer": {},
     }
 
-    ctrl = _random_controls(X_img, valence, n_random, seed)
+    ctrl = random_direction_controls(X_img, valence, n_random, seed)
     ctrl_abs = np.asarray(ctrl.pop("_abs"), dtype=float)
     metrics["random_control"] = ctrl
 
     for a in appraisals:
         coef, inter = probes.coef[probes.index(a)], probes.intercept[probes.index(a)]
         pred = predict(X_img, coef, inter)
-        vc = _corr(pred, valence)
+        vc = correlation(pred, valence)
         pval = None
         if vc["spearman"] is not None and ctrl_abs.size:
             pval = float((1 + int(np.sum(ctrl_abs >= abs(vc["spearman"])))) / (ctrl_abs.size + 1))
-        metrics["image_readout"][a] = {"vs_valence": vc, "polarity_auc": _auc(pred, polarity),
+        metrics["image_readout"][a] = {"vs_valence": vc, "polarity_auc": polarity_auc(pred, polarity),
                                        "vs_control_p": pval}
 
     if cfg.get("text_reference", True):
@@ -326,7 +333,7 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
             if a not in tdf.columns:
                 continue
             coef, inter = probes.coef[probes.index(a)], probes.intercept[probes.index(a)]
-            tc = _corr(predict(X_txt, coef, inter), tdf[a].to_numpy(dtype=np.float64))
+            tc = correlation(predict(X_txt, coef, inter), tdf[a].to_numpy(dtype=np.float64))
             metrics["text_reference"][a] = tc
             img_sp = metrics["image_readout"][a]["vs_valence"]["spearman"]
             if tc["spearman"] and img_sp is not None:
@@ -334,7 +341,7 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
                                           "image_abs_spearman": abs(img_sp),
                                           "retention": abs(img_sp) / abs(tc["spearman"])}
 
-    metrics["verdict"] = _verdict(metrics, appraisals)
+    metrics["verdict"] = transfer_verdict(metrics, appraisals)
     save_json(metrics, STAGE_C_DIR / "metrics_hf.json")
     _print(metrics)
     return metrics

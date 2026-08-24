@@ -38,11 +38,11 @@ from scipy.special import logsumexp
 from ..data.labels import EMOTION_LABELS
 from ..paths import STAGE_F_DIR, ensure_dirs
 from .common import git_hash, run_stamp, save_json
-from .analyze_stage_f import _POSITIVE, _NEGATIVE
+from .shared.reporting import NEGATIVE_LABELS, POSITIVE_LABELS
 
 LP = [f"lp_{w}" for w in EMOTION_LABELS]
-_POS_IDX = [EMOTION_LABELS.index(w) for w in _POSITIVE]
-_NEG_IDX = [EMOTION_LABELS.index(w) for w in _NEGATIVE]
+_POS_IDX = [EMOTION_LABELS.index(w) for w in POSITIVE_LABELS]
+_NEG_IDX = [EMOTION_LABELS.index(w) for w in NEGATIVE_LABELS]
 
 
 # --------------------------------------------------------------------------- read-outs
@@ -141,7 +141,7 @@ def override_gap(d: pd.DataFrame, n_boot: int = 2000, seed: int = 0) -> dict:
     the argmax emotion's valence category follows the text), but the sentence axis is kept so the
     interval can also resample sentences.
     """
-    cat = np.array(["pos" if w in _POSITIVE else "neg" if w in _NEGATIVE else "other"
+    cat = np.array(["pos" if w in POSITIVE_LABELS else "neg" if w in NEGATIVE_LABELS else "other"
                     for w in EMOTION_LABELS])
     e = d.copy()
     e["_cat"] = cat[e[LP].to_numpy().argmax(axis=1)]

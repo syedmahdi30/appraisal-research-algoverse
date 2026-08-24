@@ -40,6 +40,7 @@ from .shared.readouts import (
     model_readout as readout,
     user_text as _user_text,
 )
+from .shared.reporting import asymmetry_vs_floor, flip_override
 from .shared.sampling import select_extreme_rows
 
 DEFAULT_MODEL = "Qwen/Qwen3-VL-8B-Instruct"
@@ -126,9 +127,8 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0) -> dict:
     parquet, no model load). The override rate is the saturation-robust primary metric; the graded
     asymmetry is kept as a secondary (fragile when the read-out saturates, as Qwen's does).
     """
-    from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
-    asym = _asymmetry_vs_floor(df) if len(df) else {}
-    flip = _flip_override(df) if len(df) else {}
+    asym = asymmetry_vs_floor(df) if len(df) else {}
+    flip = flip_override(df) if len(df) else {}
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "read_out": "behavioral_valence",
                "n_images": int(df["image_path"].nunique()), "n_skipped": n_skipped, "n_rows": int(len(df)),
                "asymmetry_vs_floor": asym, "flip_override": flip, "tokenization_multi_token": multi or {}}

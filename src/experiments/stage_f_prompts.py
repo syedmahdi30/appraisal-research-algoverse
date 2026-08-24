@@ -156,10 +156,10 @@ def analyze(df: pd.DataFrame) -> dict:
     Reuses the SHARED `_flip_override` so these numbers are directly comparable to the base Gemma run
     and the Qwen port. Robustness verdict = every variant's dominance gap CI clears 0.
     """
-    from .analyze_stage_f import _flip_override
+    from .shared.reporting import flip_override
     per_variant = {}
     for variant, g in df.groupby("prompt_variant"):
-        per_variant[str(variant)] = _flip_override(g)
+        per_variant[str(variant)] = flip_override(g)
 
     gaps = {v: m["dominance_gap"] for v, m in per_variant.items() if m}
     lo = {v: m["dominance_gap_ci95"][0] for v, m in per_variant.items() if m}

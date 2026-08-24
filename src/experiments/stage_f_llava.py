@@ -41,6 +41,12 @@ from .common import load_config, run_stamp, save_json
 from .multitoken_scoring import score_label_sequences
 from .shared.artifacts import artifact_metadata, llava_artifact_paths
 from .shared.readouts import first_content_token_ids, model_readout, user_text
+from .shared.reporting import (
+    asymmetry_vs_floor,
+    content_mean_frame,
+    flip_override,
+    sequence_result_columns,
+)
 from .shared.sampling import select_extreme_rows
 
 DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
@@ -50,24 +56,8 @@ def _artifact_paths(score_mode: str, *, text_only: bool, model_name: str = DEFAU
     return llava_artifact_paths(STAGE_F_DIR, score_mode, text_only, model_name, DEFAULT_MODEL)
 
 
-def _sequence_columns(result: dict) -> dict:
-    summed = result["sequence_sum"]
-    mean = result["content_mean"]
-    columns = {"valence": summed["valence"], "valence_content_mean": mean["valence"]}
-    for label in EMOTION_LABELS:
-        columns[f"lp_{label}"] = summed["logprobs"][label]
-        columns[f"lp_content_mean_{label}"] = mean["logprobs"][label]
-        columns[f"score_sequence_sum_{label}"] = summed["scores"][label]
-        columns[f"score_content_mean_{label}"] = mean["scores"][label]
-    return columns
-
-
-def _content_mean_frame(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    out["valence"] = out["valence_content_mean"]
-    for label in EMOTION_LABELS:
-        out[f"lp_{label}"] = out[f"lp_content_mean_{label}"]
-    return out
+_sequence_columns = sequence_result_columns
+_content_mean_frame = content_mean_frame
 
 
 def _pad_token_id(processor) -> int:
@@ -120,9 +110,8 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0,
     Uses the SHARED `analyze_stage_f` metrics so LLaVA lands in the same table as Gemma + Qwen. Also
     the CPU `--reanalyze` entry point.
     """
-    from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
-    asym = _asymmetry_vs_floor(df) if len(df) else {}
-    flip = _flip_override(df) if len(df) else {}
+    asym = asymmetry_vs_floor(df) if len(df) else {}
+    flip = flip_override(df) if len(df) else {}
     metrics = artifact_metadata(
         model=model_name, score_mode=score_mode,
         score_rule=("sum of teacher-forced conditional token log probabilities"
@@ -132,11 +121,11 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0,
         asymmetry_vs_floor=asym, flip_override=flip, tokenization_multi_token=multi or {},
     )
     if score_mode == "sequence" and len(df):
-        mean_df = _content_mean_frame(df)
+        mean_df = content_mean_frame(df)
         metrics["sensitivity_content_mean"] = {
             "score_rule": "mean conditional log probability over content tokens after shared prefix",
-            "asymmetry_vs_floor": _asymmetry_vs_floor(mean_df),
-            "flip_override": _flip_override(mean_df),
+            "asymmetry_vs_floor": asymmetry_vs_floor(mean_df),
+            "flip_override": flip_override(mean_df),
         }
     _, metrics_path = _artifact_paths(score_mode, text_only=False, model_name=model_name)
     save_json(metrics, metrics_path)
@@ -210,7 +199,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
                     pad_token_id=pad_token_id,
                     label_batch_size=label_batch_size,
                 )
-                readout_columns = _sequence_columns(scored)
+                readout_columns = sequence_result_columns(scored)
             else:
                 val, lp = model_readout(model, inputs, tok_ids)
                 readout_columns = {"valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}}
@@ -275,7 +264,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
                 pad_token_id=pad_token_id,
                 label_batch_size=label_batch_size,
             )
-            readout_columns = _sequence_columns(scored)
+            readout_columns = sequence_result_columns(scored)
             val = readout_columns["valence"]
             lp = {label: readout_columns[f"lp_{label}"] for label in EMOTION_LABELS}
         else:
@@ -314,7 +303,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
         image_conditioned_ratio=img_ratio, tokenization_multi_token=multi,
     )
     if score_mode == "sequence":
-        mean_df = _content_mean_frame(df)
+        mean_df = content_mean_frame(df)
         mneu = float(mean_df[mean_df["condition"] == "neutral"]["valence"].mean())
         mpe = float((mean_df[mean_df["condition"] == "positive"]["valence"] - mneu).mean())
         mne = float((mean_df[mean_df["condition"] == "negative"]["valence"] - mneu).mean())

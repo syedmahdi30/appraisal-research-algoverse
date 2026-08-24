@@ -38,7 +38,7 @@ from ..data.emotic import load_split as load_emotic_split
 from ..paths import FIGURES_DIR, STAGE_A_DIR, STAGE_C_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer import _corr
+from .shared.reporting import correlation
 
 # Two caption styles bound the verbalization hypothesis:
 #   neutral — a plain one-line description (does a bare caption carry the appraisal?).
@@ -215,8 +215,8 @@ def run(config_path: str, preview: int | None = None, style: str = "neutral",
         persist[f"pred_caption_{a}"] = cap_pred
         persist[f"pred_image_{a}"] = img_pred
         metrics["readout"][a] = {
-            "image": _corr(img_pred, valence),
-            "caption": _corr(cap_pred, valence),
+            "image": correlation(img_pred, valence),
+            "caption": correlation(cap_pred, valence),
             "semipartial": _semipartial(valence, cap_pred, img_pred),
         }
 
