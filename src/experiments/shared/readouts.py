@@ -36,25 +36,25 @@ def first_content_token_ids(processor) -> dict[str, int]:
     return token_ids
 
 
-def closed_vocab_logprobs(logits_last, token_ids) -> dict[str, float]:
+def closed_vocab_logprobs(logits_last, tok_ids) -> dict[str, float]:
     """Return log probabilities normalized over the project's 13 emotion labels."""
-    index = torch.tensor([token_ids[label] for label in EMOTION_LABELS], device=logits_last.device)
+    index = torch.tensor([tok_ids[label] for label in EMOTION_LABELS], device=logits_last.device)
     values = torch.log_softmax(logits_last[index].float(), dim=-1)
     return {label: float(values[i]) for i, label in enumerate(EMOTION_LABELS)}
 
 
-def closed_vocab_valence(logits_last, token_ids) -> float:
+def closed_vocab_valence(logits_last, tok_ids) -> float:
     """Return P(positive labels) minus P(negative labels) within the closed vocabulary."""
-    index = torch.tensor([token_ids[label] for label in EMOTION_LABELS], device=logits_last.device)
+    index = torch.tensor([tok_ids[label] for label in EMOTION_LABELS], device=logits_last.device)
     probabilities = torch.softmax(logits_last[index].float(), dim=-1)
     by_label = {label: probabilities[i].item() for i, label in enumerate(EMOTION_LABELS)}
     return sum(by_label[label] for label in POSITIVE) - sum(by_label[label] for label in NEGATIVE)
 
 
-def model_readout(model, inputs, token_ids) -> tuple[float, dict[str, float]]:
+def model_readout(model, inputs, tok_ids) -> tuple[float, dict[str, float]]:
     """Score the final prompt position of one raw-HuggingFace forward pass."""
     moved = {key: value.to(model.device) for key, value in inputs.items()}
     with torch.no_grad():
         output = model(**moved)
     logits_last = output.logits[0, -1].float()
-    return closed_vocab_valence(logits_last, token_ids), closed_vocab_logprobs(logits_last, token_ids)
+    return closed_vocab_valence(logits_last, tok_ids), closed_vocab_logprobs(logits_last, tok_ids)

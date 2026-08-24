@@ -55,6 +55,26 @@ def test_extreme_selection_preserves_published_order_and_pairing():
     assert negative["image_path"].tolist() == ["p0", "p1"]
 
 
+def test_tied_valence_selection_matches_the_former_default_pandas_sort_order():
+    df = pd.DataFrame({"image_path": [f"p{i}" for i in range(17)],
+                       "valence": [-1] + [0] * 15 + [1]})
+    former_order = df.sort_values("valence")
+
+    expected_extremes = pd.concat([
+        former_order.tail(4).assign(image_group="positive"),
+        former_order.head(4).assign(image_group="negative"),
+    ]).reset_index(drop=True)
+    expected_positive = former_order.tail(4).sort_values("valence", ascending=False).reset_index(drop=True)
+    expected_negative = former_order.head(4).sort_values("valence").reset_index(drop=True)
+
+    selected = select_extreme_rows(df, 8)
+    positive, negative = select_ranked_pairs(df, 4)
+
+    assert selected["image_path"].tolist() == expected_extremes["image_path"].tolist()
+    assert positive["image_path"].tolist() == expected_positive["image_path"].tolist()
+    assert negative["image_path"].tolist() == expected_negative["image_path"].tolist()
+
+
 def test_model_readout_scores_the_final_prompt_token():
     class FakeModel:
         device = torch.device("cpu")
@@ -80,3 +100,27 @@ def test_qwen_runner_keeps_shared_readout_compatibility_aliases():
     assert stage_f_qwen.emotion_logprobs is closed_vocab_logprobs
     assert stage_f_qwen.readout is model_readout
     assert stage_f_qwen._user_text is user_text
+
+
+def test_qwen_readout_aliases_accept_legacy_tok_ids_keyword():
+    from src.experiments import stage_f_qwen
+
+    class FakeModel:
+        device = torch.device("cpu")
+
+        def __call__(self, input_ids):
+            logits = torch.zeros((1, input_ids.shape[-1], 256))
+            logits[0, -1, 100 + EMOTION_LABELS.index("joy")] = 2.0
+            return type("Output", (), {"logits": logits})()
+
+    tok_ids = {label: 100 + i for i, label in enumerate(EMOTION_LABELS)}
+    logits = torch.zeros(256)
+    logits[tok_ids["joy"]] = 2.0
+
+    assert stage_f_qwen.valence_score(logits, tok_ids=tok_ids) > 0
+    emotion_logprobs = stage_f_qwen.emotion_logprobs(logits, tok_ids=tok_ids)
+    assert max(emotion_logprobs, key=emotion_logprobs.get) == "joy"
+    valence, logprobs = stage_f_qwen.readout(
+        FakeModel(), {"input_ids": torch.tensor([[1, 2]])}, tok_ids=tok_ids)
+    assert valence > 0
+    assert max(logprobs, key=logprobs.get) == "joy"
