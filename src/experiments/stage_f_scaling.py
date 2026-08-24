@@ -34,11 +34,12 @@ from ..bridge.boot import boot_gemma
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       TEXT_CODE, context_prompt)
+from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import FIGURES_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
 from .stage_a_steering import emotion_logprobs, emotion_token_ids, valence_score
-from .stage_f_conflict import select_extreme_images
+from .shared.sampling import select_extreme_rows
 
 # Known Gemma-3 multimodal sizes → billions of parameters (x-axis). Unknown ids fall back to a regex.
 GEMMA_PARAMS_B = {
@@ -76,7 +77,8 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
     conditions += [("negative", f"n{i}", c) for i, c in enumerate(NEGATIVE_CONTEXTS)]
     conditions += [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
 
-    sel = select_extreme_images(cfg.get("split", "test"), n_images)
+    frame = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images)
     bridge = boot_gemma(model_name, device=cfg.get("device", "cuda"))
     tok_ids = emotion_token_ids(bridge)
     multi = {w: r for w, r in verify_label_tokenization(bridge.tokenizer).items() if not r["single_token"]}

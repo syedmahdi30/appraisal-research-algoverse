@@ -32,27 +32,17 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
+from .shared.readouts import (
+    QUESTION,
+    closed_vocab_logprobs as emotion_logprobs,
+    closed_vocab_valence as valence_score,
+    first_content_token_ids as emotion_token_ids,
+    model_readout as readout,
+    user_text as _user_text,
+)
+from .shared.sampling import select_extreme_rows
 
 DEFAULT_MODEL = "Qwen/Qwen3-VL-8B-Instruct"
-QUESTION = "What single emotion is this person feeling?"
-
-# Valence split — identical to stage_a_steering (copied to keep this module import-light: it must run
-# in the Qwen venv, which does not have the TransformerBridge / crowd-enVENT stack).
-POSITIVE = ("joy", "pride", "relief", "trust")
-NEGATIVE = ("anger", "boredom", "disgust", "fear", "guilt", "sadness", "shame")
-
-
-def valence_score(logits_last, tok_ids) -> float:
-    idx = torch.tensor([tok_ids[w] for w in EMOTION_LABELS], device=logits_last.device)
-    probs = torch.softmax(logits_last[idx].float(), dim=-1)
-    p = {w: probs[i].item() for i, w in enumerate(EMOTION_LABELS)}
-    return sum(p[w] for w in POSITIVE) - sum(p[w] for w in NEGATIVE)
-
-
-def emotion_logprobs(logits_last, tok_ids) -> dict[str, float]:
-    idx = torch.tensor([tok_ids[w] for w in EMOTION_LABELS], device=logits_last.device)
-    logp = torch.log_softmax(logits_last[idx].float(), dim=-1)
-    return {w: float(logp[i]) for i, w in enumerate(EMOTION_LABELS)}
 
 
 # --------------------------------------------------------------------------- model
@@ -69,34 +59,6 @@ def load_qwen(model_name: str = DEFAULT_MODEL):
     return model, processor
 
 
-def emotion_token_ids(processor) -> dict[str, int]:
-    """First CONTENT sub-token id per emotion label (skips a leading SentencePiece '▁' space token).
-
-    Naively taking `encode(' '+w)[0]` breaks on LLaMA/SentencePiece tokenizers (e.g. LLaVA-1.5): they
-    emit the leading space as a STANDALONE '▁' token, so `[0]` returns that same space id for EVERY
-    label → all 13 collapse to one id → a uniform softmax → a constant, degenerate read-out
-    (valence pinned at (4−7)/13 = −0.231). We instead take the first token that decodes to
-    non-whitespace, which is unchanged for BPE tokenizers (Gemma/Qwen: the first token already carries
-    the word). The guard makes a collapse fail loudly instead of silently producing −0.231.
-    """
-    tok = processor.tokenizer
-    ids = {}
-    for w in EMOTION_LABELS:
-        enc = tok.encode(" " + w, add_special_tokens=False)
-        ids[w] = next((t for t in enc if tok.decode([t]).strip()), enc[0]) if enc else -1
-    n_distinct = len(set(ids.values()))
-    if n_distinct < len(EMOTION_LABELS):
-        raise ValueError(
-            f"emotion label token ids collapsed ({n_distinct}/{len(EMOTION_LABELS)} distinct) — the "
-            f"read-out would be degenerate. Tokenizer {type(tok).__name__}; inspect encode(' joy').")
-    return ids
-
-
-def _user_text(context_sentence: str | None) -> str:
-    ctx = "" if not context_sentence else f"Context: {context_sentence} "
-    return f"{ctx}{QUESTION}"
-
-
 def build_inputs(processor, image, context_sentence):
     """Qwen chat inputs for one image + context; image=None gives the text-only (image-ablated) form."""
     content = []
@@ -109,24 +71,11 @@ def build_inputs(processor, image, context_sentence):
     return processor(text=[text], images=imgs, padding=True, return_tensors="pt")
 
 
-def readout(model, inputs, tok_ids):
-    """(behavioral_valence, {emotion: logprob}) at the last prompt token."""
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
-    with torch.no_grad():
-        out = model(**inputs)
-    last = out.logits[0, -1].float()
-    return valence_score(last, tok_ids), emotion_logprobs(last, tok_ids)
-
-
 # --------------------------------------------------------------------------- image selection
 def select_extreme_images(n: int) -> pd.DataFrame:
     """n/2 highest- and n/2 lowest-EMOTIC-valence test rows (read the parquet directly; no Gemma stack)."""
     df = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
-    df = df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
-    k = n // 2
-    low = df.head(k).assign(image_group="negative")
-    high = df.tail(k).assign(image_group="positive")
-    return pd.concat([high, low]).reset_index(drop=True)
+    return select_extreme_rows(df, n)
 
 
 # --------------------------------------------------------------------------- base pass

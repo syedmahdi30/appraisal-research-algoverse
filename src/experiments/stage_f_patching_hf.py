@@ -56,7 +56,8 @@ from .common import git_hash, load_config, load_probes, run_stamp, save_json
 from .stage_c_transfer_hf import CANDIDATE_TAPS, find_lm_layers, last_token_tap, load_hf
 from .stage_f_attribution import segment_positions
 from .stage_f_patching import GROUPS, _aligned_groups, _recovery, _verdict
-from .stage_f_qwen import emotion_token_ids, valence_score
+from .shared.readouts import closed_vocab_valence, first_content_token_ids
+from .shared.sampling import select_extreme_rows
 
 # Published bridge results, keyed by the (pos_idx, neg_idx) context pair they were actually run on.
 # Keyed explicitly because the two published pairs are NOT (0,2) and (1,0): pair 2 is (4,0), the
@@ -154,16 +155,15 @@ def readout(model, enc, store, coef, inter, tok_ids) -> tuple[float, float]:
         out = model(**enc)
     act = np.asarray(store[0], dtype=np.float32)
     probe = float(predict(act[None, :], coef, inter)[0])
-    return probe, valence_score(out.logits[0, -1].float(), tok_ids)
+    return probe, closed_vocab_valence(out.logits[0, -1].float(), tok_ids)
 
 
 # --------------------------------------------------------------------------- data
 def select_positive_images(split: str, n: int) -> pd.DataFrame:
-    """The n highest-valence EMOTIC rows. Mirrors `stage_f_conflict.select_extreme_images`'s
-    positive half, inlined so this module has no path back to the bridge stack."""
+    """The n highest-valence EMOTIC rows, tagged as the positive group."""
     df = load_emotic_split(split).reset_index(drop=True)
-    df = df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
-    return df.tail(n).assign(image_group="positive").reset_index(drop=True)
+    selected = select_extreme_rows(df, n * 2)
+    return selected[selected["image_group"] == "positive"].reset_index(drop=True)
 
 
 def encode(processor, image, prompt: str, device):
@@ -185,7 +185,7 @@ def verify_tap(cfg, tap: str) -> dict:
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
     model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
     sel = select_positive_images(cfg.get("split", "test"), 8)
     pos_ctx, neg_ctx = POSITIVE_CONTEXTS[0], NEGATIVE_CONTEXTS[2]
 
@@ -247,7 +247,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
 
     sel = select_positive_images(cfg.get("split", "test"), n_images)
     model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
     shim = _TokShim(processor.tokenizer)
 
     rows, n_skip, seg_bad = [], 0, 0

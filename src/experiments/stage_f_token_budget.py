@@ -56,9 +56,10 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
                                       build_conditions,
                                       TEXT_CODE)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
-from ..paths import STAGE_F_DIR, ensure_dirs
+from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
-from .stage_f_qwen import (_user_text, emotion_token_ids, readout, select_extreme_images)
+from .shared.readouts import first_content_token_ids, model_readout, user_text
+from .shared.sampling import select_extreme_rows
 
 
 def _conditions(bank: str = "full"):
@@ -174,10 +175,10 @@ def build_inputs(processor, image, context_sentence, family: str, style: str = "
         return processor(text=text, images=imgs, return_tensors="pt")
     if family == "qwen":
         content = ([{"type": "image", "image": image}] if image is not None else [])
-        content.append({"type": "text", "text": _user_text(context_sentence)})
+        content.append({"type": "text", "text": user_text(context_sentence)})
     else:
         content = ([{"type": "image"}] if image is not None else [])
-        content.append({"type": "text", "text": _user_text(context_sentence)})
+        content.append({"type": "text", "text": user_text(context_sentence)})
     text = processor.apply_chat_template([{"role": "user", "content": content}],
                                          tokenize=False, add_generation_prompt=True)
     imgs = [image] if image is not None else None
@@ -273,9 +274,10 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
             f"replace it, or change --max-side / --model so the run gets its own key.")
 
     n_images = limit_override or int(cfg.get("n_images", 150))
-    sel = select_extreme_images(n_images)
+    frame = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images)
     model, processor, family = load_any(model_name, max_side)
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
     multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
              if not r["single_token"]}
 
@@ -289,7 +291,7 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
         if tokens is None:            # measured on the first real image, at the resolution actually used
             tokens = count_image_tokens(processor, img, family, style)
         for cond, cid, sentence in _conditions(bank):
-            val, lp = readout(model, build_inputs(processor, img, sentence, family, style), tok_ids)
+            val, lp = model_readout(model, build_inputs(processor, img, sentence, family, style), tok_ids)
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
                          "context": sentence or "", "text_code": TEXT_CODE[cond],
@@ -360,13 +362,13 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
         raise FileExistsError(f"{out_pq} already exists — pass --force to replace it.")
 
     model, processor, family = load_any(model_name, None)
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
     multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
              if not r["single_token"]}
 
     rows = []
     for cond, cid, sentence in _conditions(bank):
-        val, lp = readout(model, build_inputs(processor, None, sentence, family, style), tok_ids)  # image=None
+        val, lp = model_readout(model, build_inputs(processor, None, sentence, family, style), tok_ids)  # image=None
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
                      "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": max(lp, key=lp.get),
                      **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})

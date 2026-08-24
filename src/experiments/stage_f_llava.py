@@ -14,8 +14,8 @@ content-token-mean sensitivity analysis for label-length bias. Sequence runs use
 paths, keyed by model for non-default checkpoints, so they cannot overwrite first-subtoken artifacts
 or another LLaVA-family run.
 
-Reuses the model-agnostic scoring/selection from `stage_f_qwen` (emotion_token_ids, readout,
-select_extreme_images, _user_text); only the model load and the chat template are LLaVA-specific.
+Reuses model-agnostic scoring/selection from `shared`; only the model load and the chat template are
+LLaVA-specific.
 Run in the `requirements-qwen.txt` env (recent transformers with
 `AutoModelForImageTextToText` + llava-hf support). Needs the EMOTIC test parquet staged.
 
@@ -36,10 +36,11 @@ from tqdm import tqdm
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       TEXT_CODE)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
-from ..paths import STAGE_F_DIR, ensure_dirs
+from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
 from .multitoken_scoring import score_label_sequences
-from .stage_f_qwen import _user_text, emotion_token_ids, readout, select_extreme_images
+from .shared.readouts import first_content_token_ids, model_readout, user_text
+from .shared.sampling import select_extreme_rows
 from .stage_f_token_budget import slug
 
 DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
@@ -110,7 +111,7 @@ def build_inputs(processor, image, context_sentence):
     the processor) at the head of the user turn: `USER: <image>\\n{context} {question} ASSISTANT:`.
     """
     content = ([{"type": "image"}] if image is not None else []) + \
-              [{"type": "text", "text": _user_text(context_sentence)}]
+              [{"type": "text", "text": user_text(context_sentence)}]
     messages = [{"role": "user", "content": content}]
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     imgs = [image] if image is not None else None
@@ -184,7 +185,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
     cfg = load_config(config_path)
     ensure_dirs()
     n_images = limit_override or int(cfg.get("n_images", 150))
-    sel = select_extreme_images(n_images)
+    sel = select_extreme_rows(pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True), n_images)
     model, processor = load_llava(model_name)
     token_report = verify_label_tokenization(processor.tokenizer)
     multi = {w: r for w, r in token_report.items() if not r["single_token"]}
@@ -193,7 +194,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
         label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
         pad_token_id = _pad_token_id(processor)
     else:
-        tok_ids = emotion_token_ids(processor)
+        tok_ids = first_content_token_ids(processor)
         label_ids = None
         pad_token_id = None
 
@@ -216,7 +217,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
                 )
                 readout_columns = _sequence_columns(scored)
             else:
-                val, lp = readout(model, inputs, tok_ids)
+                val, lp = model_readout(model, inputs, tok_ids)
                 readout_columns = {"valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}}
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
@@ -264,7 +265,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
         label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
         pad_token_id = _pad_token_id(processor)
     else:
-        tok_ids = emotion_token_ids(processor)
+        tok_ids = first_content_token_ids(processor)
         label_ids = None
         pad_token_id = None
 
@@ -283,7 +284,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
             val = readout_columns["valence"]
             lp = {label: readout_columns[f"lp_{label}"] for label in EMOTION_LABELS}
         else:
-            val, lp = readout(model, inputs, tok_ids)
+            val, lp = model_readout(model, inputs, tok_ids)
             readout_columns = {"valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}}
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
                      "text_code": TEXT_CODE[cond], "argmax_emotion": max(lp, key=lp.get),

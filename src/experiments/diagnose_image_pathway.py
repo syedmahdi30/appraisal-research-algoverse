@@ -29,13 +29,20 @@ from __future__ import annotations
 import argparse
 
 import numpy as np
+import pandas as pd
 import torch
 from PIL import Image
 
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, context_prompt
 from ..data.labels import EMOTION_LABELS
-from .stage_f_qwen import (emotion_logprobs, emotion_token_ids, select_extreme_images,
-                           valence_score)
+from ..paths import PROCESSED_DIR
+from .shared.readouts import closed_vocab_logprobs, closed_vocab_valence, first_content_token_ids
+from .shared.sampling import select_extreme_rows
+
+
+def _select_extreme_test_rows(n: int):
+    frame = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
+    return select_extreme_rows(frame, n)
 
 
 def _versions() -> None:
@@ -67,7 +74,7 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
     # EMOTIC annotates per PERSON, so image_path recurs across rows — taking a head slice returns the
     # same photo several times (and only from one valence group). Dedupe, then interleave the two
     # groups so the sample spans both positive and negative images.
-    sel = select_extreme_images(max(4, n_images * 4))
+    sel = _select_extreme_test_rows(max(4, n_images * 4))
     pos = sel[sel["image_group"] == "positive"]["image_path"].drop_duplicates().tolist()
     neg = sel[sel["image_group"] == "negative"]["image_path"].drop_duplicates().tolist()
     paths = [p for pair in zip(pos, neg) for p in pair][:n_images] or pos[:n_images]
@@ -80,7 +87,7 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
     processor = AutoProcessor.from_pretrained(model_name)
     hf = AutoModelForImageTextToText.from_pretrained(
         model_name, dtype=torch.bfloat16, device_map="auto").eval()
-    tok_hf = emotion_token_ids(processor)
+    tok_hf = first_content_token_ids(processor)
 
     # ---------------- bridge
     print("\n=== TransformerBridge ===")
@@ -108,14 +115,14 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
     with torch.no_grad():
         lt_b = bridge.run_with_hooks(ids_t.to(device), fwd_hooks=[])[0, -1]
         lt_h = hf(input_ids=ids_t.to(hf.device)).logits[0, -1]
-    lpt_b, lpt_h = emotion_logprobs(lt_b, tok_br), emotion_logprobs(lt_h, tok_hf)
+    lpt_b, lpt_h = closed_vocab_logprobs(lt_b, tok_br), closed_vocab_logprobs(lt_h, tok_hf)
     tb, th = max(lpt_b, key=lpt_b.get), max(lpt_h, key=lpt_h.get)
     mdt = max(abs(lpt_b[w] - lpt_h[w]) for w in EMOTION_LABELS)
     # Grade on the quantity the paper actually reports, not on a raw logprob threshold. `max|Δ
     # logprob|` over 13 labels is dominated by the LEAST likely label, where a tiny probability change
     # is a large log change, so it overstates disagreement. Behavioural valence (P(pos) − P(neg)) is
     # what every Stage A/C/D/F number is built from, and the argmax is what the override rate uses.
-    vb, vh = valence_score(lt_b, tok_br), valence_score(lt_h, tok_hf)
+    vb, vh = closed_vocab_valence(lt_b, tok_br), closed_vocab_valence(lt_h, tok_hf)
     dv = abs(vb - vh)
     text_ok = tb == th and dv < 0.05
     print(f"  bridge -> {tb:9s}   hf -> {th:9s}   max|Δ logprob| = {mdt:.4f}")
@@ -161,10 +168,10 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
         with torch.no_grad():
             lg_b = bridge.run_with_hooks(ids_b, pixel_values=pv_b, fwd_hooks=[])[0, -1]
             lg_h = hf(**{k: v.to(hf.device) for k, v in hf_in.items()}).logits[0, -1]
-        lp_b, lp_h = emotion_logprobs(lg_b, tok_br), emotion_logprobs(lg_h, tok_hf)
+        lp_b, lp_h = closed_vocab_logprobs(lg_b, tok_br), closed_vocab_logprobs(lg_h, tok_hf)
         top_b, top_h = max(lp_b, key=lp_b.get), max(lp_h, key=lp_h.get)
         md = max(abs(lp_b[w] - lp_h[w]) for w in EMOTION_LABELS)
-        ivb, ivh = valence_score(lg_b, tok_br), valence_score(lg_h, tok_hf)
+        ivb, ivh = closed_vocab_valence(lg_b, tok_br), closed_vocab_valence(lg_h, tok_hf)
         rec.update({"argmax_bridge": top_b, "argmax_hf": top_h, "max_logprob_diff": float(md),
                     "valence_bridge": float(ivb), "valence_hf": float(ivh),
                     "valence_diff": float(abs(ivb - ivh))})
@@ -179,7 +186,7 @@ def compare(model_name: str, n_images: int, device: str = "cuda") -> dict:
         with torch.no_grad():
             nb = bridge.run_with_hooks(ids_t.to(device), fwd_hooks=[])[0, -1]
             nh = hf(input_ids=ids_t.to(hf.device)).logits[0, -1]
-        lpn_b, lpn_h = emotion_logprobs(nb, tok_br), emotion_logprobs(nh, tok_hf)
+        lpn_b, lpn_h = closed_vocab_logprobs(nb, tok_br), closed_vocab_logprobs(nh, tok_hf)
         shift_b = max(abs(lp_b[w] - lpn_b[w]) for w in EMOTION_LABELS)
         shift_h = max(abs(lp_h[w] - lpn_h[w]) for w in EMOTION_LABELS)
         rec.update({"image_shift_bridge": float(shift_b), "image_shift_hf": float(shift_h)})
@@ -249,7 +256,7 @@ def layer_scan(model_name: str, device: str = "cuda", layer: int = 18) -> dict:
 
     sentence = NEGATIVE_CONTEXTS[0]
     prompt = context_prompt(sentence)
-    sel = select_extreme_images(4)
+    sel = _select_extreme_test_rows(4)
     img = Image.open(sel["image_path"].iloc[0]).convert("RGB")
 
     processor = AutoProcessor.from_pretrained(model_name)

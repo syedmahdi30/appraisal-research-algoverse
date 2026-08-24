@@ -50,23 +50,17 @@ from .stage_f_attribution import segment_positions
 from .stage_f_cross_patching import (CONTEXT_BANKS, GROUPS, _cross_groups, _metrics, _print,
                                      _probe_valid, _recovery)
 from .stage_f_patching_hf import _TokShim, encode, patch_resid, readout, resid_capture_full
-from .stage_f_qwen import emotion_token_ids
+from .shared.readouts import first_content_token_ids
+from .shared.sampling import select_ranked_pairs
 
 PARQUET = STAGE_F_DIR / "cross_patching_hf.parquet"
 METRICS = STAGE_F_DIR / "cross_patching_hf_metrics.json"
 
 
 def select_pairs(split: str, n_pairs: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Rank-matched (highest-valence, lowest-valence) EMOTIC pairs, maximising the image-valence gap.
-
-    Mirrors `stage_f_conflict.select_extreme_images` + the bridge module's rank pairing, inlined so
-    this module has no path back to the bridge stack.
-    """
+    """Rank-matched extreme EMOTIC pairs, maximizing the image-valence gap."""
     df = load_emotic_split(split).reset_index(drop=True)
-    df = df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
-    pos = df.tail(n_pairs).sort_values("valence", ascending=False).reset_index(drop=True)
-    neg = df.head(n_pairs).sort_values("valence").reset_index(drop=True)
-    return pos, neg
+    return select_ranked_pairs(df, n_pairs)
 
 
 def run(config_path: str, limit_override: int | None = None, layers_override: str | None = None,
@@ -95,7 +89,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
     n_pairs = min(n_pairs, len(pos), len(neg))
 
     model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
     shim = _TokShim(processor.tokenizer)
     if not _probe_valid(patch_layers, crit):
         print(f"  NOTE: band {patch_layers[0]}-{patch_layers[-1]} reaches the L{crit} probe tap, so the "
