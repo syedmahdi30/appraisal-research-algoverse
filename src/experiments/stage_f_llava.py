@@ -37,23 +37,17 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
                                       TEXT_CODE)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
-from .common import git_hash, load_config, run_stamp, save_json
+from .common import load_config, run_stamp, save_json
 from .multitoken_scoring import score_label_sequences
+from .shared.artifacts import artifact_metadata, llava_artifact_paths
 from .shared.readouts import first_content_token_ids, model_readout, user_text
 from .shared.sampling import select_extreme_rows
-from .stage_f_token_budget import slug
 
 DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
 
 
 def _artifact_paths(score_mode: str, *, text_only: bool, model_name: str = DEFAULT_MODEL):
-    if score_mode not in {"first-subtoken", "sequence"}:
-        raise ValueError(f"unknown score mode: {score_mode}")
-    prefix = "text_only" if text_only else "conflict"
-    suffix = "" if score_mode == "first-subtoken" else "_sequence"
-    model_key = "llava" if model_name == DEFAULT_MODEL else slug(model_name, None)
-    stem = f"{prefix}_{model_key}{suffix}"
-    return STAGE_F_DIR / f"{stem}.parquet", STAGE_F_DIR / f"{stem}_metrics.json"
+    return llava_artifact_paths(STAGE_F_DIR, score_mode, text_only, model_name, DEFAULT_MODEL)
 
 
 def _sequence_columns(result: dict) -> dict:
@@ -129,13 +123,14 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0,
     from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
     asym = _asymmetry_vs_floor(df) if len(df) else {}
     flip = _flip_override(df) if len(df) else {}
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "score_mode": score_mode,
-               "score_rule": ("sum of teacher-forced conditional token log probabilities"
-                              if score_mode == "sequence" else "first content sub-token"),
-               "read_out": "behavioral_valence", "n_images": int(df["image_path"].nunique()) if len(df) else 0,
-               "n_skipped": n_skipped, "n_rows": int(len(df)),
-               "asymmetry_vs_floor": asym, "flip_override": flip, "tokenization_multi_token": multi or {}}
+    metrics = artifact_metadata(
+        model=model_name, score_mode=score_mode,
+        score_rule=("sum of teacher-forced conditional token log probabilities"
+                    if score_mode == "sequence" else "first content sub-token"),
+        read_out="behavioral_valence", n_images=int(df["image_path"].nunique()) if len(df) else 0,
+        n_skipped=n_skipped, n_rows=int(len(df)),
+        asymmetry_vs_floor=asym, flip_override=flip, tokenization_multi_token=multi or {},
+    )
     if score_mode == "sequence" and len(df):
         mean_df = _content_mean_frame(df)
         metrics["sensitivity_content_mean"] = {
@@ -309,14 +304,15 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
         if dn is not None and dp:
             img_ratio = abs(dn) / abs(dp)
 
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "score_mode": score_mode,
-               "score_rule": ("sum of teacher-forced conditional token log probabilities"
-                              if score_mode == "sequence" else "first content sub-token"),
-               "neutral_baseline": neu,
-               "pos_effect": pe, "neg_effect": ne, "pos_raw": pr, "neg_raw": nr,
-               "text_only_ratio_vs_neutral": text_ratio, "text_only_ratio_raw": raw_ratio,
-               "image_conditioned_ratio": img_ratio, "tokenization_multi_token": multi}
+    metrics = artifact_metadata(
+        model=model_name, score_mode=score_mode,
+        score_rule=("sum of teacher-forced conditional token log probabilities"
+                    if score_mode == "sequence" else "first content sub-token"),
+        neutral_baseline=neu,
+        pos_effect=pe, neg_effect=ne, pos_raw=pr, neg_raw=nr,
+        text_only_ratio_vs_neutral=text_ratio, text_only_ratio_raw=raw_ratio,
+        image_conditioned_ratio=img_ratio, tokenization_multi_token=multi,
+    )
     if score_mode == "sequence":
         mean_df = _content_mean_frame(df)
         mneu = float(mean_df[mean_df["condition"] == "neutral"]["valence"].mean())

@@ -57,7 +57,9 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
                                       TEXT_CODE)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
-from .common import git_hash, load_config, run_stamp, save_json
+from .common import load_config, run_stamp, save_json
+from .shared.artifacts import (artifact_metadata, ensure_output_available, run_key_suffix,
+                               token_budget_key, token_budget_metric_paths)
 from .shared.readouts import first_content_token_ids, model_readout, user_text
 from .shared.sampling import select_extreme_rows
 
@@ -76,33 +78,8 @@ def _conditions(bank: str = "full"):
     return build_conditions(bank)
 
 
-def _key_suffix(style: str = "chat", bank: str = "full") -> str:
-    """The style/bank tail of a run key, without the model or budget parts.
-
-    Split out of `slug` so that code needing to *glob* across token budgets can rebuild the tail
-    exactly. The budget tag sits before this tail, so `f"{slug(...)}_px*"` looks for a filename that
-    can never exist; `_base_runs_for` needs the pieces, not the finished key.
-    """
-    s = ""
-    if style != "chat":
-        s += f"_{style}"
-    if bank != "full":
-        s += f"_{bank}"
-    return s
-
-
-def slug(model_name: str, max_side: int | None, style: str = "chat", bank: str = "full") -> str:
-    """Filesystem-safe run key: model + token-budget tag + prompt style + bank, so runs never collide.
-
-    `bank` is part of the key for the same reason the others are: a minimal-pair run and a full-bank
-    run of the same model are different experiments, and a shared path would silently overwrite one
-    with the other --- the failure mode that destroyed three published numbers before per-run paths
-    were introduced.
-    """
-    s = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
-    if max_side:
-        s = f"{s}_px{max_side}"
-    return s + _key_suffix(style, bank)
+_key_suffix = run_key_suffix
+slug = token_budget_key
 
 
 # --------------------------------------------------------------------------- model dispatch
@@ -234,14 +211,16 @@ def image_discriminability(df: pd.DataFrame) -> dict:
 
 def _analyze(df, model_name, tokens: dict, max_side, multi=None, n_skipped=0) -> dict:
     from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
-    return {"run": run_stamp(), "git": git_hash(), "model": model_name, "max_side": max_side,
-            "read_out": "behavioral_valence", "n_images": int(df["image_path"].nunique()) if len(df) else 0,
-            "n_rows": int(len(df)), "n_skipped": n_skipped,
-            "image_tokens": tokens,
-            "image_discriminability": image_discriminability(df) if len(df) else {},
-            "asymmetry_vs_floor": _asymmetry_vs_floor(df) if len(df) else {},
-            "flip_override": _flip_override(df) if len(df) else {},
-            "tokenization_multi_token": multi or {}}
+    return artifact_metadata(
+        model=model_name, max_side=max_side,
+        read_out="behavioral_valence", n_images=int(df["image_path"].nunique()) if len(df) else 0,
+        n_rows=int(len(df)), n_skipped=n_skipped,
+        image_tokens=tokens,
+        image_discriminability=image_discriminability(df) if len(df) else {},
+        asymmetry_vs_floor=_asymmetry_vs_floor(df) if len(df) else {},
+        flip_override=_flip_override(df) if len(df) else {},
+        tokenization_multi_token=multi or {},
+    )
 
 
 def _print(m: dict) -> None:
@@ -268,10 +247,12 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
     ensure_dirs()
     key = slug(model_name, max_side, style, bank)
     out_pq = STAGE_F_DIR / f"conflict_{key}.parquet"
-    if out_pq.exists() and not force:
-        raise FileExistsError(
-            f"{out_pq} already exists — refusing to overwrite a completed run. Pass --force to "
-            f"replace it, or change --max-side / --model so the run gets its own key.")
+    ensure_output_available(
+        out_pq,
+        force,
+        f"{out_pq} already exists — refusing to overwrite a completed run. Pass --force to "
+        f"replace it, or change --max-side / --model so the run gets its own key.",
+    )
 
     n_images = limit_override or int(cfg.get("n_images", 150))
     frame = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
@@ -317,15 +298,7 @@ def _base_runs_for(model_name: str, style: str = "chat", bank: str = "full") -> 
     be comparing different sentences, which is precisely the confound the control exists to test.
     The glob is assembled from key parts because the budget tag precedes the style/bank tail.
     """
-    core = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
-    tail = _key_suffix(style, bank)
-    exact = STAGE_F_DIR / f"conflict_{core}{tail}_metrics.json"
-    runs = [exact] if exact.exists() else []
-    # The glob alone is not enough: for the full bank `tail` is empty, so `_px*_metrics.json` also
-    # swallows `_px448_minimal_metrics.json`. Anchor the budget tag to digits and the tail to the end.
-    pat = re.compile(rf"^conflict_{re.escape(core)}_px\d+{re.escape(tail)}_metrics\.json$")
-    return runs + sorted(p for p in STAGE_F_DIR.glob(f"conflict_{core}_px*_metrics.json")
-                         if pat.match(p.name))
+    return token_budget_metric_paths(STAGE_F_DIR, model_name, style, bank)
 
 
 def _amplification(img_ratio: float | None, ref: float) -> str:
@@ -358,8 +331,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     ensure_dirs()
     key = slug(model_name, None, style, bank)   # budget-free but bank-aware; see docstring
     out_pq = STAGE_F_DIR / f"text_only_{key}.parquet"
-    if out_pq.exists() and not force:
-        raise FileExistsError(f"{out_pq} already exists — pass --force to replace it.")
+    ensure_output_available(out_pq, force, f"{out_pq} already exists — pass --force to replace it.")
 
     model, processor, family = load_any(model_name, None)
     tok_ids = first_content_token_ids(processor)
@@ -398,12 +370,14 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
                          "image_conditioned_ratio": img_ratio,
                          "verdict": _amplification(img_ratio, ref)})
 
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "bank": bank,
-               "keyed_by": "model + bank (no image in this pass; --max-side cannot affect it)",
-               "neutral_baseline": neu, "none_baseline": none_v, "pos_effect": pe, "neg_effect": ne,
-               "pos_raw": pr, "neg_raw": nr, "text_only_ratio_vs_neutral": text_ratio,
-               "text_only_ratio_raw": raw_ratio, "reference_ratio": ref,
-               "per_base_run": per_base, "tokenization_multi_token": multi}
+    metrics = artifact_metadata(
+        model=model_name, bank=bank,
+        keyed_by="model + bank (no image in this pass; --max-side cannot affect it)",
+        neutral_baseline=neu, none_baseline=none_v, pos_effect=pe, neg_effect=ne,
+        pos_raw=pr, neg_raw=nr, text_only_ratio_vs_neutral=text_ratio,
+        text_only_ratio_raw=raw_ratio, reference_ratio=ref,
+        per_base_run=per_base, tokenization_multi_token=multi,
+    )
     save_json(metrics, STAGE_F_DIR / f"text_only_{key}_metrics.json")
 
     print(f"\nStage F text-only [{model_name}] bank={bank} — {len(rows)} forwards (no images).")
@@ -667,8 +641,7 @@ def aggregate() -> dict:
     tab = pd.DataFrame(rows, columns=cols)
     if len(tab):
         tab = tab.sort_values(["model", "image_tokens"], na_position="last")
-    out = {"run": run_stamp(), "git": git_hash(), "n_runs": len(tab),
-           "rows": tab.to_dict(orient="records")}
+    out = artifact_metadata(n_runs=len(tab), rows=tab.to_dict(orient="records"))
 
     out.update(_trends(tab))
     save_json(out, STAGE_F_DIR / "token_budget_trend.json")
