@@ -4,7 +4,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import roc_auc_score
 
 from ...data.labels import EMOTION_LABELS, EMOTIC_TO_SHARED
 
@@ -61,6 +60,8 @@ def polarity_vector(shared_labels, positive, negative):
 
 def polarity_auc(pred, polarity):
     """AUC of a read-out separating positive- vs negative-emotion images (scale-free)."""
+    from sklearn.metrics import roc_auc_score
+
     pred = np.asarray(pred, dtype=np.float64)
     m = np.isfinite(polarity)
     y = polarity[m]

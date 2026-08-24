@@ -1,3 +1,8 @@
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -7,6 +12,7 @@ from src.experiments.shared.reporting import (
     correlation,
     flip_override,
     image_discriminability,
+    polarity_auc,
     sequence_result_columns,
     text_only_readouts,
     token_budget_trends,
@@ -23,6 +29,41 @@ def test_correlation_filters_nonfinite_pairs_and_keeps_schema():
     assert result["n"] == 3
     assert result["pearson"] == pytest.approx(1.0)
     assert result["spearman"] == 1.0
+
+
+def test_qwen_runner_import_does_not_require_stage_c_sklearn_dependency():
+    script = """
+import builtins
+import sys
+import types
+
+real_import = builtins.__import__
+# Torch is a declared Qwen dependency but is not part of this import-boundary assertion.
+sys.modules["torch"] = types.ModuleType("torch")
+
+def import_without_sklearn(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "sklearn" or name.startswith("sklearn."):
+        raise ModuleNotFoundError("simulated requirements-qwen environment: no sklearn")
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = import_without_sklearn
+import src.experiments.stage_f_qwen
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).parents[1],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_polarity_auc_keeps_stage_c_calculation():
+    result = polarity_auc(range(10), np.array([0.0] * 5 + [1.0] * 5))
+
+    assert result == {"n": 10, "n_pos": 5, "n_neg": 5, "auc": 1.0}
 
 
 def test_flip_override_and_discriminability_schema():
