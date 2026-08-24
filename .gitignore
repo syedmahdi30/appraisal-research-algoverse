@@ -39,3 +39,4 @@ compass_artifact_*.md
 
 # EMOTIC-derived processed tables anywhere (gated — never redistribute)
 **/data/processed/
+paper/build/

@@ -1,5 +1,10 @@
 \documentclass{article}
 
+% Venue page-limit toggle. See venue.tex; \ifshort selects the 5-page
+% Interp4Discovery build, \else the 8-page VLM4RWD build.
+\newif\ifshort
+\input{venue}
+
 % ============================================================
 % Cross-modal valence conflict in vision-language models
 % v4 — image-conditioned behavioral and mechanism measurements use the reference
