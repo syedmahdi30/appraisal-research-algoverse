@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def _finite_valence_rows(df: pd.DataFrame) -> pd.DataFrame:
-    return df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence", kind="stable")
+    return df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
 
 
 def select_extreme_rows(df: pd.DataFrame, n: int) -> pd.DataFrame:
@@ -21,6 +21,6 @@ def select_extreme_rows(df: pd.DataFrame, n: int) -> pd.DataFrame:
 def select_ranked_pairs(df: pd.DataFrame, n_pairs: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return descending-positive and ascending-negative rows for rank-aligned pairing."""
     ordered = _finite_valence_rows(df)
-    positive = ordered.tail(n_pairs).sort_values("valence", ascending=False, kind="stable").reset_index(drop=True)
-    negative = ordered.head(n_pairs).sort_values("valence", kind="stable").reset_index(drop=True)
+    positive = ordered.tail(n_pairs).sort_values("valence", ascending=False).reset_index(drop=True)
+    negative = ordered.head(n_pairs).sort_values("valence").reset_index(drop=True)
     return positive, negative
