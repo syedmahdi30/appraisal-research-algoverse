@@ -9,7 +9,7 @@
 \item {\bf Claims}
     \item[] Question: Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
     \item[] Answer: \answerYes{}
-    \item[] Justification: The abstract and introduction state exactly the contributions delivered in the paper (the valence asymmetry and its matched-pair control, \S\ref{sec:conflict}; the mechanism and its scope caveats, \S\ref{sec:mechanism}; the readout and label-scoring sensitivity that prevents a cross-model claim, \S\ref{sec:robustness}), report the boundary condition rather than claiming generality, and explicitly scope out claims of priority on generic modality conflict, mechanistic conflict analysis, and multimodal emotion conflict.
+    \item[] Justification: The abstract and introduction state exactly the contributions delivered in the paper (the valence asymmetry and its matched-pair control, \S\ref{sec:conflict}; the mechanism and its scope caveats, \S\ref{sec:mechanism}; the readout and label-scoring sensitivity that prevents a cross-model claim, \S\ref{sec:models}), report the boundary condition rather than claiming generality, and explicitly scope out claims of priority on generic modality conflict, mechanistic conflict analysis, and multimodal emotion conflict.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the abstract and introduction do not include the claims made in the paper.
@@ -115,8 +115,8 @@
 
 \item {\bf Experiments compute resources}
     \item[] Question: For each experiment, does the paper provide sufficient information on the computer resources (type of compute workers, memory, time of execution) needed to reproduce the experiments?
-    \item[] Answer: \answerYes{}
-    \item[] Justification: Appendix~\ref{app:compute} reports per-experiment forward-pass counts, the single-GPU (A100-40GB class) hardware, and the additional passes consumed by the two withdrawn subsections; all experiments are inference-only, with no gradients and no generation, so the pass counts and hardware class are sufficient to reproduce the cost. Wall-clock totals are not yet reported and are marked in that appendix for camera-ready.
+    \item[] Answer: \answerNo{}
+    \item[] Justification: Appendix~\ref{app:compute} reports per-experiment forward-pass counts, the single-GPU (A100-40GB class) hardware, and the additional passes consumed by the two withdrawn subsections. Wall-clock totals are not yet available, so the disclosure does not fully answer the question's timing requirement.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not include experiments.
@@ -181,8 +181,8 @@
 
 \item {\bf New assets}
     \item[] Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets?
-    \item[] Answer: \answerYes{}
-    \item[] Justification: The new assets are the context bank, prompt variants, and analysis code, documented in Appendices~\ref{app:contexts}--\ref{app:patching} and in the anonymized code release's README.
+    \item[] Answer: \answerNo{}
+    \item[] Justification: The context bank and analysis procedures are documented in Appendices~\ref{app:contexts}--\ref{app:patching}, but the anonymized code archive and its README have not yet been attached to the submission.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not release new assets.
