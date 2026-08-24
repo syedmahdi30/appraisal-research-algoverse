@@ -40,9 +40,9 @@ from ..data.crowd_envent import load_split as load_text_split, sample_tak_subset
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_D_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
+from .shared.readouts import closed_vocab_valence, first_content_token_ids
 from .stage_a_steering_v2 import diff_of_means
 from .stage_c_transfer_hf import find_lm_layers, load_hf
-from .stage_f_qwen import emotion_token_ids, valence_score
 
 # Published Δμ norms at resid_post L18 (results/stage_d/steering_metrics.json). Built from TEXT
 # activations, and the text path is exact across stacks, so a correct site reproduces these.
@@ -105,7 +105,7 @@ def text_resid(model, processor, texts, layer: int, desc: str) -> np.ndarray:
 def image_valence(model, enc, tok_ids) -> float:
     with torch.no_grad():
         out = model(**enc)
-    return valence_score(out.logits[0, -1].float(), tok_ids)
+    return closed_vocab_valence(out.logits[0, -1].float(), tok_ids)
 
 
 # --------------------------------------------------------------------------- directions
@@ -158,7 +158,7 @@ def run(config_path: str, model_name: str, limit_override: int | None = None,
     seed = int(cfg.get("seed", 0))
 
     model, processor = load_hf(model_name)
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
     dmu, norms, n_used = build_directions(model, processor, layer, n_dir, seed, appraisals)
     check = check_norms(norms)
     if verify_only:

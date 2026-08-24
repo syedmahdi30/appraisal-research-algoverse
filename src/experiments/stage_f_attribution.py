@@ -39,12 +39,13 @@ from ..bridge.boot import boot_gemma
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       TEXT_CODE, context_prompt)
+from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS
 from ..paths import FIGURES_DIR, STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
 from .stage_a_steering import emotion_token_ids, valence_score
-from .stage_f_conflict import select_extreme_images
+from .shared.sampling import select_extreme_rows
 
 QUESTION = "What single emotion is this person feeling?"
 
@@ -175,7 +176,8 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
 
     # positive-image group only: its neutral valence is mid-scale (symmetric head-room), the clean
     # cell where the positive channel demonstrably collapses under the image.
-    sel = select_extreme_images(cfg.get("split", "test"), n_images * 2)
+    frame = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images * 2)
     sel = sel[sel["image_group"] == "positive"].head(n_images).reset_index(drop=True)
 
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))

@@ -35,10 +35,11 @@ from tqdm import tqdm
 
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS
 from ..data.labels import EMOTION_LABELS
-from ..paths import STAGE_F_DIR, ensure_dirs
+from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
-from .stage_f_qwen import (DEFAULT_MODEL, QUESTION, build_inputs, emotion_token_ids, load_qwen,
-                           select_extreme_images, valence_score)
+from .shared.readouts import closed_vocab_valence, first_content_token_ids
+from .shared.sampling import select_extreme_rows
+from .stage_f_qwen import DEFAULT_MODEL, QUESTION, build_inputs, load_qwen
 
 GROUPS = ("image", "question", "bos", "prefix_delim", "suffix_delim", "structure", "text_all")
 
@@ -174,7 +175,7 @@ def _readout(model, inputs, tok_ids, hooks=None):
     last = out.logits[0, -1].float()
     lp = {w: float(v) for w, v in zip(EMOTION_LABELS,
           torch.log_softmax(last[[tok_ids[w] for w in EMOTION_LABELS]], dim=-1))}
-    return valence_score(last, tok_ids), lp
+    return closed_vocab_valence(last, tok_ids), lp
 
 
 # --------------------------------------------------------------------------- run
@@ -196,9 +197,10 @@ def run(config_path: str, model_name: str, limit_override: int | None = None,
         band = list(range(a, b + 1))
     else:  # onset unknown on Qwen (no layerwise yet) → broad mid+late band, proportional to Gemma's
         band = list(range(round(0.35 * n_layers), n_layers - 2))
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
 
-    sel = select_extreme_images(n_images * 2)
+    frame = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images * 2)
     sel = sel[sel["image_group"] == "positive"].head(n_images).reset_index(drop=True)
 
     rows, n_skip, seg_bad, n_ok = [], 0, 0, 0

@@ -31,12 +31,13 @@ from tqdm import tqdm
 from ..bridge.boot import boot_gemma
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS, context_prompt
+from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
 from .stage_a_steering import emotion_token_ids, valence_score
 from .stage_f_attribution import _stash_hook, segment_positions
-from .stage_f_conflict import select_extreme_images
+from .shared.sampling import select_extreme_rows
 
 GROUPS = ("image", "question", "bos", "prefix_delim", "suffix_delim", "structure", "text_all")
 
@@ -128,7 +129,8 @@ def run(config_path: str, limit_override: int | None = None,
     pi = probes.index("pleasantness")
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
-    sel = select_extreme_images(cfg.get("split", "test"), n_images * 2)
+    frame = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images * 2)
     sel = sel[sel["image_group"] == "positive"].head(n_images).reset_index(drop=True)
 
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))

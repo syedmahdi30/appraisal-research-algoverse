@@ -41,13 +41,14 @@ from ..bridge.boot import boot_gemma
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       context_prompt)
+from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
 from .stage_a_steering import emotion_token_ids, valence_score
 from .stage_f_attribution import _stash_hook, segment_positions
-from .stage_f_conflict import select_extreme_images
 from .stage_f_patching import _patch_hook, _readout
+from .shared.sampling import select_ranked_pairs
 
 # image = the visual-valence test; context/question/structure = did image valence broadcast into text?;
 # text_all = all non-image alignable tokens; all = everything but the read-out query (≈100% sanity).
@@ -110,9 +111,8 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
 
     # donor = highest-valence (positive group), recipient = lowest-valence (negative group), paired by
     # rank so each pair has the largest possible image-valence gap.
-    sel = select_extreme_images(cfg.get("split", "test"), n_pairs * 2)
-    pos = sel[sel["image_group"] == "positive"].sort_values("valence", ascending=False).reset_index(drop=True)
-    neg = sel[sel["image_group"] == "negative"].sort_values("valence").reset_index(drop=True)
+    frame = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
+    pos, neg = select_ranked_pairs(frame, n_pairs)
     n_pairs = min(n_pairs, len(pos), len(neg))
 
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))

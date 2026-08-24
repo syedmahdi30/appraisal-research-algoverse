@@ -39,6 +39,7 @@ from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_E_DIR, STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
+from .shared.sampling import select_extreme_rows
 from .stage_a_steering import emotion_logprobs, emotion_token_ids, valence_score
 
 
@@ -46,11 +47,7 @@ from .stage_a_steering import emotion_logprobs, emotion_token_ids, valence_score
 def select_extreme_images(split: str, n: int):
     """Return the n/2 highest- and n/2 lowest-valence EMOTIC rows, tagged by image_group."""
     df = load_emotic_split(split).reset_index(drop=True)
-    df = df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
-    k = n // 2
-    low = df.head(k).assign(image_group="negative")
-    high = df.tail(k).assign(image_group="positive")
-    return pd.concat([high, low]).reset_index(drop=True)
+    return select_extreme_rows(df, n)
 
 
 # --------------------------------------------------------------------------- read-out
