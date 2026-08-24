@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.stats import pearsonr, spearmanr
 
 from ...data.labels import EMOTION_LABELS, EMOTIC_TO_SHARED
+from .patching import probe_recovery_valid
 
 
 POSITIVE_LABELS = ("joy", "pride", "relief", "trust")
@@ -14,6 +15,137 @@ NEGATIVE_LABELS = ("anger", "boredom", "disgust", "fear", "guilt", "sadness", "s
 # Keep the original formula-local names while the public constants describe their meaning.
 _POSITIVE = POSITIVE_LABELS
 _NEGATIVE = NEGATIVE_LABELS
+
+CROSS_IMAGE_GROUPS = ("image", "context", "question", "structure", "text_all", "all")
+
+
+def same_image_verdict(recovery) -> str:
+    """Interpret the established same-image probe recovery and sink decomposition."""
+    probe = lambda key: recovery[key]["probe"]  # noqa: E731
+    image = probe("image")
+    question = probe("question")
+    structure = probe("structure")
+    text_all = probe("text_all")
+    sinks = {
+        "BOS": probe("bos"),
+        "prefix-delims": probe("prefix_delim"),
+        "suffix-delims": probe("suffix_delim"),
+    }
+    dominant = max(sinks, key=lambda key: sinks[key])
+    parts = (
+        f"(probe recovery) image {image:.0%}, question {question:.0%} | sinks: "
+        f"BOS {sinks['BOS']:.0%}, prefix-delims {sinks['prefix-delims']:.0%}, "
+        f"suffix-delims {sinks['suffix-delims']:.0%} → structure {structure:.0%}, "
+        f"all-text {text_all:.0%}"
+    )
+    conclusions = [
+        "IMAGE tokens causally INERT" if abs(image) < 0.05 else f"IMAGE tokens carry {image:.0%}"
+    ]
+    if structure > 1.5 * max(question, 1e-3):
+        conclusions.append(
+            f"the context is BROADCAST into sink/turn tokens (structure {structure:.0%} > question "
+            f"{question:.0%}); dominant sink = {dominant} ({sinks[dominant]:.0%})"
+        )
+    else:
+        conclusions.append(
+            f"question and structure carry it comparably ({question:.0%} / {structure:.0%}); "
+            f"dominant sink = {dominant} ({sinks[dominant]:.0%})"
+        )
+    conclusions.append(
+        f"sink parts sum {sum(sinks.values()):.0%} vs structure {structure:.0%} (additivity check)"
+    )
+    conclusions.append(f"~{1.0 - text_all:.0%} remains in the unpatched CONTEXT tokens")
+    return parts + ". " + "; ".join(conclusions) + "."
+
+
+def cross_image_verdict(recovery, patch_layers, critical_layer) -> str:
+    """Interpret the established cross-image recovery result without changing its thresholds."""
+    if "image" not in recovery:
+        return "no pairs analysed"
+    probe_valid = probe_recovery_valid(patch_layers, critical_layer)
+    metric = "probe" if probe_valid else "val"
+    image = recovery["image"][metric]
+    text_all = recovery["text_all"][metric]
+    all_positions = recovery["all"][metric]
+    image_ci = recovery["image"][f"{metric}_ci95"]
+    note = "" if probe_valid else (
+        f" [NOTE: patched at/after the L{critical_layer} probe tap, so probe recovery is "
+        "invariant-by-construction — verdict uses behavioral VALENCE]"
+    )
+    lead = (
+        "VISUAL VALENCE LIVES IN THE IMAGE TOKENS" if image > 0.5 else
+        "image tokens carry a MODERATE share" if image > 0.2 else
+        "image tokens carry LITTLE in this band"
+    )
+    return (
+        f"{lead}{note}: patching image tokens recovers {image:.0%} "
+        f"[{image_ci[0]:.0%},{image_ci[1]:.0%}] of the image-driven read-out gap, vs all-text "
+        f"{text_all:.0%}. Sanity: patching every token bar the read-out query recovers "
+        f"{all_positions:.0%} (expect ~100%). Mirror of the same-image result, where image tokens "
+        "were inert for the TEXT context delta."
+    )
+
+
+def cross_image_metrics(recovery, patch_layers, critical_layer, context, context_polarity,
+                        n_pairs, n_skipped, n_segmentation_dropped, *, run_stamp, git_hash) -> dict:
+    """Build the stable cross-image metrics artifact with explicit provenance."""
+    return {
+        "run": run_stamp,
+        "git": git_hash,
+        "critical_layer": critical_layer,
+        "patch_layers": patch_layers,
+        "n_pairs": n_pairs,
+        "n_skipped": n_skipped,
+        "n_segmentation_dropped": n_segmentation_dropped,
+        "context_polarity": context_polarity,
+        "context": context,
+        "recovery": recovery,
+        "probe_valid": probe_recovery_valid(patch_layers, critical_layer),
+        "verdict": cross_image_verdict(recovery, patch_layers, critical_layer),
+        "design": (
+            "CROSS-IMAGE: donor=positive image, recipient=negative image, SAME context → "
+            "identical input_ids, all positions (incl. context) patchable. recovery = "
+            "(patched-neg_img)/(pos_img-neg_img) at L{c} read-out, resid_post over band "
+            "{b}."
+        ).format(c=critical_layer, b=patch_layers),
+    }
+
+
+def print_cross_image_report(recovery, metrics, patch_layers, data_path, metrics_path) -> None:
+    """Print the stable cross-image report using caller-owned artifact paths."""
+    print(
+        f"\nStage F CROSS-IMAGE patching — {metrics['n_pairs']} donor/recipient pairs "
+        f"({metrics['n_skipped']} skipped, {metrics['n_segmentation_dropped']} seg-dropped); "
+        f"context={metrics['context_polarity']} \"{metrics['context'][:34]}\"; "
+        f"patch resid_post {patch_layers[0]}-{patch_layers[-1]}."
+    )
+    if "image" not in recovery:
+        print("  no pairs analysed.")
+        return
+    print(
+        f"  baselines: probe pos-img {recovery['pos_probe']:+.3f} / "
+        f"neg-img {recovery['neg_probe']:+.3f}  |  valence pos-img "
+        f"{recovery['pos_val']:+.3f} / neg-img {recovery['neg_val']:+.3f}"
+    )
+    if not metrics.get("probe_valid", True):
+        print(
+            f"  NOTE: patched at/after the L{metrics['critical_layer']} probe tap → the probe column "
+            "is invariant-by-construction (all 0); read the VALENCE column for this band."
+        )
+    print(f"\n  {'group':10s} {'recovery(probe)':>22s} {'recovery(valence)':>22s}")
+    for group in CROSS_IMAGE_GROUPS:
+        probe, valence = recovery[group]["probe"], recovery[group]["val"]
+        probe_ci, valence_ci = recovery[group]["probe_ci95"], recovery[group]["val_ci95"]
+        print(
+            f"  {group:10s} {probe*100:>7.0f}% [{probe_ci[0]*100:>4.0f},{probe_ci[1]*100:>4.0f}]     "
+            f"{valence*100:>7.0f}% [{valence_ci[0]*100:>4.0f},{valence_ci[1]*100:>4.0f}]"
+        )
+    print(f"\n  VERDICT: {metrics['verdict']}")
+    print(f"  data -> {data_path}   metrics -> {metrics_path}")
+    print(
+        "  NEXT (band sweep — does visual valence read out earlier/later?): "
+        "--layers 0-12 and --layers 18-28"
+    )
 
 
 def correlation(pred, target):

@@ -15,12 +15,9 @@ turn-boundary result is EXPECTED to survive. That is precisely why it has to be 
 assumed: it is the mechanism claim the paper's §6 rests on, and "expected to survive" is not a
 result. This module re-runs it end to end on raw HF.
 
-WHAT IS DELIBERATELY SHARED WITH THE BRIDGE VERSION. `_aligned_groups`, `_recovery` and `_verdict`
-are imported from `stage_f_patching`, not reimplemented. They are pure numpy/pandas and touch no
-model; importing them guarantees the two runs are aggregated identically, which is the whole point of
-a re-score. (`src.bridge.boot` imports transformer_lens lazily, so this import boots nothing.)
-`segment_positions` is likewise imported and fed a tokenizer shim --- it only ever touches
-`.tokenizer`.
+WHAT IS DELIBERATELY SHARED WITH THE BRIDGE VERSION. Alignment, recovery, verdict, and prompt
+segmentation come from `experiments.shared`; they are pure numpy/pandas/token operations and touch no
+model. Both runners therefore aggregate identically without either backend importing the other.
 
 THE TAP. The probe was fit on the bridge's `blocks.18.hook_attn_out`. The raw-HF equivalent is
 `post_attention_layernorm`, NOT `self_attn`: Gemma post-norms the attention output before the
@@ -53,11 +50,14 @@ from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
+from .shared.patching import (SAME_IMAGE_GROUPS, aligned_patch_groups, same_image_recovery,
+                              segment_prompt_positions)
 from .stage_c_transfer_hf import CANDIDATE_TAPS, find_lm_layers, last_token_tap, load_hf
-from .stage_f_attribution import segment_positions
-from .stage_f_patching import GROUPS, _aligned_groups, _recovery, _verdict
-from .shared.readouts import closed_vocab_valence, first_content_token_ids
+from .shared.readouts import QUESTION, closed_vocab_valence, first_content_token_ids
+from .shared.reporting import same_image_verdict
 from .shared.sampling import select_extreme_rows
+
+GROUPS = SAME_IMAGE_GROUPS
 
 # Published bridge results, keyed by the (pos_idx, neg_idx) context pair they were actually run on.
 # Keyed explicitly because the two published pairs are NOT (0,2) and (1,0): pair 2 is (4,0), the
@@ -202,9 +202,13 @@ def verify_tap(cfg, tap: str) -> dict:
             n_probe, _ = readout(model, enc_n, store, coef, inter, tok_ids)
             gaps.append(p_probe - n_probe)
             shim = _TokShim(processor.tokenizer)
-            sd = segment_positions(shim, enc_p["input_ids"].cpu())
-            sr = segment_positions(shim, enc_n["input_ids"].cpu())
-            _, ok = _aligned_groups(sd, sr)
+            sd = segment_prompt_positions(
+                shim.tokenizer, enc_p["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            sr = segment_prompt_positions(
+                shim.tokenizer, enc_n["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            _, ok = aligned_patch_groups(sd, sr)
             seg_ok += int(all(ok.get(g) for g in GROUPS) and sd["image_ok"] and sd["question_ok"])
             n += 1
 
@@ -260,9 +264,13 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
                 continue
             enc_d = encode(processor, img, context_prompt(pos_ctx), model.device)   # donor: +ctx
             enc_r = encode(processor, img, context_prompt(neg_ctx), model.device)   # recipient: -ctx
-            seg_d = segment_positions(shim, enc_d["input_ids"].cpu())
-            seg_r = segment_positions(shim, enc_r["input_ids"].cpu())
-            groups, ok = _aligned_groups(seg_d, seg_r)
+            seg_d = segment_prompt_positions(
+                shim.tokenizer, enc_d["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            seg_r = segment_prompt_positions(
+                shim.tokenizer, enc_r["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            groups, ok = aligned_patch_groups(seg_d, seg_r)
             if not all(ok.get(g) for g in GROUPS):
                 seg_bad += 1
                 continue
@@ -284,7 +292,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
 
     df = pd.DataFrame(rows)
     df.to_parquet(STAGE_F_DIR / "patching_hf.parquet")
-    rec = _recovery(df)
+    rec = same_image_recovery(df, GROUPS)
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "stack": "raw_hf", "tap": tap,
@@ -292,7 +300,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
         "n_images": len(df), "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
         "donor_pos_context": pos_ctx, "recipient_neg_context": neg_ctx,
         "pos_idx": pj, "neg_idx": ni,
-        "recovery": rec, "verdict": _verdict(rec),
+        "recovery": rec, "verdict": same_image_verdict(rec),
         "note": ("raw-HF re-score of the bridge result. recovery = (patched-neg)/(pos-neg) at the "
                  f"L{crit} {tap} read-out; decoder-layer outputs (= resid_post) patched over "
                  f"{patch_layers}. Aggregation is imported from stage_f_patching so the two runs "
