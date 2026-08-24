@@ -37,10 +37,11 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
 from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_E_DIR, STAGE_F_DIR, ensure_dirs
-from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
+from .shared.patching import stash_activation
+from .shared.readouts import bridge_probe_and_logits
 from .shared.sampling import select_extreme_rows
-from .stage_a_steering import emotion_logprobs, emotion_token_ids, valence_score
+from .stage_a_steering import emotion_token_ids
 
 
 # --------------------------------------------------------------------------- image selection
@@ -52,30 +53,13 @@ def select_extreme_images(split: str, n: int):
 
 # --------------------------------------------------------------------------- read-out
 def _stash_hook(store: dict):
-    """Forward hook that stashes the activation at its site (for the frozen-probe read-out)."""
-    def hook(act, hook):  # noqa: ARG001 - `hook` arg is part of the TL contract
-        store["act"] = act.detach()
-        return act
-    return hook
+    return stash_activation(store)
 
 
 def _probe_and_logits(bridge, ids, pv, name, coef, inter, tok_ids, steer_hooks=None):
-    """One forward: (probe_readout, behavioral_valence, {emotion: logprob}).
-
-    A stash hook on the probe site (`name`) runs in the SAME forward as any steering hooks, so the
-    recorded probe read-out honestly reflects the steered forward. Because the probe site
-    (attn_out L18) is upstream of the resid_post L18 steering injection, that read-out is invariant
-    to steering by construction — recorded to demonstrate, not to score. Uses only run_with_hooks
-    (the pixel_values + fwd_hooks path proven in Stage D).
-    """
-    store: dict = {}
-    hooks = [(name, _stash_hook(store))] + list(steer_hooks or [])
-    with torch.no_grad():
-        logits = bridge.run_with_hooks(ids, pixel_values=pv, fwd_hooks=hooks)
-    last = ids.shape[-1] - 1
-    act = store["act"][0, last].float().cpu().numpy()
-    probe = float(predict(act[None, :], coef, inter)[0])
-    return probe, valence_score(logits[0, -1], tok_ids), emotion_logprobs(logits[0, -1], tok_ids)
+    return bridge_probe_and_logits(
+        bridge, ids, pv, name, coef, inter, tok_ids, steering_hooks=steer_hooks
+    )
 
 
 # --------------------------------------------------------------------------- pleasantness Δμ

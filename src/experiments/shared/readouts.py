@@ -1,9 +1,10 @@
-"""Closed-vocabulary behavioral readouts for raw-HuggingFace runners."""
+"""Closed-vocabulary scoring plus TransformerBridge-specific probe readouts."""
 from __future__ import annotations
 
 import torch
 
 from ...data.labels import EMOTION_LABELS
+from .patching import stash_activation
 
 QUESTION = "What single emotion is this person feeling?"
 POSITIVE = ("joy", "pride", "relief", "trust")
@@ -58,3 +59,41 @@ def model_readout(model, inputs, tok_ids) -> tuple[float, dict[str, float]]:
         output = model(**moved)
     logits_last = output.logits[0, -1].float()
     return closed_vocab_valence(logits_last, tok_ids), closed_vocab_logprobs(logits_last, tok_ids)
+
+
+def bridge_probe_readout(bridge, input_ids, pixel_values, tap_name,
+                         token_ids, coef, intercept, extra_hooks=None) -> tuple[float, float]:
+    """Read the frozen probe and closed-vocabulary valence from one bridge forward."""
+    from ...probes.evaluate import predict
+
+    store = {}
+    hooks = [(tap_name, stash_activation(store)), *list(extra_hooks or [])]
+    with torch.no_grad():
+        logits = bridge.run_with_hooks(
+            input_ids, pixel_values=pixel_values, fwd_hooks=hooks
+        )
+    activation = store["act"][0, input_ids.shape[-1] - 1].float().cpu().numpy()
+    probe = float(predict(activation[None, :], coef, intercept)[0])
+    return probe, closed_vocab_valence(logits[0, -1], token_ids)
+
+
+def bridge_probe_and_logits(bridge, input_ids, pixel_values, tap_name,
+                            coef, intercept, token_ids,
+                            steering_hooks=None) -> tuple[float, float, dict[str, float]]:
+    """Read probe, valence, and label log-probabilities from one bridge forward."""
+    from ...probes.evaluate import predict
+
+    store = {}
+    hooks = [(tap_name, stash_activation(store)), *list(steering_hooks or [])]
+    with torch.no_grad():
+        logits = bridge.run_with_hooks(
+            input_ids, pixel_values=pixel_values, fwd_hooks=hooks
+        )
+    activation = store["act"][0, input_ids.shape[-1] - 1].float().cpu().numpy()
+    probe = float(predict(activation[None, :], coef, intercept)[0])
+    logits_last = logits[0, -1]
+    return (
+        probe,
+        closed_vocab_valence(logits_last, token_ids),
+        closed_vocab_logprobs(logits_last, token_ids),
+    )

@@ -39,9 +39,10 @@ from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_a_steering import emotion_logprobs, emotion_token_ids, valence_score
-from .stage_f_conflict import STAGE_A_DIR_probes, _probe_and_logits
+from .shared.readouts import bridge_probe_and_logits
 from .shared.sampling import select_extreme_rows
+from .stage_a_steering import emotion_token_ids
+from .stage_f_conflict import STAGE_A_DIR_probes
 
 
 # --------------------------------------------------------------------------- prompt variants
@@ -122,7 +123,7 @@ def run_base(config_path: str, limit_override: int | None = None,
         for variant in variants:
             for cond, ctx_id, sentence in conditions:
                 inputs = build_image_inputs(bridge, img, prompt=variant_prompt(variant, sentence))
-                probe, val, lp = _probe_and_logits(
+                probe, val, lp = bridge_probe_and_logits(
                     bridge, inputs["input_ids"], inputs["pixel_values"], name, coef, inter, tok_ids)
                 rows.append({"prompt_variant": variant, "image_path": r["image_path"],
                              "image_valence": float(r["valence"]), "image_group": r["image_group"],
