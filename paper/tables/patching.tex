@@ -1,0 +1,19 @@
+\begin{table}[h]
+  \caption{Same-image patching (probe readout, layers 13--17, \gemma{}): percentage of the positive-versus-negative context difference recovered by each token group, with bootstrap 95\% intervals over 60 images. Positions before the context are zero by construction and serve only as an alignment check.}
+  \label{tab:patching}
+  \centering
+  \small
+  \begin{tabular}{lrr}
+    \toprule
+    Patched group & Pair 1 & Pair 2 \\
+    \midrule
+    Question tokens              & $47.3\%$ $[43.4, 51.0]$ & $54.3\%$ $[51.9, 57.0]$ \\
+    Assistant-turn boundary      & $46.4\%$ $[44.4, 48.3]$ & $39.8\%$ $[37.3, 42.1]$ \\
+    All aligned text             & $\mathbf{93.2\%}$ $[91.5, 94.7]$ & $\mathbf{88.3\%}$ $[87.2, 89.4]$ \\
+    \midrule
+    Image tokens                 & $0\%$  & $-0\%$ \\
+    BOS                          & $0\%$  & $0\%$ \\
+    User-turn prefix delimiters  & $0\%$  & $0\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}

@@ -1,0 +1,29 @@
+\begin{table}[h]
+  \caption{Four models $\times$ three readouts. Intervals are bootstrap 95\%; ``crossed'' resamples photographs and sentences jointly. Bold marks a primary crossed interval excluding zero. The corrected gap subtracts each image's neutral-sentence error rate; LLaVA labels are complete token sequences.}
+  \label{tab:models}
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{3.5pt}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Readout & \qwen{} & \llavanext{} & \gemma{} & \llava{} \\
+    \midrule
+    Override gap (corrected) & $+21.7\%$ & $-11.2\%$ & $+18.1\%$ & $+63.9\%$ \\
+    \quad photo-clustered & $[+10.9,+31.9]$ & $[-21.4,-0.3]$ & $[+7.5,+28.7]$ & $[+55.1,+72.5]$ \\
+    \quad crossed & $[-8.6,+48.0]$ & $[-34.9,+11.9]$ & $[-5.4,+41.2]$ & $\mathbf{[+44.0,+83.3]}$ \\
+    \addlinespace[1pt]
+    \quad \emph{uncorrected} & $+39.4\%$ & $-14.6\%$ & $+12.2\%$ & $+63.9\%$ \\
+    \quad \emph{photo-clustered} & $[+29.5,+49.0]$ & $[-25.5,-2.7]$ & $[-0.4,+23.7]$ & $[+55.0,+71.8]$ \\
+    \quad \emph{crossed} & $[+6.4,+66.5]$ & $[-38.0,+9.2]$ & $[-11.4,+36.9]$ & $[+44.1,+83.5]$ \\
+    \midrule
+    Mirror contrast & $+0.409$ & $+0.125$ & $+0.405$ & $+0.673$ \\
+    \quad photo-clustered & $[+0.23,+0.59]$ & $[+0.07,+0.18]$ & $[+0.25,+0.55]$ & $[+0.61,+0.73]$ \\
+    \quad crossed & $[-0.16,+0.91]$ & $[-0.05,+0.31]$ & $\mathbf{[+0.06,+0.77]}$ & $\mathbf{[+0.45,+0.88]}$ \\
+    \midrule
+    Unbounded margin & $-1.81$ & $+0.497$ & $+4.64$ & $+1.430$ \\
+    \quad crossed & $[-5.47,+1.80]$ & $\mathbf{[+0.018,+0.982]}$ & $\mathbf{[+3.05,+6.29]}$ & $\mathbf{[+0.776,+2.085]}$ \\
+    \midrule
+    $|\betatxt|/|\betaimg|$ & $1.14$ & $0.52$ & $0.44$ & $0.68$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
