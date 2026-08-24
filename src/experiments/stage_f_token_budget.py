@@ -61,7 +61,17 @@ from .common import load_config, run_stamp, save_json
 from .shared.artifacts import (artifact_metadata, ensure_output_available, run_key_suffix,
                                token_budget_key, token_budget_metric_paths)
 from .shared.readouts import first_content_token_ids, model_readout, user_text
+from .shared.reporting import (
+    asymmetry_vs_floor,
+    flip_override,
+    image_discriminability,
+    text_only_readouts,
+    token_budget_trends,
+)
 from .shared.sampling import select_extreme_rows
+
+_text_only_readouts = text_only_readouts
+_trends = token_budget_trends
 
 
 def _conditions(bank: str = "full"):
@@ -185,40 +195,15 @@ def count_image_tokens(processor, image, family: str, style: str = "chat") -> di
                      "instead of this field.")}
 
 
-# --------------------------------------------------------------------------- controls & metrics
-def image_discriminability(df: pd.DataFrame) -> dict:
-    """Can the model still tell the two image groups apart with NO context? The resolution control.
-
-    Uses only the `none` rows, so it is a pure vision read: if this collapses at low resolution the
-    image simply became unreadable, and any change in the override gap is confounded with visual
-    quality rather than attributable to the token budget.
-    """
-    d = df[df["condition"] == "none"]
-    pos = d[d["image_group"] == "positive"]["valence"].to_numpy(dtype=float)
-    neg = d[d["image_group"] == "negative"]["valence"].to_numpy(dtype=float)
-    if not len(pos) or not len(neg):
-        return {}
-    # AUC via the Mann-Whitney U identity (no sklearn dependency in the raw-HF envs).
-    order = np.argsort(np.concatenate([pos, neg]), kind="mergesort")
-    ranks = np.empty(len(order), dtype=float)
-    ranks[order] = np.arange(1, len(order) + 1)
-    auc = (ranks[:len(pos)].sum() - len(pos) * (len(pos) + 1) / 2) / (len(pos) * len(neg))
-    return {"mean_valence_positive_images": float(pos.mean()),
-            "mean_valence_negative_images": float(neg.mean()),
-            "discriminability_gap": float(pos.mean() - neg.mean()),
-            "auc": float(auc), "n_pos": int(len(pos)), "n_neg": int(len(neg))}
-
-
 def _analyze(df, model_name, tokens: dict, max_side, multi=None, n_skipped=0) -> dict:
-    from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
     return artifact_metadata(
         model=model_name, max_side=max_side,
         read_out="behavioral_valence", n_images=int(df["image_path"].nunique()) if len(df) else 0,
         n_rows=int(len(df)), n_skipped=n_skipped,
         image_tokens=tokens,
         image_discriminability=image_discriminability(df) if len(df) else {},
-        asymmetry_vs_floor=_asymmetry_vs_floor(df) if len(df) else {},
-        flip_override=_flip_override(df) if len(df) else {},
+        asymmetry_vs_floor=asymmetry_vs_floor(df) if len(df) else {},
+        flip_override=flip_override(df) if len(df) else {},
         tokenization_multi_token=multi or {},
     )
 
@@ -402,39 +387,6 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     return metrics
 
 
-def _text_only_readouts(df: pd.DataFrame) -> dict:
-    """Both scales for a text-only run: the bounded valence score and an unbounded log-odds margin.
-
-    The bounded score is the paper's primary readout, but with no image some models pin it to a
-    bound: Qwen3-VL reads a bare neutral sentence as sadness at -0.996, so every sentence lands
-    at +/-1 and the |neg|/|pos| ratio comes out at 1.00 no matter what the sentences do. A ratio
-    computed from two saturated constants is not evidence that the sets are balanced; it is evidence
-    that the readout cannot see. The margin (best positive-valence label minus best negative-valence
-    label, in log-odds) has no bounds and answers the question the control is actually asking.
-
-    Two references are reported per scale. `raw` compares each polarity against zero and is the one
-    to trust when the neutral baseline is itself pinned; `vs_neutral` subtracts the neutral-sentence
-    baseline and is the one to trust when it is not. `saturation` says which situation you are in.
-    """
-    from .analyze_stage_f import _POSITIVE, _NEGATIVE
-    d = df.copy()
-    d["margin"] = [max(r["lp_" + w] for w in _POSITIVE) - max(r["lp_" + w] for w in _NEGATIVE)
-                   for _, r in d.iterrows()]
-    out = {"saturation_frac": float((d["valence"].abs() >= 0.999).mean()), "n_rows": int(len(d))}
-    for scale, col in (("bounded_valence", "valence"), ("unbounded_margin", "margin")):
-        g = lambda c: d[d["condition"] == c][col]
-        pos, neg, neu = float(g("positive").mean()), float(g("negative").mean()), float(g("neutral").mean())
-        pe, ne = pos - neu, neg - neu
-        out[scale] = {
-            "pos_raw": pos, "neg_raw": neg, "neutral_baseline": neu,
-            "ratio_raw": abs(neg) / abs(pos) if pos else float("nan"),
-            "pos_vs_neutral": pe, "neg_vs_neutral": ne,
-            "ratio_vs_neutral": abs(ne) / abs(pe) if pe else float("nan"),
-            "mirror_contrast_raw": abs(neg) - abs(pos),
-        }
-    return out
-
-
 def reanalyze_text_only(model_name: str, style: str = "chat", bank: str = "full") -> dict:
     """Recompute a text-only control from its saved parquet (CPU, no model load).
 
@@ -448,7 +400,7 @@ def reanalyze_text_only(model_name: str, style: str = "chat", bank: str = "full"
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run --text-only first.")
     df = pd.read_parquet(pq)
-    r = _text_only_readouts(df)
+    r = text_only_readouts(df)
 
     mpath = STAGE_F_DIR / f"text_only_{key}_metrics.json"
     m = json.loads(mpath.read_text()) if mpath.exists() else {"model": model_name, "bank": bank}
@@ -504,76 +456,6 @@ def reanalyze(model_name: str, max_side: int | None, bank: str = "full") -> dict
     save_json(m, mpath)
     _print(m)
     return m
-
-
-# --------------------------------------------------------------------------- aggregation
-def _trends(tab: pd.DataFrame) -> dict:
-    """Within-model and cross-model evidence on the token-budget hypothesis, kept strictly separate.
-
-    A single correlation over every row is worse than useless here, for three reasons this function
-    exists to avoid:
-
-      1. POOLING. A within-model resolution sweep (same weights, budget varied) and a cross-model
-         comparison (everything varies at once) answer different questions. Pooling them lets three
-         clustered points from one model plus one distant point from another produce r = -0.99 that
-         means nothing.
-      2. IGNORED UNCERTAINTY. Correlation uses point estimates only. Four gaps that sit inside
-         mutually overlapping 95% CIs are a flat line, however neatly ordered they happen to be.
-      3. SILENT EXCLUSION. Runs from the older fixed-path runner carry no image-token count and drop
-         out of any correlation without comment — and those were exactly the models that break the
-         pattern. Missing rows are now named, not dropped quietly.
-
-    Within-model verdict is CI-based: if every sweep CI shares a common intersection, no effect of the
-    budget is detectable regardless of the ordering of the point estimates.
-    """
-    out: dict = {}
-    have = tab.dropna(subset=["image_tokens", "override_gap"])
-    missing = tab[tab["image_tokens"].isna()]
-    if len(missing):
-        out["excluded_missing_image_tokens"] = [
-            {"model": r["model"], "source": r["source"], "override_gap": r["override_gap"]}
-            for _, r in missing.iterrows()]
-
-    # ---- within-model: one entry per model that was swept over >=2 distinct budgets
-    within = []
-    for model, g in have.groupby("model"):
-        if g["image_tokens"].nunique() < 2:
-            continue
-        lo, hi = float(g["ci_lo"].max()), float(g["ci_hi"].min())   # common intersection of all CIs
-        flat = lo <= hi
-        within.append({
-            "model": model, "n_runs": int(len(g)),
-            "tokens_min": float(g["image_tokens"].min()), "tokens_max": float(g["image_tokens"].max()),
-            "fold_range": float(g["image_tokens"].max() / g["image_tokens"].min()),
-            "gap_min": float(g["override_gap"].min()), "gap_max": float(g["override_gap"].max()),
-            "all_cis_overlap": bool(flat),
-            "discriminability_auc_range": [float(g["auc"].min()), float(g["auc"].max())]
-                                          if g["auc"].notna().any() else None,
-            "verdict": ("FLAT — every CI overlaps, so no effect of the token budget is detectable "
-                        "over this range" if flat else
-                        "MOVES — at least two CIs are disjoint across the budget range")})
-    if within:
-        out["within_model"] = within
-
-    # ---- cross-model: exactly one representative run per model (the largest budget measured)
-    reps = have.sort_values("image_tokens").groupby("model", as_index=False).last()
-    if len(reps) >= 3:
-        t, gp = reps["image_tokens"].to_numpy(float), reps["override_gap"].to_numpy(float)
-        r = float(np.corrcoef(t, gp)[0, 1])
-        loo = [float(np.corrcoef(np.delete(t, i), np.delete(gp, i))[0, 1]) for i in range(len(t))]
-        out["cross_model"] = {
-            "n_models": int(len(reps)), "models": reps["model"].tolist(),
-            "pearson_tokens_vs_gap": r, "leave_one_out_range": [min(loo), max(loo)],
-            "caveat": (f"n={len(reps)} models: a correlation this small is descriptive only, ignores "
-                       f"every CI, and confounds the budget with everything else that differs "
-                       f"between checkpoints."
-                       + (" Runs are missing image-token counts (see excluded_missing_image_tokens), "
-                          "so this omits models that may break the pattern."
-                          if "excluded_missing_image_tokens" in out else ""))}
-    elif len(reps):
-        out["cross_model"] = {"n_models": int(len(reps)),
-                              "note": "fewer than 3 models with measured image tokens — no trend reported"}
-    return out
 
 
 def _print_trends(t: dict) -> None:
@@ -643,7 +525,7 @@ def aggregate() -> dict:
         tab = tab.sort_values(["model", "image_tokens"], na_position="last")
     out = artifact_metadata(n_runs=len(tab), rows=tab.to_dict(orient="records"))
 
-    out.update(_trends(tab))
+    out.update(token_budget_trends(tab))
     save_json(out, STAGE_F_DIR / "token_budget_trend.json")
     if len(tab):
         print(tab.to_string(index=False))

@@ -29,8 +29,6 @@ import argparse
 import numpy as np
 import torch
 from PIL import Image
-from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
 
 from ..bridge.boot import boot_gemma
@@ -38,10 +36,17 @@ from ..bridge.hooks import keep_language_taps
 from ..bridge.multimodal import TEXT_EMOTION_PROMPT, build_image_inputs
 from ..data.crowd_envent import load_split as load_text_split
 from ..data.emotic import load_split as load_emotic_split
-from ..data.labels import EMOTIC_TO_SHARED
 from ..paths import FIGURES_DIR, STAGE_A_DIR, STAGE_C_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import load_config, load_probes, run_stamp, save_json
+from .shared.reporting import (
+    correlation as _corr,
+    polarity_auc as _auc,
+    polarity_vector as _polarity,
+    random_direction_controls as _random_controls,
+    shared_emotic_label as _shared_label,
+    transfer_verdict as _verdict,
+)
 
 
 # --------------------------------------------------------------------------- activations
@@ -82,82 +87,6 @@ def text_activations(bridge, texts, layer, tap):
         last = ids.shape[-1] - 1
         rows.append(cache[name][0, last].float().cpu().numpy())
     return np.stack(rows)
-
-
-# --------------------------------------------------------------------------- metrics
-def _corr(pred, y):
-    """Scale-invariant correlations of a read-out vs a target, on finite pairs only."""
-    pred = np.asarray(pred, dtype=np.float64)
-    y = np.asarray(y, dtype=np.float64)
-    m = np.isfinite(pred) & np.isfinite(y)
-    if m.sum() < 3 or np.std(pred[m]) == 0 or np.std(y[m]) == 0:
-        return {"n": int(m.sum()), "pearson": None, "spearman": None}
-    return {"n": int(m.sum()),
-            "pearson": float(pearsonr(pred[m], y[m])[0]),
-            "spearman": float(spearmanr(pred[m], y[m])[0])}
-
-
-def _shared_label(categories) -> str | None:
-    """Row-aligned EMOTIC-26 -> shared-7 collapse (single-label; else None).
-
-    Mirrors data.emotic.to_shared_single_label's logic but keeps row alignment with the
-    activation matrix (no reindexing), so labels line up with X_img.
-    """
-    mapped = set()
-    for c in np.atleast_1d(categories):
-        v = EMOTIC_TO_SHARED.get(str(c).strip())
-        if v is not None:
-            mapped.add(v)
-    return next(iter(mapped)) if len(mapped) == 1 else None
-
-
-def _polarity(shared_labels, positive, negative):
-    """shared-7 label -> +1 (positive emotion) / 0 (negative) / NaN (excluded)."""
-    pos, neg = set(positive), set(negative)
-    out = np.full(len(shared_labels), np.nan)
-    for i, lab in enumerate(shared_labels):
-        if lab in pos:
-            out[i] = 1.0
-        elif lab in neg:
-            out[i] = 0.0
-    return out
-
-
-def _auc(pred, polarity):
-    """AUC of a read-out separating positive- vs negative-emotion images (scale-free)."""
-    pred = np.asarray(pred, dtype=np.float64)
-    m = np.isfinite(polarity)
-    y = polarity[m]
-    if m.sum() < 10 or y.sum() == 0 or y.sum() == m.sum():
-        return {"n": int(m.sum()), "n_pos": int(np.nansum(polarity == 1)),
-                "n_neg": int(np.nansum(polarity == 0)), "auc": None}
-    return {"n": int(m.sum()), "n_pos": int(y.sum()), "n_neg": int(m.sum() - y.sum()),
-            "auc": float(roc_auc_score(y, pred[m]))}
-
-
-def _random_controls(X, y, n_random, seed):
-    """Null distribution of |spearman| for random directions vs y (direction specificity).
-
-    A correlation is scale-invariant, so direction norm is irrelevant — we skip
-    norm-matching. Gemma's activations are anisotropic, so random directions have a
-    non-trivial |spearman| spread; this returns the whole spread so the caller can compute
-    an empirical p-value rather than eyeball a single max. `_abs` is the raw per-draw list.
-    """
-    rng = np.random.default_rng(seed)
-    d = X.shape[1]
-    spears = []
-    for _ in range(n_random):
-        r = rng.standard_normal(d).astype(np.float32)
-        c = _corr(X @ r, y)
-        if c["spearman"] is not None:
-            spears.append(abs(c["spearman"]))
-    a = np.asarray(spears, dtype=float)
-    if a.size == 0:
-        return {"n_random": n_random, "n_valid": 0, "mean": None, "std": None,
-                "max": None, "p95": None, "_abs": []}
-    return {"n_random": n_random, "n_valid": int(a.size), "mean": float(a.mean()),
-            "std": float(a.std()), "max": float(a.max()),
-            "p95": float(np.percentile(a, 95)), "_abs": a.tolist()}
 
 
 # --------------------------------------------------------------------------- run
@@ -265,36 +194,6 @@ def run(config_path: str, n_images_override: int | None = None) -> dict:
     save_json(metrics, STAGE_C_DIR / "metrics.json")
     _plot(metrics, X_img, probes, appraisals, valence)
     return metrics
-
-
-def _verdict(metrics, appraisals):
-    """Provisional READ-OUT verdict (human confirms). Requires agreement across three
-    independent signals — valence correlation, polarity AUC, and beating the random-
-    direction null — and a mirror sign from unpleasantness when scored. Note this is a
-    read-out verdict only; shared-geometry vs verbalization needs the caption baseline.
-    """
-    if "pleasantness" not in appraisals:
-        return "inconclusive (pleasantness not scored)"
-    p = metrics["image_readout"]["pleasantness"]
-    sp = p["vs_valence"]["spearman"]
-    auc = p["polarity_auc"]["auc"]
-    pval = p.get("vs_control_p")
-    if sp is None:
-        return "inconclusive (no valence signal computed)"
-    beats = pval is not None and pval < 0.05          # beats the random-direction null
-    concord = auc is not None and auc >= 0.60          # polarity agrees
-    mirror = True
-    if "unpleasantness" in appraisals:
-        us = metrics["image_readout"]["unpleasantness"]["vs_valence"]["spearman"]
-        mirror = us is not None and us < 0             # opposite sign, as theory predicts
-    if abs(sp) >= 0.3 and beats and concord and mirror:
-        return (f"supports read-out transfer (pleasantness rho={sp:+.2f} vs valence, "
-                f"polarity AUC={auc:.2f}, beats random dirs p={pval:.3f}, unpleasantness "
-                f"mirrors) — NEXT: caption baseline to separate shared-geometry vs verbalization")
-    if abs(sp) >= 0.15 and beats:
-        return ("inconclusive (above the random null but modest/mixed — scale to full split "
-                "and add the caption baseline)")
-    return "fails to support transfer (read-out indistinguishable from random directions)"
 
 
 def _plot(metrics, X_img, probes, appraisals, valence):

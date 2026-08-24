@@ -1,0 +1,91 @@
+import pandas as pd
+import pytest
+
+from src.data.labels import EMOTION_LABELS
+from src.experiments.shared.reporting import (
+    content_mean_frame,
+    correlation,
+    flip_override,
+    image_discriminability,
+    sequence_result_columns,
+    text_only_readouts,
+    token_budget_trends,
+)
+
+
+def _lp(winner):
+    return {f"lp_{label}": 0.0 if label == winner else -10.0 for label in EMOTION_LABELS}
+
+
+def test_correlation_filters_nonfinite_pairs_and_keeps_schema():
+    result = correlation([1.0, 2.0, float("nan"), 3.0], [2.0, 4.0, 99.0, 6.0])
+
+    assert result["n"] == 3
+    assert result["pearson"] == pytest.approx(1.0)
+    assert result["spearman"] == 1.0
+
+
+def test_flip_override_and_discriminability_schema():
+    rows = []
+    for image, group, valence, condition, winner in (
+        ("pos", "positive", 0.8, "none", "joy"),
+        ("pos", "positive", -0.4, "negative", "sadness"),
+        ("neg", "negative", -0.8, "none", "sadness"),
+        ("neg", "negative", 0.4, "positive", "joy"),
+    ):
+        rows.append({"image_path": image, "image_group": group, "valence": valence,
+                     "condition": condition, **_lp(winner)})
+    frame = pd.DataFrame(rows)
+    override = flip_override(frame, n_boot=20, seed=7)
+    assert override["neg_ctx_overrides_pos_img"] == 1.0
+    assert override["pos_ctx_overrides_neg_img"] == 1.0
+    assert set(override) == {
+        "neg_ctx_overrides_pos_img", "pos_ctx_overrides_neg_img", "dominance_gap",
+        "dominance_gap_ci95", "n_pos_images", "n_neg_images",
+    }
+    discrim = image_discriminability(frame)
+    assert discrim["discriminability_gap"] == pytest.approx(1.6)
+    assert discrim["auc"] == 1.0
+
+
+def test_text_only_and_trend_outputs_keep_existing_keys():
+    rows = []
+    for condition, value, winner in (("positive", 0.5, "joy"),
+                                     ("negative", -0.75, "sadness"),
+                                     ("neutral", 0.0, "neutral")):
+        rows.append({"condition": condition, "valence": value, **_lp(winner)})
+    readouts = text_only_readouts(pd.DataFrame(rows))
+    assert set(readouts) == {"saturation_frac", "n_rows", "bounded_valence", "unbounded_margin"}
+    assert readouts["bounded_valence"]["ratio_raw"] == pytest.approx(1.5)
+
+    table = pd.DataFrame([
+        {"model": "m", "source": "a", "image_tokens": 10, "override_gap": 0.2,
+         "ci_lo": 0.1, "ci_hi": 0.3, "auc": 0.95},
+        {"model": "m", "source": "b", "image_tokens": 20, "override_gap": 0.25,
+         "ci_lo": 0.15, "ci_hi": 0.35, "auc": 0.96},
+    ])
+    trends = token_budget_trends(table)
+    assert trends["within_model"][0]["all_cis_overlap"] is True
+
+
+def test_sequence_transformations_preserve_primary_and_sensitivity_columns():
+    result = {
+        "sequence_sum": {
+            "valence": 0.25,
+            "logprobs": {label: -float(i + 1) for i, label in enumerate(EMOTION_LABELS)},
+            "scores": {label: -float(i + 10) for i, label in enumerate(EMOTION_LABELS)},
+        },
+        "content_mean": {
+            "valence": -0.5,
+            "logprobs": {label: -float(i + 20) for i, label in enumerate(EMOTION_LABELS)},
+            "scores": {label: -float(i + 30) for i, label in enumerate(EMOTION_LABELS)},
+        },
+    }
+
+    columns = sequence_result_columns(result)
+    mean_frame = content_mean_frame(pd.DataFrame([columns]))
+
+    assert columns["valence"] == 0.25
+    assert columns["lp_joy"] == result["sequence_sum"]["logprobs"]["joy"]
+    assert mean_frame.loc[0, "valence"] == -0.5
+    assert mean_frame.loc[0, "lp_joy"] == result["content_mean"]["logprobs"]["joy"]

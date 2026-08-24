@@ -126,7 +126,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
 # --------------------------------------------------------------------------- analysis (CPU)
 def analyze() -> dict:
     """Glob every per-model scaling parquet, compute the shared override gap, order by param count."""
-    from .analyze_stage_f import _flip_override
+    from .shared.reporting import flip_override
     pqs = sorted(STAGE_F_DIR.glob("conflict_scaling_*.parquet"))
     if not pqs:
         raise FileNotFoundError(
@@ -135,7 +135,7 @@ def analyze() -> dict:
     for pq in pqs:
         df = pd.read_parquet(pq)
         model = str(df["model"].iloc[0]) if "model" in df.columns else pq.stem
-        flip = _flip_override(df)
+        flip = flip_override(df)
         if not flip:
             continue
         per_model.append({"model": model, "params_billions": params_billions(model),
