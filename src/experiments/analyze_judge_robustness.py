@@ -31,7 +31,12 @@ import pandas as pd
 from ..data.labels import EMOTION_LABELS
 from ..paths import STAGE_F_DIR, ensure_dirs
 from .common import git_hash, run_stamp, save_json
-from .analyze_stage_f import _POSITIVE, _NEGATIVE, _flip_override, _asymmetry_vs_floor
+from .shared.reporting import (
+    NEGATIVE_LABELS,
+    POSITIVE_LABELS,
+    asymmetry_vs_floor,
+    flip_override,
+)
 
 # Default parquet locations (Gemma full bank is written as conflict_pilot.parquet; see NUMBER-LEDGER).
 DEFAULT_PARQUETS = {
@@ -48,8 +53,8 @@ class Evaluator:
     """A scoring judge: a pos/neg partition, the label set the argmax ranges over, and the softmax
     denominator used for the graded valence. Defaults reproduce the paper's E0 evaluator exactly."""
     name: str
-    pos: tuple[str, ...] = _POSITIVE
-    neg: tuple[str, ...] = _NEGATIVE
+    pos: tuple[str, ...] = POSITIVE_LABELS
+    neg: tuple[str, ...] = NEGATIVE_LABELS
     argmax_set: tuple[str, ...] = tuple(EMOTION_LABELS)   # labels the model may 'pick' among
     denom: tuple[str, ...] = tuple(EMOTION_LABELS)        # softmax denominator for graded valence
     note: str = ""
@@ -78,7 +83,7 @@ EVALUATORS: list[Evaluator] = [
               note="drop arguably-weak positives relief, trust -> 'other'"),
     Evaluator("J3_boredom_neutral", neg=("anger", "disgust", "fear", "guilt", "sadness", "shame"),
               note="re-file low-arousal boredom out of NEG"),
-    Evaluator("J4_denom_swap", denom=tuple(_POSITIVE) + tuple(_NEGATIVE),
+    Evaluator("J4_denom_swap", denom=tuple(POSITIVE_LABELS) + tuple(NEGATIVE_LABELS),
               note="renormalise over pos u neg only (drop surprise/neutral sink mass)"),
     Evaluator("J5_rank_only", note="identical partition; argmax-only, magnitudes ignored (== E0 override)"),
 ]
@@ -145,7 +150,7 @@ def _mirror_contrast(df: pd.DataFrame, ev: Evaluator, n_boot: int = 2000, seed: 
     d = df.copy()
     d["valence"] = _rescore_valence(df, ev).to_numpy()
     try:
-        res = _asymmetry_vs_floor(d, n_boot=n_boot, seed=seed)
+        res = asymmetry_vs_floor(d, n_boot=n_boot, seed=seed)
     except Exception as exc:  # noqa: BLE001 — a malformed bank should not kill the sweep
         return {"error": str(exc)}
     return {k: res[k] for k in ("asymmetry_index", "asymmetry_ci95", "headroom_norm_pull_drop",
@@ -160,7 +165,7 @@ def anchor_check(df: pd.DataFrame, published_gap: float | None = None, tol: floa
     (2) data-exact:  == `published_gap` (from a sibling conflict_analysis.json) when available.
     """
     mine = _override_gap(df, E0)
-    ref = _flip_override(df)
+    ref = flip_override(df)
     if not mine or not ref:
         return {"ok": False, "reason": "no lp_* columns or no conflict cells in this parquet"}
     dgap = abs(mine["dominance_gap"] - ref["dominance_gap"])

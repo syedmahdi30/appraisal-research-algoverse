@@ -1,118 +1,125 @@
-# Handoff — paper rewritten on raw HF; review panel found two verified defects
+# Handoff — paper reframed, cleaned, and verified; the page cut is next
 
-_Written 2026-08-23. Branch `main`, tip = the review-findings commit, pushed. Working tree clean
-except pre-existing untracked files (`PAPER-CONTEXT.md`, `PROJECT-INSTRUCTIONS.md`, `session*.md`,
+_Written 2026-08-23. Branch `main`, tip `4b5e589` pushed, plus one uncommitted one-line fix to
+`paper/checklist.tex` (see Changes Made #8). Working tree otherwise clean apart from long-standing
+untracked files (`PAPER-CONTEXT.md`, `PROJECT-INSTRUCTIONS.md`, `context6/7.md`, `session*.md`,
 `graphify-out/`, PDFs, `paper/neurips_2026old.tex`, `paper/neurips_2026.tex.pre-rescore-backup`)._
-
-**Read `docs/review-panel-2026-08-23.md` first, then `docs/paper-retraction-audit.md`.**
 
 ## Goal
 
-Get `paper/neurips_2026.tex` into a clean, coherent, well-grounded draft suitable for circulating to
-human peer readers. Per Sneheel: reduce jargon, move extra experiments to the appendix, ground the
-methodology in prior literature, converge on a few key experiments, build a coherent story. **Venue
-is deliberately undecided** — do not optimise for a page limit; Interp4Discovery (Aug 29) and
-VLM4RWD (Aug 30) are both still open and the decision comes after the draft is good.
+Get `paper/neurips_2026.tex` into a state Sneheel can review and that can actually be submitted:
+honest claims, verified numbers, credited methods, plain language — then cut it to the venue page
+limit. The reframe and clean-up are done. **The cut is not.**
 
 ## Current State
 
-- **The paper is fully rewritten on raw HuggingFace measurements.** Every number in it is
-  re-derivable from `results/` on this machine. Qwen3-VL is the primary behavioural model (it is the
-  only one of four that weights both cues comparably, 1.14 vs 0.44–0.55); Gemma-3-4B remains the
-  mechanism model because the frozen probe was fit on it.
-- **Compiles to ~19 pages: body ends ~p13, appendix to p19.** 11 tables, 4 figures, 2 remaining
-  `\todo`s (both routine camera-ready: acknowledgements, wall-clock).
-- **A simulated 5-seat review panel was run and returned only 3 seats.** Methodology and Devil's
-  Advocate died on API errors and were never re-run. The panel is incomplete and the skill's own
-  rule (every DA `[CRITICAL]` must be adjudicated) is unsatisfied.
-- **Two defects are verified computationally and are NOT yet fixed in the paper:**
-  1. §6.2's "image tokens recover 0%" is an **arithmetic identity** — those positions precede the
-     context under causal masking, so patching them is a no-op (60/60 rows bitwise identical).
-     Still stated as a finding in the abstract, contribution 5, Discussion and Conclusion.
-  2. The override rate is **not baselined** while the graded readouts are. Correcting it against each
-     cell's own neutral context takes Qwen's headline from **+39.8% to +21.1%** and collapses the
-     spread across models to +21/+14/+18/−14.
-- Everything is committed and pushed. Nothing is half-edited.
+- **The paper claims what it can defend.** Story was deliberately changed this session (see #4):
+  it now leads with the six matched minimal pairs on Qwen3-VL, treats the varied set as
+  generalization evidence, keeps the Gemma mechanism work, and reports the cross-model comparison as
+  a boundary rather than a finding. Title is now *"When One Word Changes an Image Judgment: A
+  Valence Asymmetry in Vision-Language Models"*.
+- **Every headline number re-derives from `results/`.** 13 were re-verified programmatically at the
+  end of the clean-up pass. Six stale bridge-era figures were found and replaced.
+- **All 53 bib entries are cited and every citation resolves.** No dangling `\ref` (after the fix in
+  #8), environments balance, `$` parity holds, 47 tests pass.
+- **It has been compiled once** (`paper/main.pdf`, Overleaf). The `ack` anonymity guard works — the
+  built PDF goes straight from Conclusion to References with no acknowledgements section.
+- **THE BLOCKER: the body is ~13.3 pages against an 8-page limit** (`docs/tae-experiment-plan.md:5`,
+  "8 pp excl. refs + appendices"). That is a ~40% cut. Nothing else matters as much.
+- **The 8-page figure is not confirmed against a live CFP.** That doc names TAE, which memory
+  records as dropped in favour of VLM4RWD; it says VLM4RWD is "same trim". **Confirm before cutting.**
+- Two panel seats (Methodology, Devil's Advocate) were re-run and adjudicated; three seats
+  (Journal-Fit, Domain, Perspective) are stale — they reviewed a pre-correction, pre-rescore draft.
+  No editorial decision exists and none can be synthesized (`panel_size: 5`).
 
 ## Active Files
 
-- `docs/review-panel-2026-08-23.md` — **the review findings, with what was verified vs. asserted.** New.
-- `docs/paper-retraction-audit.md` — claim-by-claim triage from the bridge-bug re-scoring; all the
-  raw-HF numbers and their provenance.
-- `paper/neurips_2026.tex` — the draft. 641 lines. Overleaf-compiled; no local LaTeX toolchain.
-- `paper/references.bib` — 50 entries. The 12 methodology entries added this session were **written
-  from memory and are still unverified**; the file carries an in-line warning saying so.
-- `docs/rescore-runbook.md` — Colab commands for every re-score, and what each outcome means.
-- `src/experiments/stage_f_token_budget.py` — the raw-HF conflict runner; now takes `--bank minimal`.
-  **Does not yet accept `--bank` for `--text-only`** — that blocks the top next step.
-- `src/experiments/analyze_stage_f.py` / `analyze_stage_f_unbounded.py` — CPU analysers; both now
-  cluster on `image_path` (photo), not person-annotation.
+- `paper/neurips_2026.tex` — the draft, 668 lines. Read this first.
+- `paper/checklist.tex` — NeurIPS checklist. Items 5 and 11 are deliberately `\answerNo{}`; they
+  flip back to Yes once the code archive is attached and licenses are listed.
+- `paper/references.bib` — 53 entries, all cited. The 12 methodology entries were verified against
+  arXiv/ACL/Crossref; three of them had been wrong.
+- `docs/review-panel-seats-rerun-2026-08-23.md` — the two re-run seats, my adjudication of every DA
+  CRITICAL, and the action list. Several items still open.
+- `docs/paper-retraction-audit.md` — provenance for every number; says which stack produced what.
+- `docs/rescore-runbook.md` — Colab commands, including step 7 (text-only control) and the LLaVA
+  sequence re-score.
+- `src/experiments/multitoken_scoring.py` + `stage_f_llava.py` — complete-label scoring. This is the
+  code behind the result that reversed both LLaVA models.
+- `src/experiments/patching_intervals.py` — recomputes every interval in Tables 4 and 5 from saved
+  per-row outputs (CPU).
+- `paper/main.pdf` — the Overleaf build. **Predates the last three commits.**
 
 ## Changes Made
 
-1. Ported same-image and cross-image patching, layerwise localisation, and conflict steering to raw
-   HF (`stage_f_patching_hf.py`, `stage_f_cross_patching_hf.py`, `stage_f_layerwise_hf.py`,
-   `stage_f_arbitration_hf.py`). All import their aggregation from the bridge originals so the runs
-   stay comparable.
-2. Ran all of them. §6.2 carrier survives but the turn-boundary *concentration* does not (65/57 →
-   46/40). §6.3 shape survives, the 9% late-band number becomes 31%. Steering **strengthens**:
-   +0.335 vs a no-conflict +0.336, i.e. no attenuation, where the paper claimed 65%. Layerwise entry
-   replicates (L13→L12) but the 7× amplification does not.
-3. Fixed `analyze_stage_f_unbounded` to cluster on photograph, not person-annotation — EMOTIC
-   annotates per person but the model sees the whole photo, so 29 rows were duplicates counted as
-   independent. This made both analysers agree exactly and *improved* the crossed intervals.
-4. Added `--bank minimal` to the raw-HF runner; ran the Qwen matched-pair set. It is now the paper's
-   strongest result: within-item contrast **+1.148** [+0.94, +1.34], all six pairs concordant.
-5. Rewrote the paper: Qwen primary, LLaVA boundary claim retracted, "1.8×" dropped, prompt sweep and
-   scale comparison withdrawn, mechanism numbers updated, attention-share paragraph dropped.
-6. Grounding pass: credited difference-of-means steering (it had **no citation at all**), grounded the
-   crossed bootstrap in Clark 1973, credited logit lens and Alain & Bengio. 12 new bib entries.
-7. Jargon pass: "full/minimal bank" → "varied/matched set"; plain section headings; removed internal
-   "Stage A/C/D" vocabulary from the appendix.
-8. Ran the review panel; verified its two most damaging claims against the parquets.
+1. **Re-ran the two dead panel seats** under the full two-phase sprint contract (paper-blind Phase 1,
+   then paper-visible Phase 2, fresh contexts, no peer visibility). R1 blocked D1; DA blocked D3.
+2. **Adjudicated all three DA CRITICALs — all validated.** The worst (C2) was self-inflicted: after
+   the baseline correction, Qwen clears *none* of the three crossed intervals and LLaVA-NeXT cleared
+   *all three*, while five sentences said otherwise. Fixed in all five places.
+3. **Added bootstrap intervals to both patching tables.** The intervals already existed in the
+   stored metrics and had simply never been printed. Printing them cost two claims: "contribute
+   comparably" and "close to additive" hold on pair 1 and fail on pair 2.
+4. **Reframed the paper** (user decision, after being offered four options): minimal pairs lead;
+   five findings became four; §5 retitled from "Generality across models" (which it disproved) to
+   "How far the result travels"; steering moved out of the caveat section into Mechanism; abstract
+   and conclusion rewritten.
+5. **Landed the complete-label re-score** (from the Codex session) and verified all of it against the
+   parquets — LLaVA-1.5 moves from the paper's only null (−10.0%) to **+63.9%**, LLaVA-NeXT reverses
+   to −11.2%. Ran the diagnostic the audit was missing: `sequence_sum`'s length bias is small
+   (r = −0.23) and runs *against* the finding, while `content_mean`'s is fatal (r = +0.93,
+   2,246/2,250 argmax on the two 3-token labels).
+6. **Clean-up pass**: six stale bridge-era figures replaced (shared-image sensitivity ×2, the whole
+   context-sentence table, the whole no-context table, layerwise raw separations, pilot appendix);
+   a *fourth* instance of the stale matched-set claim found at line 171; `luo2025`,
+   `conflictchallenges2025`, `unraveling2024` cited (all had been in the bib, uncited); the scoring
+   rule grounded in `holtzman2021` + `brown2020`; jargon removed.
+7. **Codex session after mine** (`44a8c2c`, `4b5e589`): retitled again, added `hewitt2019` for probe
+   control tasks, reworded findings toward plainer language ("internal replacement experiments",
+   "summary score", "split labels"), and reframed patching as *sufficiency* rather than necessity.
+8. **Uncommitted:** `44a8c2c` deleted the withdrawn "Scale details" appendix but left
+   `paper/checklist.tex` pointing at `\ref{app:scale}`, which would render as `??`. Rewrote that
+   sentence. One line, needs committing.
 
 ## Failed Attempts
 
-- **Do not trust `results/figures/` to survive a Drive re-sync.** Two figures generated locally were
-  wiped when `results/` was re-synced; `paper/figures/` and `results/figures/` are separate trees.
-- **`colab_bootstrap.py --drive` `rmtree`s a non-symlink `results/`.** Its comment says "replace the
-  empty local dir" but it never checks emptiness. Check whether `results/` is already a symlink
-  before running it with `--drive`.
-- **I gave the wrong minimal-pair indices once.** The published pairs are `(pos 0, neg 2)` and
-  `(pos 4, neg 0)` — *not* `(1, 0)`. `stage_f_patching_hf.py` now keys published numbers by pair and
-  prints `--` for an unpublished one.
-- **`analyze_stage_f` attached Gemma's steering sweep to every model's analysis** from a fixed path,
-  so a Qwen run reported Gemma's +0.215 as its own. Fixed, but be wary of other fixed-path reads.
-- **The Perspective seat's label-count `[CRITICAL]` is wrong** — it claimed the 4-positive/7-negative
-  split biases the override rate. Neutral base rates refute it (97% correct both directions in three
-  models). The *asymmetric baseline* problem it gestures at is real; the mechanism it proposed is not.
-  Do not re-litigate the label-count version.
-- Do not revive the TAE measurement-validity framing (mentor called it overreach), the architecture-
-  boundary claim (falsified by LLaVA-NeXT), or the visual-token-budget hypothesis (falsified twice).
+- **Do not cut before confirming the page limit.** The only recorded number (8 pp) is in a doc that
+  names a venue that was dropped. Cutting to 8 when the real limit is 9 throws away a page.
+- **Do not trust `results/` paths blindly.** The 0–12 and 13–17 cross-image patching parquets were
+  destroyed by a fixed-path overwrite; only 18–28 survives, so those two bands' intervals come from
+  stored metrics and cannot be independently re-bootstrapped.
+- **`content_mean` is not a usable scoring rule** despite length normalization being the standard
+  (GPT-3 uses it). On single-word labels it collapses onto the longest label. Do not "fix" the
+  scoring by averaging.
+- **A 5-seat editorial decision is not obtainable** from a partial panel — the contract forbids
+  recomputing `cross_reviewer_quantifier` thresholds against a smaller panel. Don't try to synthesize
+  one from the two re-run seats plus three stale prose summaries.
+- **The measurement-validity framing is off the table.** `docs/tae-experiment-plan.md` describes a
+  redraft that made measurement validity the contribution; memory records the mentor calling that
+  overreach. The current framing deliberately keeps the phenomenon primary.
+- **Do not revive**: the architecture-boundary claim (falsified twice now — first by LLaVA-NeXT, then
+  reversed again by complete-label scoring), or the visual-token-budget hypothesis.
+- **A `\label` after an unnumbered `\paragraph` captures the wrong counter** — it grabs whatever last
+  stepped (an `itemize` item, in the case caught). Point at the enclosing section instead.
 
 ## Next Steps
 
-1. **Fix the §6.2 image-token claim.** Change "partly follows from prompt order" to "is determined
-   by"; move the three forced rows (image, BOS, prefix) into a labelled sanity-check block or the
-   appendix; strike the claim from the abstract, contribution 5, Discussion and Conclusion, replacing
-   it with what the data do show (text recovers 88–93%). Apply the same demotion to the Qwen port.
-   No new runs needed.
-2. **Add a baseline-corrected override rate** everywhere the override rate appears, or say explicitly
-   why it is not baselined when the graded readouts are. The numbers are in
-   `docs/review-panel-2026-08-23.md`; the correction is CPU-only from existing parquets. Expect
-   Qwen's headline to drop to +21.1%.
-3. **Run the text-only matched-set control on Qwen.** This is the seats' shared `[CRITICAL]` and the
-   paper's largest untested alternative explanation. Requires threading `--bank` through
-   `run_text_only()` in `stage_f_token_budget.py` (it is already threaded through `run_base`), then
-   ~15 forward passes. Report the text-only mirror contrast beside the conflict one.
-4. **Re-run the two dead panel seats** (Methodology, Devil's Advocate). The DA especially — the
-   panel's own rule requires its CRITICALs be adjudicated and none exist yet.
-5. **State the multi-token scoring rule** (first-subtoken vs summed log-prob) and re-score LLaVA under
-   it. The paper's only null is the result most exposed to a scoring artefact.
-6. **Fix the steering baseline confound**: the no-conflict slope has no context sentence, the conflict
-   slope does. Re-run against neutral-context trials, and drop "at all" from the no-attenuation claim.
-7. **Verify the 12 methodology bib entries** against real records before circulating.
-8. **Check the `ack` anonymity risk** on a fresh Overleaf build — `neurips_2026.sty` appears to print
-   the acknowledgement unconditionally, and its `\todo` names the Algoverse program.
-9. Add a responsible-use / broader-impacts paragraph; `checklist.tex` item 9 currently claims content
-   that does not exist in §6.
+1. **Commit the `app:scale` fix** in `paper/checklist.tex` (item #8 above). One line, already made.
+2. **Confirm the page limit against the live CFP** for whichever of Interp4Discovery (Aug 29) /
+   VLM4RWD (Aug 30) you are targeting. Everything below depends on the number.
+3. **Send the current draft to Sneheel with an explicit note that the trim is pending**, so he
+   reviews the argument and not the length. The reframe is the thing most worth his judgment and it
+   gets expensive to reverse after a 40% cut.
+4. **Do the cut.** Plan that survives the reframe: move §4 (probe foundations) almost entirely into
+   Appendix A, keeping a paragraph in §6; compress §7 to its table plus half a page; relocate part
+   of Limitations. That is roughly 5 pages without touching findings 1–3.
+5. **Rebuild on Overleaf** — `paper/main.pdf` predates the last three commits and the title changed.
+6. **Fix M4/W4**: §4.3 still says conflict "does not attenuate the intervention at all" from
+   +0.335 vs +0.336 with no interval on either. Needs the neutral-context re-run (the no-conflict
+   slope has no context sentence while the conflict slope does), not rewording. GPU.
+7. **Open panel items** in `docs/review-panel-seats-rerun-2026-08-23.md`: W2 (same-image patching has
+   no control that could have come out otherwise), W9 (probe r² is the selection statistic, no
+   test-split number), W11 (patching band chosen on the same data, 3× noise-floor multiplier
+   untested).
+8. Optional: re-run the three stale panel seats against the current draft if a full editorial
+   decision is wanted before submission.

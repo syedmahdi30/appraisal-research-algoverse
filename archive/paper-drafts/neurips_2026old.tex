@@ -1,0 +1,495 @@
+\documentclass{article}
+
+% ============================================================
+% NeurIPS 2026 submission: Stage F (cross-modal valence conflict)
+% Track: Main Track, double-blind (default option)
+% Switch to [preprint] for arXiv, [main, final] after acceptance.
+% ============================================================
+\usepackage{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+
+% Convenience macros
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\gemma}{Gemma-3-4B}
+\newcommand{\gemmabig}{Gemma-3-12B}
+\newcommand{\qwen}{Qwen3-VL-8B}
+\newcommand{\betaimg}{\beta_{\text{img}}}
+\newcommand{\betatxt}{\beta_{\text{txt}}}
+
+% ------------------------------------------------------------
+% Title candidates (pick one; current choice below):
+%  (a) Negative Words Defeat Positive Images: Valence-Asymmetric
+%      Conflict Resolution in Vision-Language Models
+%  (b) Cross-Modal Negativity Dominance in Vision-Language Models:
+%      Behavior, Mechanism, and Causal Arbitration
+%  (c) When Bad News Beats Happy Faces: How Vision-Language Models
+%      Resolve Affective Conflict Between Modalities
+% ------------------------------------------------------------
+\title{Negative Words Defeat Positive Images: Valence-Asymmetric Conflict Resolution in Vision-Language Models}
+
+% Anonymized for submission. Fill in for camera-ready / preprint.
+\author{%
+  Anonymous Author(s) \\
+  Anonymous Affiliation \\
+  \texttt{anon@example.com} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Vision-language models (VLMs) can follow either modality when image and text disagree, but prior work has largely treated the competing evidence as interchangeable content. We ask whether conflict resolution depends on the \emph{valence} of the competing information. Pairing emotionally extreme person images from EMOTIC with a controlled bank of one-sentence positive, negative, and neutral contexts, we find a pronounced asymmetry in \gemma{}: negative linguistic context overrides positive visual affect $3.6\times$ more strongly than positive context overrides negative visual affect, an asymmetry that survives head-room normalization ($0.63$ vs.\ $0.26$; $|\Delta|$ 95\% CI $[+0.10, +0.43]$) and, critically, is absent in text-only controls where the two context banks are statistically symmetric ($1.06$). The effect is therefore cross-modal: a positive image blunts agreeing positive text by $76\%$ but conflicting negative text by only $20\%$. Mechanistically, the conflict-induced divergence becomes detectable mid-stack (${\sim}$layer 13 under a fixed probe lens) and amplifies ${\sim}7\times$ toward late layers; activation patching shows the context-induced delta is mediated predominantly by text-side answer-preparation states ($85$--$87\%$ recovery), concentrated in the assistant-turn-boundary tokens in \gemma{} ($57$--$65\%$ alone), rather than by context-dependent rewriting of image-token states (${\sim}0\%$). The behavioral asymmetry and the coarse text-stream mechanism replicate on \qwen{} ($3.64\times$; image-token patching $0\%$, carrier distributed), persist across six prompt phrasings (override gap $+46\%$ to $+74\%$) and with scale ($4$B$\to$12B), and a text-derived valence steering direction causally arbitrates the conflict (slope $+0.215$). Our results show that affective arbitration in VLMs is valence-dependent and routed through the text stream, connecting multimodal negativity dominance to a localized, causally testable mechanism.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+When a vision-language model is shown a smiling face alongside the sentence \emph{``This was taken at her best friend's funeral,''} which signal wins? A growing literature establishes that VLMs can prefer textual or visual evidence when the modalities disagree, with the preference swinging by task, model, and prompt \citep{deng2025blindfaith, mixedsignals2025, contextvqa2026, signpost2026}. This work, however, largely treats the two competing signals as interchangeable content: the question asked is \emph{which modality} wins, not whether arbitration depends on \emph{what} the competing evidence says.
+
+We ask a sharper question: does cross-modal conflict resolution depend on the valence of the competing information? Human affective science suggests it should. Negativity dominance, the principle that combinations of negative and positive cues are evaluated more negatively than their parts predict, is among the most replicated findings in psychology \citep{rozin2001, baumeister2001}, and situational sentences are known to modulate the perception of facial affect in context-dependent, valence-dependent ways \citep{aviezer2008, aviezer2012}. Whether general-purpose VLMs exhibit an analogous asymmetry, and what computational mechanism would implement it, has not been established.
+
+We study this with a controlled conflict paradigm. Person images from the extremes of the EMOTIC valence distribution \citep{kosti2019} are paired with a bank of positive, negative, and neutral one-sentence contexts, and the model's emotion judgment is measured both behaviorally (closed-vocabulary valence over emotion labels) and internally (a frozen linear appraisal probe trained only on text \citep{tak2025}, applied unchanged under image conditioning). Both conflict directions are run, so negative-text/positive-image can be compared against its mirror, and a text-only control establishes the unimodal strength of each context bank.
+
+Three findings emerge. \textbf{First, a behavioral asymmetry:} in \gemma{}, negative context moves the valence of a positive image by $-0.598$ while positive context moves it only $+0.167$, a $3.58\times$ asymmetry that survives head-room normalization and whose drop-vs.-rise contrast excludes zero (95\% CI $[+0.095, +0.431]$). The asymmetry is genuinely cross-modal: with no image present, the positive and negative banks are statistically symmetric ($+0.706$ vs.\ $-0.752$, ratio $1.06$). Introducing a positive image preserves $80\%$ of the negative-text effect but only $24\%$ of the positive-text effect; the image suppresses \emph{agreeing} framing far more than \emph{conflicting} negative framing. \textbf{Second, a mechanism:} the conflict-induced divergence becomes detectable around layer 13 of 34 (under a fixed probe lens) and amplifies ${\sim}7\times$ toward layer 28, and activation patching localizes the context-induced delta to text-side answer-preparation states ($85$--$87\%$ recovery), with the assistant-turn-boundary tokens alone recovering $57$--$65\%$ in \gemma{}. Patching image-token states recovers ${\sim}0\%$: the context-induced difference is not mediated by rewriting of the visual representations at the patched layers. \textbf{Third, generality and causality:} the asymmetry and the coarse text-stream mechanism replicate on \qwen{}, an architecturally unrelated VLM ($3.64\times$; image patching $0\%$, carrier distributed across the text stream rather than concentrated); the behavioral override gap stays positive across six prompt phrasings ($+46\%$ to $+74\%$) and across a $4$B$\to$12B scale jump; and a valence steering direction derived purely from text causally arbitrates the ongoing conflict (behavioral slope $+0.215$ per unit $\beta$).
+
+Our contributions:
+\begin{itemize}
+  \item \textbf{Phenomenon.} A controlled demonstration of \emph{cross-modal negativity dominance} in VLM conflict resolution: negative language disproportionately defeats positive visual affect despite matched unimodal strength, with both conflict directions, head-room and floor controls, and a text-only polarity-strength control (\S\ref{sec:conflict}).
+  \item \textbf{Mechanism.} A layerwise and causal (activation-patching) account showing the conflict-induced delta emerges mid-stack and is mediated predominantly through text-side states, concentrated at the assistant-turn boundary in \gemma{} and distributed across the text stream in \qwen{} (\S\ref{sec:mechanism}).
+  \item \textbf{Generality and causal arbitration.} Replication of the behavioral asymmetry and coarse mechanism across two architectures, robustness across six prompt variants and model scale, and causal arbitration of the conflict by a text-derived appraisal steering direction (\S\ref{sec:robustness}).
+  \item \textbf{Methodology.} A cross-modal appraisal-probe framework (frozen text-trained readout, difference-of-means steering) that supports the above and may be reused for other affective phenomena in VLMs (\S\ref{sec:foundations}).
+\end{itemize}
+
+Throughout, we are careful about scope. We do not claim to discover that text can override vision \citep{deng2025blindfaith, contextvqa2026}, nor the first mechanistic study of multimodal conflict \citep{seeingoverrides2026}, nor the first study of multimodal emotion conflict \citep{mosear2025}. Our claim is narrower and, we argue, more consequential: \emph{arbitration itself is valence-asymmetric}, the asymmetry emerges specifically from cross-modal competition, and it has a localizable, causally testable implementation.
+
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Modality conflict in VLMs.}
+Several lines of work create mismatched image-text pairs and ask which modality the model follows. \citet{deng2025blindfaith} show VLMs disproportionately trust text under corrupted-text conflicts; \citet{mixedsignals2025} find the preferred modality swings with task complexity and model; \citet{contextvqa2026} report that contradictory persuasive text overrides clear visual evidence across 11 VLMs; \citet{signpost2026} extend this to geolocation with adversarial textual edits; and \citet{camel2025} find misleading instructions become \emph{more} influential when an image is present (a ``sycophantic modality gap''). These studies establish generic text-vision arbitration as a real and safety-relevant phenomenon, but treat the competing content as largely interchangeable. We build directly on this setup and add the valence axis: our conflicts are affectively controlled, run in both directions, and accompanied by unimodal strength controls, revealing an arbitration asymmetry that generic conflict benchmarks do not measure.
+
+\paragraph{A conflict-type taxonomy.}
+A complementary mechanistic literature studies conflicts between visual input and the model's \emph{internal parametric knowledge}: \citet{nooralahzadeh2026} find image tokens carry nearly all causal impact when a model must override its prior (e.g., a recolored banana), and \citet{lietzow2026} identify sparse late attention heads governing prior override; \citet{seeingoverrides2026} causally steer conflict between visual information and parametric knowledge. These results are not in tension with ours: in image-vs.-parametric-prior conflicts the competing signal lives in the weights and its causal locus is naturally the image tokens, whereas in our image-vs.-external-text conflicts the competing signal is delivered in the prompt and, we show, is carried by the text stream. Conflict type is thus a variable that determines causal locus, and our results supply the external-text half of this taxonomy.
+
+\paragraph{Emotion and affect in multimodal models.}
+EMOTIC and related corpora have been used to benchmark VLM emotion recognition \citep{kosti2019, etesam2024, agarwal2026}, and emotion conflicts across audio-visual modalities have been benchmarked and mitigated \citep{mosear2025, emomm2026}. VEENA \citep{veena2026} is the closest mechanistic neighbor: it identifies emotion circuits in LVLMs (visual emotion cues aggregated mid-stack by sentiment-specific heads) and intervenes to improve recognition. VEENA studies congruent emotion processing with no modality conflict, no valence asymmetry, and no cross-modal direction transfer; we study conflict arbitration through an appraisal-theoretic lens. In text-only LLMs, \citet{tak2025} localize appraisal representations and steer emotion inference causally (our methodological foundation), and \citet{negbeforepos2026} report asymmetric valence processing across layers, an LLM-internal precedent for valence asymmetry that our cross-modal, behavioral-override setting extends.
+
+\paragraph{Mechanistic interpretability of VLMs.}
+Activation patching and causal tracing are established tools \citep{meng2022, patchingbestpractices, attributionpatching}, and have been applied to VLMs to trace cross-modal information flow: image information is transferred into text/query positions in early-to-middle layers \citep{basu2024, whatsintheimage2025, narrowgate2024, towardsinterp2024}, and middle-layer last-token attention matters for cross-modal aggregation \citep{fcct2026}. Our contribution is not that information flows into the text stream, which is known, but the \emph{conflict-specific, polarity-specific decomposition}: which positions carry the conflict-induced delta, where it enters, and how this differs by valence. Relatedly, \citet{nikankin2025} find largely disjoint circuits for analogous visual and textual tasks; our claims are compatible, since we posit a shared, causally manipulable valence readout within the language backbone, not a single modality-agnostic circuit (see \S\ref{sec:discussion}). Work on attention sinks and delimiter tokens \citep{xiao2024, activedormant2024} and on safety signals concentrating in assistant header tokens \citep{ada2025} anticipates structural tokens as aggregation sites; our carrier is specifically the assistant-turn boundary and not the BOS sink (BOS and user-turn prefix recover $0\%$), extending the header-token aggregation picture to cross-modal affect.
+
+\paragraph{Human affective science.}
+Negativity dominance \citep{rozin2001} and ``bad is stronger than good'' \citep{baumeister2001} are foundational asymmetries in human evaluation, and situational sentences modulate facial-affect perception with valence-dependent congruency effects \citep{aviezer2008, aviezer2012}. We use this literature as motivation, not as a claim of novelty for negativity dominance itself: the open question we address is whether VLMs exhibit an affective arbitration asymmetry and what computational mechanism implements it.
+
+\paragraph{Steering vectors.}
+Difference-of-means steering is causally effective but its interpretation requires care \citep{steeringunreliability2025, steeringnonident2026}. We pre-empt the standard concerns with norm-matched random nulls, a non-valence specificity control, and the observation (consistent with this literature) that the probe direction reads but does not steer, while the mean-shift direction steers (\S\ref{sec:foundations}).
+
+\section{Experimental framework}
+\label{sec:setup}
+
+\paragraph{Models.}
+Primary model: \texttt{google/gemma-3-4b-it} (34 layers, $d_{\text{model}}{=}2560$; SigLIP tower pooled to 256 image tokens), accessed via TransformerBridge in bf16. Replication models: \qwen{} (unrelated architecture and chat template, raw HuggingFace hooks) and \gemmabig{} (scale). All forwards run without gradient tracking; behavioral measures are single forward passes with no autoregressive generation.
+
+\paragraph{Behavioral readout.}
+Closed-vocabulary \emph{behavioral valence} $= P(\text{positive}) - P(\text{negative})$ over 13 single-token emotion labels at the last prompt token. For cross-model comparisons we additionally use a calibration-free \emph{override rate}: the fraction of conflict trials where the argmax emotion's valence category follows the text rather than the image. Behavioral valence is negatively skewed in \gemma{} (even happy faces read slightly negative), so only relative effects (regressions, deltas vs.\ neutral) are interpreted.
+
+\paragraph{Internal readout.}
+A linear \emph{pleasantness} probe (ridge regression) trained on crowd-enVENT \citep{troiano2023} text activations at \texttt{attn\_out} layer 18, last token, following \citet{tak2025}. The probe is frozen after text training and never re-fit on image data; applied under image conditioning it tracks EMOTIC ground-truth valence at $\rho = 0.507$ (\S\ref{sec:foundations}).
+
+\paragraph{Stimuli.}
+Images: the 75 highest- and 75 lowest-valence person annotations from the EMOTIC test split (150 persons over 121 distinct images; EMOTIC is annotated per person, and we disclose the duplication). Contexts: a bank of 6 positive, 6 negative, and 2 neutral generic one-sentence contexts (e.g., championship, birthday / funeral, accident; full bank in Appendix~\ref{app:contexts}), inserted as \texttt{Context: \{ctx\}} into a fixed image prompt asking \emph{``What single emotion is this person feeling?''}. This yields 15 conditions per image (2{,}250 base forwards). Effects are measured against the \emph{neutral-context} baseline: adding any framing sentence, even a neutral one, shifts both readouts relative to a no-context prompt (a structural confound we document in Appendix~\ref{app:nocontext}), so the no-context condition is excluded from all analyses and only context \emph{polarity} varies.
+
+\paragraph{Why a context bank.}
+A single-sentence pilot produced qualitatively different conclusions (apparent image dominance) that turned out to be artifacts of one weak positive sentence; averaging over six contexts per polarity removes this sensitivity. We report the bank-averaged results as authoritative and use the pilot only as a cautionary note on single-context conflict designs (Appendix~\ref{app:pilot}).
+
+\section{A shared cross-modal valence readout and a causal handle}
+\label{sec:foundations}
+
+Before studying conflict we establish the measurement instruments; full details in Appendix~\ref{app:foundations}.
+
+\paragraph{Appraisal probes replicate in the text backbone.}
+Following \citet{tak2025}, ridge probes for six appraisal dimensions on crowd-enVENT peak mid-network (layers 17--21 of 34) at the MHSA output, far above shuffled baselines; pleasantness is strongest (val $r^2 = 0.641$ at layer 18 vs.\ $0.007$ shuffled). Layer 18 is fixed as the readout/steering site for all subsequent experiments.
+
+\paragraph{The frozen text probe transfers to images.}
+Applied unchanged to image-conditioned activations, the pleasantness probe tracks EMOTIC continuous valence at Spearman $\rho = +0.507$ ($n{=}7{,}280$; polarity AUC $0.898$), clearing a 100-draw norm-matched random-direction null ($p{=}0.010$; the null is nontrivial because activations are anisotropic). The transfer is not merely verbalization: controlling jointly for a neutral and a rich perceptual caption of each image, the image readout retains a unique valence contribution (semipartial $\rho = +0.201$, $p{<}0.001$).
+
+\paragraph{Text-derived directions causally steer image-conditioned behavior.}
+A difference-of-means pleasantness direction $\Delta\mu$ estimated purely from text, injected at layer 18 under image input, moves behavioral valence monotonically in the theory-predicted direction (slope $+0.329$ per unit $\beta$; unpleasantness $-0.309$), ${\sim}12\times$ a norm-matched random null and ${\sim}4.5\times$ a non-valence (suddenness) specificity control. Consistent with the steering literature, the probe (readout) direction does \emph{not} steer; the mean-shift direction does.
+
+Together these results license the interpretation we need for Stage F: image and text both write valence into a shared, causally manipulable readout channel within the language backbone. We emphasize that this is a claim about a shared \emph{readout/channel}, not about a single modality-agnostic circuit; upstream computations may well be modality-specific \citep{nikankin2025}.
+
+\section{Cross-modal negativity dominance}
+\label{sec:conflict}
+
+\subsection{Balanced integration under conflict}
+\label{sec:integration}
+
+We first ask whether either modality simply dominates. A standardized OLS of each readout on z-scored EMOTIC image valence and text-context polarity ($\text{text\_code} \in \{-1, 0, +1\}$, neutral baseline, sentence-bearing conditions only) shows both cues enter with the theory-predicted sign and comparable magnitude (Table~\ref{tab:integration}). In the affective-context regime studied here, the model genuinely integrates both modalities, with text slightly leading the behavioral output ($|\betatxt|/|\betaimg| = 1.19$), directionally consistent with the mild text preference reported for other conflict regimes \citep{deng2025blindfaith}. We scope this as regime-specific and do not claim VLMs are generally balanced.
+
+\begin{table}[t]
+  \caption{Modality integration under conflict (\gemma{}, 150 EMOTIC persons, full context bank, sentence-bearing conditions). Both cues are sign-correct and comparable; text slightly leads the behavioral output. Balanced integration is what makes the asymmetry in \S\ref{sec:asymmetry} an arbitration result rather than a triviality.}
+  \label{tab:integration}
+  \centering
+  \begin{tabular}{lrrr}
+    \toprule
+    Readout & $\betaimg$ & $\betatxt$ & $|\betatxt|/|\betaimg|$ \\
+    \midrule
+    Frozen pleasantness probe (attn\_out L18) & $+0.367$ & $+0.315$ & $0.86$ \\
+    Behavioral valence (logits)               & $+0.322$ & $+0.382$ & $1.19$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{The asymmetry: negative text wins, positive text does not}
+\label{sec:asymmetry}
+
+The integration coefficients hide a strong polarity dependence. Table~\ref{tab:asymmetry} reports the mean change in behavioral valence relative to the neutral context, per image group and context polarity. Negative context drops a positive image by $-0.598$; the mirror move, positive context lifting a negative image, is $+0.333$; and within the positive-image cell, where head-room is symmetric around the neutral baseline ($-0.058$, mid-scale), negative context moves the output $3.58\times$ more than positive context ($-0.598$ vs.\ $+0.167$).
+
+Two controls rule out the obvious artifacts. \textbf{(i) Not a floor effect.} The drop-vs.-rise contrast is $+0.265$ with a bootstrap 95\% CI of $[+0.095, +0.431]$ (Mann-Whitney $p = 0.005$), and it survives head-room normalization, dividing each effect by the distance to the valence bound it moves toward: normalized pull $0.632$ vs.\ $0.259$. \textbf{(ii) Not stronger negative sentences.} Running every context sentence with no image through the identical (token-matched) prompt, the positive and negative banks are statistically symmetric: $+0.706$ vs.\ $-0.752$, ratio $1.06$ (MW $p = 0.155$). The asymmetry appears only when the image is present. Nor is the positive context capped: with a positive image, positive-context valence reaches only $+0.109$, far below the $+1.0$ region the same sentences reach text-only, so the positive context has room to push and does not.
+
+\begin{table}[t]
+  \caption{The negativity asymmetry is cross-modal. Text-only, the context banks are symmetric; adding a positive image retains $80\%$ of the negative-text effect but only $24\%$ of the positive-text effect. All effects vs.\ the neutral-context baseline.}
+  \label{tab:asymmetry}
+  \centering
+  \begin{tabular}{lrrr}
+    \toprule
+    Condition & Positive-ctx effect & Negative-ctx effect & $|{\rm neg}|/|{\rm pos}|$ \\
+    \midrule
+    Text-only (no image)    & $+0.706$ & $-0.752$ & $1.06$ \; (MW $p{=}0.155$) \\
+    $+$ positive image      & $+0.167$ & $-0.598$ & $\mathbf{3.58}$ \\
+    \midrule
+    Retention under image   & $24\%$   & $80\%$   & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The precise phenomenon is therefore not ``negative text is amplified'' but a \emph{selective suppression}: adding a positive image blunts the agreeing positive-text channel by $76\%$ while leaving $80\%$ of the conflicting negative-text channel intact. The asymmetry emerges specifically from cross-modal competition. In override-rate terms, negative context overrides a positive image on $84\%$ of trials while positive context overrides a negative image on $21\%$ (gap $+64\%$, 95\% CI clustered over images $[+55, +72]$).
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/stage_f_conflict.png}
+  \caption{Cross-modal negativity dominance (\gemma{}, 150 EMOTIC persons, full context bank). Behavioral valence per image group and context polarity relative to the neutral baseline: negative context moves a positive image $3.58\times$ more than positive context does, while text-only the two banks are symmetric (Table~\ref{tab:asymmetry}). \todo{If the exported plot styles panels differently, regenerate via \texttt{python -m src.experiments.analyze\_stage\_f} and consider adding the text-only comparison as a second panel.}}
+  \label{fig:conflict}
+\end{figure}
+
+\section{Mechanism: where the conflict lives}
+\label{sec:mechanism}
+
+\subsection{The divergence emerges mid-stack and amplifies}
+\label{sec:layerwise}
+
+Using the frozen probe weight as a fixed direction applied at every layer (a logit-lens-style diagnostic; onset and peak are gated for scale and sign, and we treat the lens as a detection instrument, not as evidence of where the representation is created), the positive-vs.-negative context divergence on the last token first clears the noise floor at ${\sim}$layer 13 of 34 (paired effect size $|d| = 0.21$) and amplifies ${\sim}7\times$ through the back half of the network, peaking near layer 28 ($|d| = 1.47$), passing through the layer-18 readout site en route. An attention knockout at the readout layer is consistent with indirect routing: the last token attends ${\sim}88\%$ to template and question tokens and only ${\sim}3.5\%$ to the context sentence, and the direct context contribution is ${\sim}6\%$ of the effect. The context therefore reaches the readout indirectly, having been mixed into other positions upstream. The next experiment identifies which positions.
+
+\subsection{The conflict-induced delta is carried by text-side states}
+\label{sec:patching}
+
+We use activation patching with the \emph{same image} held constant: donor $=$ positive-context run, recipient $=$ negative-context run, overwriting the recipient's residual stream over layers 13--17 for one position-aligned token group at a time, and measuring recovery toward the positive readout, $\mathrm{recovery}(G) = (\text{patched} - \text{neg})/(\text{pos} - \text{neg})$. Groups: image tokens (256), the question tokens, BOS, the user-turn prefix delimiters, and the assistant-turn-boundary suffix (\texttt{<end\_of\_turn>\textbackslash n<start\_of\_turn>model}) immediately preceding the readout position. Context sentences differ in length between donor and recipient and cannot be patched 1:1; the remainder after all alignable positions bounds their share. Results replicate across two independent context pairs (Table~\ref{tab:patching}).
+
+\begin{table}[t]
+  \caption{Activation-patching recovery of the context-induced delta (probe readout, layers 13--17, \gemma{}; two independent context pairs). The delta is carried by text-side states, concentrated in the assistant-turn boundary; patching image-token states recovers ${\sim}0\%$, and the carrier is not the BOS attention sink.}
+  \label{tab:patching}
+  \centering
+  \begin{tabular}{lrr}
+    \toprule
+    Patched group & Pair 1 (championship/funeral) & Pair 2 (wonderful/devastating) \\
+    \midrule
+    Image tokens                 & $-1\%$ & $+1\%$ \\
+    BOS                          & $0\%$  & $-1\%$ \\
+    User-turn prefix delimiters  & $0\%$  & $-1\%$ \\
+    Question tokens              & $22\%$ & $32\%$ \\
+    Assistant-turn boundary      & $\mathbf{65\%}$ & $\mathbf{57\%}$ \\
+    All aligned text             & $85\%$ & $87\%$ \\
+    \midrule
+    Remainder (context tokens, bound) & ${\sim}15\%$ & ${\sim}13\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Three conclusions. \textbf{(1)} The context-induced positive-vs.-negative difference is \emph{not} mediated by changes in image-token states at the patched layers (${\sim}0\%$ recovery). We deliberately state this narrowly: the same-image design isolates the context-induced delta, and image valence itself contributes substantially to the prediction ($\betaimg \approx +0.32$--$0.37$, \S\ref{sec:integration}); the claim is about where the \emph{conflict} signal travels, not that visual tokens are causally irrelevant overall \citep{fcct2026, whatsintheimage2025}. \textbf{(2)} In \gemma{}, the dominant carrier is the assistant-turn-boundary tokens adjacent to the readout ($57$--$65\%$ alone), and it is not a global attention-sink effect: BOS and the user-turn prefix carry $0\%$ \citep{xiao2024, activedormant2024}. This extends the observation that alignment-relevant signals concentrate in assistant header tokens \citep{ada2025} from safety to cross-modal affect. \textbf{(3)} $85$--$87\%$ of the effect lives in the aligned text stream; only $13$--$15\%$ remains attributable to the literal context tokens.
+
+The resulting picture: the negative context wins by writing into the answer-preparation states the readout actually consults, while the positive image's valence, though integrated into the prediction, is not re-written by the context and does not counter-propagate into those states.
+
+\begin{figure}[t]
+  \centering
+  \begin{minipage}[t]{0.54\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/stage_f_layerwise.png}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.44\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/stage_f_attribution.png}
+  \end{minipage}
+  \caption{Mechanism. \emph{Left:} layerwise paired effect size of the positive-vs.-negative context divergence on the last token under the fixed probe lens; the divergence clears the noise floor at ${\sim}$layer 13 and amplifies ${\sim}7\times$ to its peak at ${\sim}$layer 28 (\S\ref{sec:layerwise}). \emph{Right:} last-token attention at the readout layer concentrates on template and question tokens (${\sim}88\%$) with only ${\sim}3.5\%$ on the context sentence, so the context reaches the readout indirectly; the patching decomposition in Table~\ref{tab:patching} identifies the carrier positions.}
+  \label{fig:mechanism}
+\end{figure}
+
+\section{Generality, robustness, and causal arbitration}
+\label{sec:robustness}
+
+\subsection{Cross-architecture replication (\qwen{})}
+\label{sec:qwen}
+
+\qwen{} shares neither architecture, vision encoder, tokenizer, nor chat template with \gemma{}, and is run through raw HuggingFace hooks with behavioral scoring only. The behavioral asymmetry replicates near-quantitatively (Table~\ref{tab:qwen}): the within-positive-image ratio is $3.64\times$ (vs.\ Gemma's $3.58\times$), the text-only banks are again symmetric ($1.00$), and the override gap is $+39\%$ (95\% CI $[+30, +49]$, clustered over images). Qwen integrates the image (a happy face reads $+0.63$ under the neutral context); negative text nonetheless wins the conflict. Because Qwen's closed-vocabulary valence saturates, the calibration-free override rate is the primary cross-model metric.
+
+The coarse mechanism replicates with an architecture-specific twist: image-token patching again recovers ${\sim}0\%$, and the aligned text stream recovers $65\%$, but no single text group is dominant (question $12\%$, turn scaffold $6\%$); the carrier is \emph{distributed} across text positions, with the super-additive pattern suggesting redundant copies of the conflict signal. The text-stream routing of the conflict generalizes across architectures; the concentration of the carrier (Gemma's turn boundary) is architecture- and template-specific, and we present it as such.
+
+\begin{table}[t]
+  \caption{Cross-architecture replication. The behavioral asymmetry and the coarse mechanism (image-token patching ${\sim}0\%$, text stream as carrier) transfer to \qwen{}; the fine-grained carrier locus does not (concentrated vs.\ distributed).}
+  \label{tab:qwen}
+  \centering
+  \begin{tabular}{lrr}
+    \toprule
+    Metric & \gemma{} & \qwen{} \\
+    \midrule
+    Within-positive-image $|{\rm neg}|/|{\rm pos}|$ & $3.58\times$ & $3.64\times$ \\
+    Text-only $|{\rm neg}|/|{\rm pos}|$ (control)   & $1.06$ & $1.00$ \\
+    Override rate: neg-ctx $>$ pos image            & $84\%$ & $76\%$ \\
+    Override rate: pos-ctx $>$ neg image            & $21\%$ & $37\%$ \\
+    Override gap (95\% CI, clustered)               & $+64\%$ $[+55,+72]$ & $+39\%$ $[+30,+49]$ \\
+    \midrule
+    Patching: image tokens                          & $-1\%$ & $0\%$ \\
+    Patching: question                              & $22\%$ & $12\%$ \\
+    Patching: turn scaffold alone                   & $65\%$ & $6\%$ \\
+    Patching: all aligned text                      & $85\%$ & $65\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Prompt robustness}
+\label{sec:prompts}
+
+Holding the scoring and turn scaffold fixed and varying only the user-turn phrasing across six natural rephrasings (question wording, context placement, presence of the \texttt{Context:} label; 13{,}500 forwards), the override gap never flips sign and every CI clears zero: $+46\%$ to $+74\%$, mean $+58\%$ (Table~\ref{tab:prompts}, Appendix~\ref{app:prompts}). The reported base prompt sits mid-pack ($+65\%$), so the headline is not a best-case phrasing; the strongest variant is the \emph{unlabeled} context ($+74\%$), and the weakest ($+46\%$, a one-word answer format that nudges the model toward terse image-literal descriptors) still clears zero comfortably.
+
+\begin{table}[t]
+  \caption{Prompt robustness (\gemma{}, full bank, 150 images). The override gap is positive with CIs excluding zero under all six phrasings; the base prompt (v0) is mid-pack, not a cherry-pick.}
+  \label{tab:prompts}
+  \centering
+  \small
+  \begin{tabular}{llrrrr}
+    \toprule
+    Variant & Framing & Neg$>$pos img & Pos$>$neg img & Gap & 95\% CI \\
+    \midrule
+    v0 & base question & $84\%$ & $19\%$ & $+65\%$ & $[+0.57, +0.73]$ \\
+    v1 & ``How is this person feeling?'' & $82\%$ & $26\%$ & $+57\%$ & $[+0.47, +0.66]$ \\
+    v2 & one-word answer & $76\%$ & $29\%$ & $+46\%$ & $[+0.37, +0.56]$ \\
+    v3 & ``most likely emotion'' & $76\%$ & $27\%$ & $+49\%$ & $[+0.38, +0.60]$ \\
+    v4 & context after question & $84\%$ & $29\%$ & $+54\%$ & $[+0.45, +0.63]$ \\
+    v5 & no \texttt{Context:} label & $89\%$ & $16\%$ & $+74\%$ & $[+0.65, +0.81]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Scale}
+\label{sec:scale}
+
+From \gemma{} to \gemmabig{} (same prompt, bank, and scoring), the dominance gap remains large and significant ($+51\%$, CI $[+0.42, +0.59]$). The components are informative: negative override \emph{rises} with scale ($84\% \to 93\%$) while positive override more than doubles ($19\% \to 42\%$); the larger model is more text-driven in both directions, and the gap narrows only because the positive channel gains faster. We do not claim the asymmetry significantly decreases: the two gap CIs overlap, and with negative override near ceiling the gap metric is mechanically compressed from above.
+
+\subsection{Steering causally arbitrates the conflict}
+\label{sec:arbitration}
+
+Finally, the shared valence channel is a working handle on the conflict itself. On the incongruent cells, injecting the text-derived pleasantness $\Delta\mu$ at layer 18 drives behavioral valence through the conflict at slope $+0.215$ per unit $\beta$, about $65\%$ of the no-conflict Stage-D slope ($+0.329$), consistent with a strong context acting as a real competitor. The frozen probe readout, which sits upstream of the injection site, is invariant by construction ($0.000$), confirming the effect is downstream of the intervention. A text-derived direction thus causally adjudicates a cross-modal conflict, which no verbalization account of the readout transfer explains.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{What kind of shared representation?}
+Our evidence supports a specific, deliberately bounded claim: image and text access a shared, causally manipulable valence readout within the language backbone, despite potentially modality-specific upstream computation. This is compatible with findings of largely disjoint modality-specific circuits \citep{nikankin2025}: modality-specific computation upstream can converge onto a common decision-relevant affective channel downstream. The conflict experiments are the strongest evidence for the shared channel: a direction learned purely from text arbitrates an image-driven judgment, and both modalities load on the same frozen readout with comparable weight.
+
+\paragraph{Why does negative text win?}
+The mechanism suggests an answer with two parts. First, the conflict is resolved in the text stream: the context-induced delta travels through question and answer-preparation states, and in \gemma{} concentrates precisely in the turn-boundary tokens where the model begins composing its answer. Second, the asymmetry is a selective suppression: the positive image blunts agreeing positive text by $76\%$ while conflicting negative text passes largely intact. One functional interpretation is redundancy weighting, where congruent evidence is discounted as redundant while incongruent negative evidence is treated as newly informative, an arbitration policy that mirrors human negativity dominance \citep{rozin2001}; distinguishing this from alternatives (e.g., asymmetric saliency of negative tokens acquired in training) requires interventions beyond our current design, and we flag it as the central open question.
+
+\paragraph{Relation to parametric-conflict mechanisms.}
+Our text-side localization does not contradict reports that image tokens carry the causal load in image-vs.-parametric-knowledge conflicts \citep{nooralahzadeh2026, lietzow2026}. The two regimes differ in where the competing signal originates (prompt vs.\ weights), and jointly they suggest that \emph{conflict type determines causal locus}, a taxonomy that future conflict benchmarks could test directly.
+
+\paragraph{Implications.}
+Practically, a VLM deployed on affect-sensitive tasks (content moderation, mental-health triage, media analysis) can have its visual assessment overridden by a single negative sentence at rates near $90\%$, and the effect strengthens with scale on the text side. The localization results suggest concrete monitoring and mitigation levers: the turn-boundary states in Gemma-class models are a narrow interface where the conflict signal aggregates and where steering demonstrably works.
+
+\section{Limitations}
+\label{sec:limitations}
+
+\textbf{Statistical scope.} All runs use a single seed; 150 EMOTIC persons cover 121 distinct images, and headline uncertainty is clustered over images where reported, but a multi-seed repeat is the main open robustness item. \textbf{Lexical matching.} The text-only control shows the context banks are equally strong, but positive and negative sentences engage different event semantics (championship vs.\ funeral); matched minimal pairs would eliminate the residual objection and are left to future work. \textbf{Lens and locus caveats.} The layer-13 entry point is defined under a fixed off-layer probe lens and should be read as ``detectable by layer 13,'' not as the creation site; the turn-boundary carrier is specific to Gemma's chat template (Qwen distributes the carrier), and a different template could relocate aggregation without changing behavior. \textbf{Patching scope.} Same-image patching isolates the context-induced delta only; establishing where visual valence itself is causally transmitted requires cross-image (positive-donor/negative-recipient image) patching, which we have not run. Context tokens cannot be position-aligned across pairs, capping aligned-group recovery at ${\sim}85$--$87\%$. \textbf{Task scope.} One emotion-labeling task family on person images; behavioral valence collapses 13 labels into a bipolar score, and EMOTIC persons are fed as whole images without bounding boxes. \textbf{Models.} Two architectures and one scale step; the probe-based mechanistic analyses are Gemma-only (Qwen's replication is behavioral plus coarse patching).
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We showed that cross-modal conflict resolution in VLMs is valence-asymmetric: negative language disproportionately defeats positive visual affect despite matched unimodal strength, with the asymmetry emerging specifically from cross-modal competition. The conflict signal enters mid-stack, is routed through text-side answer-preparation states rather than through rewriting of visual representations, and can be causally arbitrated by a text-derived valence direction. The behavioral asymmetry and coarse mechanism reproduce across two architectures, six prompt phrasings, and a threefold scale increase. Beyond the specific phenomenon, the results argue that \emph{what} the competing evidence says, not merely which modality carries it, is a first-class variable in multimodal arbitration, and that appraisal-theoretic probes give mechanistic interpretability a productive handle on affect in multimodal models.
+
+% ============================================================
+\begin{ack}
+Hidden in the anonymized submission via the ack environment. \todo{Camera-ready: acknowledge mentor/collaborators and the Algoverse program; declare funding and competing interests per \url{https://neurips.cc/Conferences/2026/PaperInformation/FundingDisclosure}.}
+\end{ack}
+
+% ============================================================
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+% ============================================================
+\appendix
+
+\section{Foundations: Stages A, C, D in full}
+\label{app:foundations}
+
+\subsection{Text-side appraisal probes and steering (Stage A)}
+\todo{Import full tables: six-appraisal localization (pleasantness $r^2{=}0.641$ L18, unpleasantness $0.600$ L18, own-responsibility $0.442$ L21, suddenness $0.315$ L17, others'-responsibility $0.313$ L19, event-predictability $0.238$ L17, all vs.\ near-zero shuffled baselines) and the text-steering sweep ($\beta \in \{\pm1,\pm2,\pm3\}$, pleasantness slope $+0.084$, unpleasantness $-0.074$, random $-0.007$). Include the v1/v2 methodological finding: probe directions read but do not steer; difference-of-means directions steer.}
+
+\begin{figure}[h]
+  \centering
+  \begin{minipage}[t]{0.55\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/stage_a_localization.png}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.43\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/stage_a_steering_v2.png}
+  \end{minipage}
+  \caption{Stage A. \emph{Left:} layerwise probe validation $r^2$ per appraisal vs.\ shuffled baselines (mid-layer, MHSA-dominant localization; critical layer 18). \emph{Right:} difference-of-means text steering, monotonic theory-predicted valence shifts vs.\ a flat norm-matched random control.}
+  \label{fig:stagea}
+\end{figure}
+
+\subsection{Cross-modal readout transfer and caption controls (Stage C)}
+\todo{Import: full-test transfer ($\rho{=}+0.507$, AUC $0.898$, retention ${\sim}0.6$ of text-side effect), the 100-draw anisotropic null (mean $|\rho|{=}0.128$, p95 $0.300$, empirical $p{=}0.010$), and the semipartial caption-control progression ($+0.310$ neutral, $+0.256$ rich, $+0.201$ joint, all $p{<}0.001$; unpleasantness mirrors).}
+
+\begin{figure}[h]
+  \centering
+  \begin{minipage}[t]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/stage_c_readout.png}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/stage_c_caption_baseline.png}
+  \end{minipage}
+  \caption{Stage C. \emph{Left:} frozen text-trained probe readout vs.\ EMOTIC ground-truth valence under image conditioning. \emph{Right:} caption-control analysis; the image readout retains a unique valence contribution after controlling for captions.}
+  \label{fig:stagec}
+\end{figure}
+
+\subsection{Cross-modal causal steering (Stage D)}
+\todo{Import: full $\beta$-sweep table (pleasantness $+0.329$, unpleasantness $-0.309$, suddenness $-0.073$, random $-0.027$).}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/stage_d_steering.png}
+  \caption{Stage D. Cross-modal steering: text-derived appraisal directions injected at layer 18 under image input move behavioral valence monotonically in the theory-predicted direction; the random null and the suddenness specificity control stay comparatively flat.}
+  \label{fig:staged}
+\end{figure}
+
+\subsection{Compositional emotion steering (Stage E, supporting)}
+\todo{Optional: one paragraph + table on the A1 anger composition result (unpleasantness + valence-decorrelated other-responsibility $\to$ anger, 97\% win rate, matched-norm controlled), as further evidence the appraisal directions are semantically structured. Keep brief; not load-bearing for the Stage F claims. Figure available at \texttt{figures/stage\_e\_combo\_pilot\_valence.png} if included.}
+
+\section{Context bank and prompts}
+\label{app:contexts}
+
+Table~\ref{tab:contextbank} lists the full context bank verbatim with each sentence's text-only behavioral effect (vs.\ the neutral baseline, no image) and its mean behavioral valence when paired with the positive-image group. Two negative sentences are notably weak or even mildly positive in isolation (``moments before the accident'' $+0.12$; ``worst week'' $-0.42$), which strengthens the conclusion that the banks are matched in unimodal strength: the with-image asymmetry is not driven by uniformly extreme negative stimuli. The base prompt is the Gemma chat scaffold \texttt{<start\_of\_turn>user} $\ldots$ \texttt{<start\_of\_image>} $\ldots$ \texttt{Context: \{ctx\}} $\ldots$ \emph{``What single emotion is this person feeling?''} $\ldots$ \texttt{<end\_of\_turn>\textbackslash n<start\_of\_turn>model\textbackslash n}, with the readout at the final prompt token. \todo{Paste the exact template string from \texttt{src/} for camera-ready.}
+
+\begin{table}[h]
+  \caption{The context bank (6 positive, 6 negative, 2 neutral). Text-only effects are vs.\ the neutral baseline with no image (from \texttt{text\_only\_metrics.json}); the last column is the mean behavioral valence of the positive-image group under that sentence (from \texttt{conflict\_analysis.json}).}
+  \label{tab:contextbank}
+  \centering
+  \small
+  \begin{tabular}{llrr}
+    \toprule
+    ID & ``This photo was taken \ldots'' & Text-only effect & Pos.-img.\ valence \\
+    \midrule
+    p0 & moments after they won the championship.      & $+0.80$ & $+0.40$ \\
+    p1 & at their surprise birthday party.             & $+0.39$ & $+0.15$ \\
+    p2 & just after they got the job they wanted.      & $+0.85$ & $-0.18$ \\
+    p3 & on the best day of their life.                & $+0.55$ & $-0.13$ \\
+    p4 & moments after hearing wonderful news.         & $+0.93$ & $+0.24$ \\
+    p5 & at a celebration held in their honor.         & $+0.72$ & $+0.17$ \\
+    \midrule
+    n0 & moments after they received devastating news. & $-1.07$ & $-0.84$ \\
+    n1 & moments before the accident.                  & $+0.12$ & $-0.33$ \\
+    n2 & at the funeral of a close friend.             & $-1.02$ & $-0.93$ \\
+    n3 & just after they lost their job.               & $-1.06$ & $-0.63$ \\
+    n4 & during the worst week of their life.          & $-0.42$ & $-0.57$ \\
+    n5 & right after a painful goodbye.                & $-1.06$ & $-0.64$ \\
+    \midrule
+    z0 & on a weekday.                                 & --- & $+0.05$ \\
+    z1 & indoors.                                      & --- & $-0.16$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Prompt-variant details}
+\label{app:prompts}
+\todo{Exact phrasings of v0--v5 and the anchor check (v0 reproduces the base run: 84\%/19\% vs.\ published 84\%/21\%).}
+
+\section{The no-context baseline confound}
+\label{app:nocontext}
+
+Raw per-condition means expose a structural confound: adding \emph{any} framing sentence, even a neutral one, raises both readouts relative to the bare no-context prompt (Table~\ref{tab:nocontext}). Because the shift appears in the frozen probe readout, it is representational (the framing sentence changes the layer-18 representation), not a logit or label artifact, and it is uniform across the bank (no single rogue sentence). The no-context condition is therefore structurally non-comparable, and all analyses in the paper exclude it and use the neutral context as the within-structure baseline, so that only context polarity varies.
+
+\begin{table}[h]
+  \caption{Positive-image group, raw means per condition. Any framing sentence shifts both readouts relative to no-context; the design response is to drop no-context and baseline against neutral.}
+  \label{tab:nocontext}
+  \centering
+  \begin{tabular}{lrr}
+    \toprule
+    Condition (positive images) & Behavioral valence & Probe readout \\
+    \midrule
+    no context           & $-0.469$ & $+4.544$ \\
+    $+$ neutral context  & $-0.058$ & $+4.868$ \\
+    $+$ positive context & $+0.109$ & $+5.145$ \\
+    $+$ negative context & $-0.656$ & $+4.381$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Pilot vs.\ full bank}
+\label{app:pilot}
+\todo{Import the pilot-vs-full comparison table (dominance ratio 0.15--0.22 image-led $\to$ 0.86--1.19 balanced; arbitration slope $+0.350 \to +0.215$) as a cautionary result on single-context conflict designs.}
+
+\section{Patching methodology}
+\label{app:patching}
+\todo{Full details: layer band [13,17] selection, position-alignment procedure, group definitions and token counts, recovery metric, behavioral-valence recovery (noisier, same ordering: text\_all 73--78\%), and the Qwen porting details (raw HF hooks, 60 positive images, behavioral recovery).}
+
+\section{Scale details}
+\label{app:scale}
+
+Table~\ref{tab:scale} and Figure~\ref{fig:scaling} give the full 4B vs.\ 12B comparison (same images, prompt, bank, and calibration-free override scoring; only the checkpoint changes). Two caveats accompany \S\ref{sec:scale}: the two gap CIs overlap ($[0.57, 0.73]$ vs.\ $[0.42, 0.59]$), so the $-14\%$ narrowing is not clearly significant, and with negative override at $93\%$ the gap metric is mechanically compressed from above, so part of the narrowing is a ceiling artifact of the metric. The clearly significant change is positive override more than doubling ($19\% \to 42\%$).
+
+\begin{table}[h]
+  \caption{Model-scale comparison (override rates, 121 distinct EMOTIC images, CIs clustered over images).}
+  \label{tab:scale}
+  \centering
+  \small
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Model & Params & Neg$>$pos img & Pos$>$neg img & Gap & 95\% CI \\
+    \midrule
+    \gemma{}    & 4.3B  & $84\%$ & $19\%$ & $+65\%$ & $[+0.57, +0.73]$ \\
+    \gemmabig{} & 12.2B & $93\%$ & $42\%$ & $+51\%$ & $[+0.42, +0.59]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/stage_f_scaling.png}
+  \caption{Override rates and dominance gap across Gemma-3 scale. Both override rates rise with scale (the model becomes more text-driven in both directions); the gap remains large and clears zero.}
+  \label{fig:scaling}
+\end{figure}
+
+\section{Compute}
+\label{app:compute}
+\todo{Forward-pass counts (2,250 base; 1,050 arbitration; 13,500 prompt sweep; layerwise + patching runs), hardware (single A100-40GB class), and wall-clock estimates.}
+
+% ============================================================
+% NeurIPS paper checklist (required at submission; does not count
+% toward the page limit). Pre-filled; grep "CONFIRM" for items
+% needing an author decision.
+\newpage
+\input{checklist}
+
+\end{document}

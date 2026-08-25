@@ -36,7 +36,6 @@ Running the images through `self_attn` would have returned near-zero correlation
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 
 import numpy as np
 import torch
@@ -49,7 +48,15 @@ from ..data.emotic import load_split as load_emotic_split
 from ..paths import FIGURES_DIR, STAGE_A_DIR, STAGE_C_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer import _auc, _corr, _polarity, _random_controls, _shared_label, _verdict
+from .shared.hf_runtime import find_language_layers, last_token_tap, load_gemma_hf
+from .shared.reporting import (
+    correlation,
+    polarity_auc,
+    polarity_vector,
+    random_direction_controls,
+    shared_emotic_label,
+    transfer_verdict,
+)
 
 # Candidate raw-HF modules for the bridge's `hook_attn_out`, relative to a decoder layer.
 # Gemma applies `post_attention_layernorm` to the attention output BEFORE the residual add, so these
@@ -60,77 +67,12 @@ CANDIDATE_TAPS = ("self_attn", "self_attn.o_proj", "post_attention_layernorm")
 DEFAULT_MODEL = "google/gemma-3-4b-it"
 
 
-# --------------------------------------------------------------------------- module plumbing
-# Resolved layer lists, keyed by id(model). The lookup walks every named module, and steering
-# re-enters its context manager once per (direction, beta) per image — 24x per image on the Stage D
-# sweep — so without a cache this repeats a full module walk thousands of times and prints on each.
-_LAYER_CACHE: dict = {}
-
-
-def find_lm_layers(model, verbose: bool = True) -> torch.nn.ModuleList:
-    """Locate the LANGUAGE-model decoder layer list, never the vision tower.
-
-    Gemma-3's wrapper nests the LM differently across transformers versions
-    (`model.language_model.layers` vs `model.model.language_model.layers`), and the SigLIP tower has
-    its own `.layers`, so this searches by name and excludes vision paths rather than hardcoding.
-    Result is cached per model instance; the cache is NOT stored on the module itself, since
-    assigning a ModuleList to an attribute would re-register it as a submodule.
-    """
-    key = id(model)
-    if key in _LAYER_CACHE:
-        return _LAYER_CACHE[key]
-    best = None
-    for name, mod in model.named_modules():
-        if not isinstance(mod, torch.nn.ModuleList) or not name.endswith("layers"):
-            continue
-        if any(v in name for v in ("vision", "siglip", "vision_tower")):
-            continue
-        if "language_model" in name or best is None:
-            best = (name, mod)
-            if "language_model" in name:
-                break
-    if best is None:
-        raise RuntimeError("could not locate the language-model decoder layers on this model")
-    if verbose:
-        print(f"  language-model layers: {best[0]}  ({len(best[1])} layers)")
-    _LAYER_CACHE[key] = best[1]
-    return best[1]
-
-
-def _submodule(layer_mod, tap: str):
-    m = layer_mod
-    for part in tap.split("."):
-        m = getattr(m, part)
-    return m
-
-
-@contextmanager
-def last_token_tap(model, layer: int, tap: str):
-    """Capture the LAST-token output of one submodule of decoder `layer` for each forward.
-
-    Yields a one-element list that holds the most recent activation as a float32 numpy vector.
-    Attention modules return `(output, weights)`; only the output tensor is taken.
-    """
-    layers = find_lm_layers(model)
-    target = _submodule(layers[layer], tap)
-    store: list = [None]
-
-    def hook(_mod, _inp, out):
-        t = out[0] if isinstance(out, tuple) else out
-        store[0] = t[0, -1].detach().float().cpu().numpy()
-
-    h = target.register_forward_hook(hook)
-    try:
-        yield store
-    finally:
-        h.remove()
+# --------------------------------------------------------------------------- raw-HF compatibility façades
+find_lm_layers = find_language_layers
 
 
 def load_hf(model_name: str = DEFAULT_MODEL):
-    from transformers import AutoModelForImageTextToText, AutoProcessor
-    model = AutoModelForImageTextToText.from_pretrained(
-        model_name, dtype=torch.bfloat16, device_map="auto").eval()
-    return model, AutoProcessor.from_pretrained(model_name)
+    return load_gemma_hf(model_name)
 
 
 # --------------------------------------------------------------------------- activation extraction
@@ -197,7 +139,7 @@ def verify_tap(model_name: str, layer: int, n_text: int, seed: int,
         tdf = tdf.sample(n=n_text, random_state=seed).reset_index(drop=True)
     y = tdf[appraisal].to_numpy(dtype=float)
 
-    model, processor = load_hf(model_name)
+    model, processor = load_gemma_hf(model_name)
     stage_a = load_config(STAGE_A_DIR / "metrics.json") if (STAGE_A_DIR / "metrics.json").exists() else {}
     target_r2 = None
     for row in (load_config(STAGE_A_DIR / "summary.json").get("rows", [])
@@ -214,7 +156,7 @@ def verify_tap(model_name: str, layer: int, n_text: int, seed: int,
         try:
             X = text_activations(model, processor, tdf["text"].tolist(), layer, tap)
             r2 = _r2(predict(X, coef, inter), y)
-            c = _corr(predict(X, coef, inter), y)
+            c = correlation(predict(X, coef, inter), y)
             results[tap] = {"r2": r2, "spearman": c["spearman"], "d_model": int(X.shape[1])}
             print(f"  {tap:28s} r^2 = {r2:+.4f}   spearman = {c['spearman']:+.4f}   d={X.shape[1]}")
         except Exception as e:
@@ -281,15 +223,15 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
     if n_images and n_images < len(df):
         df = df.sample(n=int(n_images), random_state=seed).reset_index(drop=True)
 
-    model, processor = load_hf(model_name)
+    model, processor = load_gemma_hf(model_name)
     X_img, valid = image_activations(model, processor, df["image_path"].tolist(), layer, tap)
     n_skipped = int((~valid).sum())
     df = df.loc[valid].reset_index(drop=True)
 
     valence = (df["valence"].to_numpy(dtype=np.float64) if "valence" in df.columns
                else np.full(len(df), np.nan))
-    shared = [_shared_label(c) for c in df["categories"]]
-    polarity = _polarity(shared, positive, negative)
+    shared = [shared_emotic_label(c) for c in df["categories"]]
+    polarity = polarity_vector(shared, positive, negative)
     n_single = int(sum(s is not None for s in shared))
 
     metrics = {
@@ -302,18 +244,18 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
         "image_readout": {}, "random_control": {}, "text_reference": {}, "transfer": {},
     }
 
-    ctrl = _random_controls(X_img, valence, n_random, seed)
+    ctrl = random_direction_controls(X_img, valence, n_random, seed)
     ctrl_abs = np.asarray(ctrl.pop("_abs"), dtype=float)
     metrics["random_control"] = ctrl
 
     for a in appraisals:
         coef, inter = probes.coef[probes.index(a)], probes.intercept[probes.index(a)]
         pred = predict(X_img, coef, inter)
-        vc = _corr(pred, valence)
+        vc = correlation(pred, valence)
         pval = None
         if vc["spearman"] is not None and ctrl_abs.size:
             pval = float((1 + int(np.sum(ctrl_abs >= abs(vc["spearman"])))) / (ctrl_abs.size + 1))
-        metrics["image_readout"][a] = {"vs_valence": vc, "polarity_auc": _auc(pred, polarity),
+        metrics["image_readout"][a] = {"vs_valence": vc, "polarity_auc": polarity_auc(pred, polarity),
                                        "vs_control_p": pval}
 
     if cfg.get("text_reference", True):
@@ -326,7 +268,7 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
             if a not in tdf.columns:
                 continue
             coef, inter = probes.coef[probes.index(a)], probes.intercept[probes.index(a)]
-            tc = _corr(predict(X_txt, coef, inter), tdf[a].to_numpy(dtype=np.float64))
+            tc = correlation(predict(X_txt, coef, inter), tdf[a].to_numpy(dtype=np.float64))
             metrics["text_reference"][a] = tc
             img_sp = metrics["image_readout"][a]["vs_valence"]["spearman"]
             if tc["spearman"] and img_sp is not None:
@@ -334,7 +276,7 @@ def run(config_path: str, tap: str, model_name: str, n_images_override: int | No
                                           "image_abs_spearman": abs(img_sp),
                                           "retention": abs(img_sp) / abs(tc["spearman"])}
 
-    metrics["verdict"] = _verdict(metrics, appraisals)
+    metrics["verdict"] = transfer_verdict(metrics, appraisals)
     save_json(metrics, STAGE_C_DIR / "metrics_hf.json")
     _print(metrics)
     return metrics

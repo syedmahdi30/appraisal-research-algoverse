@@ -35,12 +35,15 @@ from tqdm import tqdm
 
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS
 from ..data.labels import EMOTION_LABELS
-from ..paths import STAGE_F_DIR, ensure_dirs
+from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
-from .stage_f_qwen import (DEFAULT_MODEL, QUESTION, build_inputs, emotion_token_ids, load_qwen,
-                           select_extreme_images, valence_score)
+from .shared.patching import (SAME_IMAGE_GROUPS, aligned_patch_groups, find_subsequence,
+                              segment_prompt_positions)
+from .shared.readouts import closed_vocab_valence, first_content_token_ids
+from .shared.sampling import select_extreme_rows
+from .stage_f_qwen import DEFAULT_MODEL, QUESTION, build_inputs, load_qwen
 
-GROUPS = ("image", "question", "bos", "prefix_delim", "suffix_delim", "structure", "text_all")
+GROUPS = SAME_IMAGE_GROUPS
 
 
 # --------------------------------------------------------------------------- decoder layers
@@ -65,12 +68,7 @@ def decoder_layers(model):
 
 # --------------------------------------------------------------------------- segmentation (Qwen)
 def _find_subseq(hay, needle):
-    if not needle:
-        return None
-    for s in range(len(hay) - len(needle) + 1):
-        if hay[s:s + len(needle)] == needle:
-            return s
-    return None
+    return find_subsequence(hay, needle)
 
 
 def segment_positions(tokenizer, input_ids) -> dict:
@@ -81,68 +79,19 @@ def segment_positions(tokenizer, input_ids) -> dict:
     Context = between the image block and the question. Template = the rest (system/user/assistant
     turn scaffold + BOS-equivalent). Mirrors the Gemma segmenter minus the 256-token assertion.
     """
-    ids = input_ids[0].tolist()
-    n = len(ids)
-    best = (0, 0)
-    i = 0
-    while i < n:
-        j = i
-        while j + 1 < n and ids[j + 1] == ids[i]:
-            j += 1
-        if (j - i + 1) > best[1]:
-            best = (i, j - i + 1)
-        i = j + 1
-    img_start, img_len = best
-    img_end = img_start + img_len
-    image_idx = list(range(img_start, img_end))
-
-    q_start, q_len = None, 0
-    for anchor in (" " + QUESTION, QUESTION):
-        toks = tokenizer.encode(anchor, add_special_tokens=False)
-        q_start = _find_subseq(ids, toks)
-        if q_start is not None:
-            q_len = len(toks)
-            break
-    if q_start is None or q_start <= img_end:
-        q_start, q_len = max(img_end, n - 12), 0
-    question_idx = list(range(q_start, min(q_start + q_len, n))) if q_len else []
-    return {"image": np.array(image_idx), "question": np.array(question_idx),
-            "question_ok": bool(q_len), "img_len": int(img_len), "n": n}
+    segment = segment_prompt_positions(
+        tokenizer, input_ids, QUESTION, expected_image_tokens=None
+    )
+    return {
+        "image": np.array(segment["image"].tolist()),
+        "question": np.array(segment["question"].tolist()),
+        "question_ok": segment["question_ok"], "img_len": segment["img_len"],
+        "n": segment["n"],
+    }
 
 
 def _aligned_groups(seg_d, seg_r):
-    """Map donor→recipient positions per patchable group (equal-length, position-aligned).
-
-    image aligned (same photo → same image-pad count → same indices); question identical (shifted by
-    the context-length difference); structure = prefix turn tokens + suffix turn scaffold, split into
-    bos / prefix_delim / suffix_delim, EXCLUDING the read-out/query token; text_all = question ∪
-    structure. Context tokens differ in length and are never patched.
-    """
-    out, ok = {}, {}
-    di, ri = seg_d["image"], seg_r["image"]
-    ok["image"] = bool(len(di) and len(di) == len(ri) and int(di[0]) == int(ri[0]))
-    if ok["image"]:
-        out["image"] = (di, ri)
-    qd, qr = seg_d["question"], seg_r["question"]
-    ok["question"] = bool(len(qd) and len(qd) == len(qr))
-    if ok["question"]:
-        out["question"] = (qd, qr)
-    ok["structure"] = ok["bos"] = ok["prefix_delim"] = ok["suffix_delim"] = False
-    if ok["image"] and ok["question"]:
-        pre = np.arange(0, int(seg_d["image"][0]))
-        qe_d, qe_r = int(qd[-1]) + 1, int(qr[-1]) + 1
-        suf_d, suf_r = np.arange(qe_d, seg_d["n"] - 1), np.arange(qe_r, seg_r["n"] - 1)  # drop last tok
-        if len(suf_d) == len(suf_r) and len(pre) >= 2 and len(suf_d) >= 1:
-            out["structure"] = (np.concatenate([pre, suf_d]), np.concatenate([pre, suf_r]))
-            out["bos"] = (pre[:1], pre[:1])
-            out["prefix_delim"] = (pre[1:], pre[1:])
-            out["suffix_delim"] = (suf_d, suf_r)
-            ok["structure"] = ok["bos"] = ok["prefix_delim"] = ok["suffix_delim"] = True
-    if ok["question"] and ok["structure"]:
-        out["text_all"] = (np.concatenate([out["question"][0], out["structure"][0]]),
-                           np.concatenate([out["question"][1], out["structure"][1]]))
-        ok["text_all"] = True
-    return out, ok
+    return aligned_patch_groups(seg_d, seg_r)
 
 
 # --------------------------------------------------------------------------- hooks
@@ -174,7 +123,7 @@ def _readout(model, inputs, tok_ids, hooks=None):
     last = out.logits[0, -1].float()
     lp = {w: float(v) for w, v in zip(EMOTION_LABELS,
           torch.log_softmax(last[[tok_ids[w] for w in EMOTION_LABELS]], dim=-1))}
-    return valence_score(last, tok_ids), lp
+    return closed_vocab_valence(last, tok_ids), lp
 
 
 # --------------------------------------------------------------------------- run
@@ -196,9 +145,10 @@ def run(config_path: str, model_name: str, limit_override: int | None = None,
         band = list(range(a, b + 1))
     else:  # onset unknown on Qwen (no layerwise yet) → broad mid+late band, proportional to Gemma's
         band = list(range(round(0.35 * n_layers), n_layers - 2))
-    tok_ids = emotion_token_ids(processor)
+    tok_ids = first_content_token_ids(processor)
 
-    sel = select_extreme_images(n_images * 2)
+    frame = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images * 2)
     sel = sel[sel["image_group"] == "positive"].head(n_images).reset_index(drop=True)
 
     rows, n_skip, seg_bad, n_ok = [], 0, 0, 0
@@ -210,9 +160,13 @@ def run(config_path: str, model_name: str, limit_override: int | None = None,
             continue
         din = build_inputs(processor, img, pos_ctx)
         rin = build_inputs(processor, img, neg_ctx)
-        seg_d = segment_positions(processor.tokenizer, din["input_ids"])
-        seg_r = segment_positions(processor.tokenizer, rin["input_ids"])
-        groups, ok = _aligned_groups(seg_d, seg_r)
+        seg_d = segment_prompt_positions(
+            processor.tokenizer, din["input_ids"], QUESTION, expected_image_tokens=None
+        )
+        seg_r = segment_prompt_positions(
+            processor.tokenizer, rin["input_ids"], QUESTION, expected_image_tokens=None
+        )
+        groups, ok = aligned_patch_groups(seg_d, seg_r)
         if not all(ok.get(g) for g in GROUPS):
             seg_bad += 1
             continue

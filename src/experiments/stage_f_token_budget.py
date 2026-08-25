@@ -56,9 +56,38 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
                                       build_conditions,
                                       TEXT_CODE)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
-from ..paths import STAGE_F_DIR, ensure_dirs
-from .common import git_hash, load_config, run_stamp, save_json
-from .stage_f_qwen import (_user_text, emotion_token_ids, readout, select_extreme_images)
+from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
+from .common import load_config, run_stamp, save_json
+from .shared.artifacts import (artifact_metadata, ensure_output_available, run_key_suffix,
+                               token_budget_artifact_paths, token_budget_key,
+                               token_budget_metric_paths)
+from .shared.hf_runtime import image_prompt_token_counts, load_vlm, resize_long_side
+from .shared.readouts import first_content_token_ids, model_readout, user_text
+from .shared.reporting import (
+    asymmetry_vs_floor,
+    cross_modal_amplification,
+    flip_override,
+    image_discriminability,
+    text_only_control_summary,
+    text_only_readouts,
+    token_budget_analysis_fields,
+    token_budget_trends,
+)
+from .shared.sampling import select_extreme_rows
+
+_text_only_readouts = text_only_readouts
+_trends = token_budget_trends
+
+BASE_RESULT_COLUMNS = [
+    "image_path", "image_valence", "image_group", "condition", "context_id",
+    "context", "text_code", "probe_readout", "valence",
+    *[f"lp_{label}" for label in EMOTION_LABELS],
+]
+
+TOKEN_BUDGET_TREND_COLUMNS = [
+    "source", "model", "bank", "max_side", "image_tokens", "image_token_fraction",
+    "discriminability_gap", "auc", "text_only_ratio", "override_gap", "ci_lo", "ci_hi",
+]
 
 
 def _conditions(bank: str = "full"):
@@ -75,82 +104,16 @@ def _conditions(bank: str = "full"):
     return build_conditions(bank)
 
 
-def _key_suffix(style: str = "chat", bank: str = "full") -> str:
-    """The style/bank tail of a run key, without the model or budget parts.
-
-    Split out of `slug` so that code needing to *glob* across token budgets can rebuild the tail
-    exactly. The budget tag sits before this tail, so `f"{slug(...)}_px*"` looks for a filename that
-    can never exist; `_base_runs_for` needs the pieces, not the finished key.
-    """
-    s = ""
-    if style != "chat":
-        s += f"_{style}"
-    if bank != "full":
-        s += f"_{bank}"
-    return s
-
-
-def slug(model_name: str, max_side: int | None, style: str = "chat", bank: str = "full") -> str:
-    """Filesystem-safe run key: model + token-budget tag + prompt style + bank, so runs never collide.
-
-    `bank` is part of the key for the same reason the others are: a minimal-pair run and a full-bank
-    run of the same model are different experiments, and a shared path would silently overwrite one
-    with the other --- the failure mode that destroyed three published numbers before per-run paths
-    were introduced.
-    """
-    s = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
-    if max_side:
-        s = f"{s}_px{max_side}"
-    return s + _key_suffix(style, bank)
+_key_suffix = run_key_suffix
+slug = token_budget_key
 
 
 # --------------------------------------------------------------------------- model dispatch
-def load_any(model_name: str, max_side: int | None = None):
-    """Load a VLM + processor by family. Returns (model, processor, family).
-
-    `max_side` is threaded into the Qwen processor as a pixel budget where the API supports it; for
-    every family the image is ALSO resized before processing (see `_prep_image`), which is the
-    family-agnostic way to move the token budget on a dynamic-resolution model.
-    """
-    from transformers import AutoProcessor
-    lname = model_name.lower()
-    if "qwen" in lname:
-        if "qwen3" in lname:
-            from transformers import Qwen3VLForConditionalGeneration as Cls
-        else:
-            from transformers import Qwen2_5_VLForConditionalGeneration as Cls
-        family = "qwen"
-        proc_kwargs = {"max_pixels": max_side * max_side} if max_side else {}
-    else:
-        try:
-            from transformers import AutoModelForImageTextToText as Cls  # llava 1.5/NeXT, paligemma, idefics
-        except ImportError:
-            from transformers import LlavaForConditionalGeneration as Cls
-        family = "llava"
-        proc_kwargs = {}
-    model = Cls.from_pretrained(model_name, torch_dtype="auto", device_map="auto").eval()
-    try:
-        processor = AutoProcessor.from_pretrained(model_name, **proc_kwargs)
-    except (TypeError, ValueError):
-        # Not every processor version accepts a pixel budget; `_prep_image` resizes anyway, so the
-        # token budget still moves. Fail soft rather than lose a GPU session to a kwarg.
-        print(f"  [warn] processor rejected {list(proc_kwargs)}; relying on image resize alone")
-        processor = AutoProcessor.from_pretrained(model_name)
-    return model, processor, family
+load_any = load_vlm
 
 
 def _prep_image(img: Image.Image, max_side: int | None) -> Image.Image:
-    """Downscale so the long side is <= max_side, preserving aspect ratio (no-op if already smaller).
-
-    On a native dynamic-resolution model this is what changes the image-token count; on a fixed-grid
-    model the count is unchanged and only the visual detail drops — which is exactly why
-    `image_discriminability` is reported next to every run.
-    """
-    if not max_side or max(img.size) <= max_side:
-        return img
-    w, h = img.size
-    scale = max_side / float(max(w, h))
-    return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.BICUBIC)
+    return resize_long_side(img, max_side)
 
 
 def build_inputs(processor, image, context_sentence, family: str, style: str = "chat"):
@@ -174,10 +137,10 @@ def build_inputs(processor, image, context_sentence, family: str, style: str = "
         return processor(text=text, images=imgs, return_tensors="pt")
     if family == "qwen":
         content = ([{"type": "image", "image": image}] if image is not None else [])
-        content.append({"type": "text", "text": _user_text(context_sentence)})
+        content.append({"type": "text", "text": user_text(context_sentence)})
     else:
         content = ([{"type": "image"}] if image is not None else [])
-        content.append({"type": "text", "text": _user_text(context_sentence)})
+        content.append({"type": "text", "text": user_text(context_sentence)})
     text = processor.apply_chat_template([{"role": "user", "content": content}],
                                          tokenize=False, add_generation_prompt=True)
     imgs = [image] if image is not None else None
@@ -194,53 +157,13 @@ def count_image_tokens(processor, image, family: str, style: str = "chat") -> di
     processors leave a single unexpanded placeholder and expand inside the model instead; that shows up
     as a delta of ~1 and is flagged rather than silently reported as a one-token image.
     """
-    with_img = build_inputs(processor, image, None, family, style)["input_ids"].shape[-1]
-    without = build_inputs(processor, None, None, family, style)["input_ids"].shape[-1]
-    delta = int(with_img - without)
-    return {"image_tokens": delta, "prompt_tokens_with_image": int(with_img),
-            "prompt_tokens_text_only": int(without),
-            "image_token_fraction": delta / with_img if with_img else float("nan"),
-            "expansion_ok": bool(delta > 8),
-            "note": ("" if delta > 8 else
-                     "placeholder appears UNEXPANDED at tokenization (delta<=8); the true image-token "
-                     "count is applied inside the model — read it from the model's vision config "
-                     "instead of this field.")}
-
-
-# --------------------------------------------------------------------------- controls & metrics
-def image_discriminability(df: pd.DataFrame) -> dict:
-    """Can the model still tell the two image groups apart with NO context? The resolution control.
-
-    Uses only the `none` rows, so it is a pure vision read: if this collapses at low resolution the
-    image simply became unreadable, and any change in the override gap is confounded with visual
-    quality rather than attributable to the token budget.
-    """
-    d = df[df["condition"] == "none"]
-    pos = d[d["image_group"] == "positive"]["valence"].to_numpy(dtype=float)
-    neg = d[d["image_group"] == "negative"]["valence"].to_numpy(dtype=float)
-    if not len(pos) or not len(neg):
-        return {}
-    # AUC via the Mann-Whitney U identity (no sklearn dependency in the raw-HF envs).
-    order = np.argsort(np.concatenate([pos, neg]), kind="mergesort")
-    ranks = np.empty(len(order), dtype=float)
-    ranks[order] = np.arange(1, len(order) + 1)
-    auc = (ranks[:len(pos)].sum() - len(pos) * (len(pos) + 1) / 2) / (len(pos) * len(neg))
-    return {"mean_valence_positive_images": float(pos.mean()),
-            "mean_valence_negative_images": float(neg.mean()),
-            "discriminability_gap": float(pos.mean() - neg.mean()),
-            "auc": float(auc), "n_pos": int(len(pos)), "n_neg": int(len(neg))}
+    return image_prompt_token_counts(processor, image, family, style, build_inputs)
 
 
 def _analyze(df, model_name, tokens: dict, max_side, multi=None, n_skipped=0) -> dict:
-    from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
-    return {"run": run_stamp(), "git": git_hash(), "model": model_name, "max_side": max_side,
-            "read_out": "behavioral_valence", "n_images": int(df["image_path"].nunique()) if len(df) else 0,
-            "n_rows": int(len(df)), "n_skipped": n_skipped,
-            "image_tokens": tokens,
-            "image_discriminability": image_discriminability(df) if len(df) else {},
-            "asymmetry_vs_floor": _asymmetry_vs_floor(df) if len(df) else {},
-            "flip_override": _flip_override(df) if len(df) else {},
-            "tokenization_multi_token": multi or {}}
+    return artifact_metadata(**token_budget_analysis_fields(
+        df, model_name, tokens, max_side, multi=multi, n_skipped=n_skipped,
+    ))
 
 
 def _print(m: dict) -> None:
@@ -265,43 +188,52 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
              bank: str = "full") -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, max_side, style, bank)
-    out_pq = STAGE_F_DIR / f"conflict_{key}.parquet"
-    if out_pq.exists() and not force:
-        raise FileExistsError(
-            f"{out_pq} already exists — refusing to overwrite a completed run. Pass --force to "
-            f"replace it, or change --max-side / --model so the run gets its own key.")
+    key = token_budget_key(model_name, max_side, style, bank)
+    out_pq, out_metrics = token_budget_artifact_paths(
+        STAGE_F_DIR, model_name, max_side, style, bank
+    )
+    ensure_output_available(
+        out_pq,
+        force,
+        f"{out_pq} already exists — refusing to overwrite a completed run. Pass --force to "
+        f"replace it, or change --max-side / --model so the run gets its own key.",
+    )
 
     n_images = limit_override or int(cfg.get("n_images", 150))
-    sel = select_extreme_images(n_images)
-    model, processor, family = load_any(model_name, max_side)
-    tok_ids = emotion_token_ids(processor)
+    frame = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images)
+    model, processor, family = load_vlm(model_name, max_side)
+    tok_ids = first_content_token_ids(processor)
     multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
              if not r["single_token"]}
 
     tokens, rows, n_skip = None, [], 0
     for _, r in tqdm(list(sel.iterrows()), desc=f"token-budget {key}"):
         try:
-            img = _prep_image(Image.open(r["image_path"]).convert("RGB"), max_side)
+            img = resize_long_side(Image.open(r["image_path"]).convert("RGB"), max_side)
         except (FileNotFoundError, OSError):
             n_skip += 1
             continue
         if tokens is None:            # measured on the first real image, at the resolution actually used
-            tokens = count_image_tokens(processor, img, family, style)
-        for cond, cid, sentence in _conditions(bank):
-            val, lp = readout(model, build_inputs(processor, img, sentence, family, style), tok_ids)
+            tokens = image_prompt_token_counts(
+                processor, img, family, style, build_inputs
+            )
+        for cond, cid, sentence in build_conditions(bank):
+            val, lp = model_readout(model, build_inputs(processor, img, sentence, family, style), tok_ids)
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
                          "context": sentence or "", "text_code": TEXT_CODE[cond],
                          "probe_readout": float("nan"),   # no probe off-Gemma; column kept for schema
                          "valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows, columns=BASE_RESULT_COLUMNS)
     df.to_parquet(out_pq)
-    metrics = _analyze(df, model_name, tokens or {}, max_side, multi=multi, n_skipped=n_skip)
+    metrics = artifact_metadata(**token_budget_analysis_fields(
+        df, model_name, tokens or {}, max_side, multi=multi, n_skipped=n_skip,
+    ))
     metrics["prompt_style"] = style
     metrics["bank"] = bank
-    save_json(metrics, STAGE_F_DIR / f"conflict_{key}_metrics.json")
+    save_json(metrics, out_metrics)
     _print(metrics)
     print(f"  data -> {out_pq}")
     return metrics
@@ -315,26 +247,12 @@ def _base_runs_for(model_name: str, style: str = "chat", bank: str = "full") -> 
     be comparing different sentences, which is precisely the confound the control exists to test.
     The glob is assembled from key parts because the budget tag precedes the style/bank tail.
     """
-    core = re.sub(r"[^a-z0-9]+", "-", model_name.lower().split("/")[-1]).strip("-")
-    tail = _key_suffix(style, bank)
-    exact = STAGE_F_DIR / f"conflict_{core}{tail}_metrics.json"
-    runs = [exact] if exact.exists() else []
-    # The glob alone is not enough: for the full bank `tail` is empty, so `_px*_metrics.json` also
-    # swallows `_px448_minimal_metrics.json`. Anchor the budget tag to digits and the tail to the end.
-    pat = re.compile(rf"^conflict_{re.escape(core)}_px\d+{re.escape(tail)}_metrics\.json$")
-    return runs + sorted(p for p in STAGE_F_DIR.glob(f"conflict_{core}_px*_metrics.json")
-                         if pat.match(p.name))
+    return token_budget_metric_paths(STAGE_F_DIR, model_name, style, bank)
 
 
 def _amplification(img_ratio: float | None, ref: float) -> str:
     """Label the image-conditioned vs text-only ratio comparison (the cross-modal amplification test)."""
-    if img_ratio is None or not np.isfinite(ref) or not np.isfinite(img_ratio):
-        return "no base run to compare"
-    if img_ratio > 1.25 * ref:
-        return "CROSS-MODAL amplification (image inflates the ratio)"
-    if abs(img_ratio - ref) <= 0.25 * ref:
-        return "STIMULUS confound (ratios match)"
-    return "image dampens (reversed)"
+    return cross_modal_amplification(img_ratio, ref)
 
 
 def run_text_only(config_path: str, model_name: str, force: bool = False, style: str = "chat",
@@ -354,39 +272,38 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     """
     load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, None, style, bank)   # budget-free but bank-aware; see docstring
-    out_pq = STAGE_F_DIR / f"text_only_{key}.parquet"
-    if out_pq.exists() and not force:
-        raise FileExistsError(f"{out_pq} already exists — pass --force to replace it.")
+    out_pq, out_metrics = token_budget_artifact_paths(
+        STAGE_F_DIR, model_name, None, style, bank, text_only=True
+    )
+    ensure_output_available(out_pq, force, f"{out_pq} already exists — pass --force to replace it.")
 
-    model, processor, family = load_any(model_name, None)
-    tok_ids = emotion_token_ids(processor)
+    model, processor, family = load_vlm(model_name, None)
+    tok_ids = first_content_token_ids(processor)
     multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
              if not r["single_token"]}
 
     rows = []
-    for cond, cid, sentence in _conditions(bank):
-        val, lp = readout(model, build_inputs(processor, None, sentence, family, style), tok_ids)  # image=None
+    for cond, cid, sentence in build_conditions(bank):
+        val, lp = model_readout(model, build_inputs(processor, None, sentence, family, style), tok_ids)  # image=None
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
                      "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": max(lp, key=lp.get),
                      **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
     df = pd.DataFrame(rows)
     df.to_parquet(out_pq)
 
-    neu = float(df[df["condition"] == "neutral"]["valence"].mean())
-    none_v = float(df[df["condition"] == "none"]["valence"].mean())
-    pe = float((df[df["condition"] == "positive"]["valence"] - neu).mean())
-    ne = float((df[df["condition"] == "negative"]["valence"] - neu).mean())
-    # raw ratio (vs 0, not vs a possibly-floored neutral) — the robust reference when a model pins
-    # its no-information baseline to the scale bound, as Qwen does.
-    pr = float(df[df["condition"] == "positive"]["valence"].mean())
-    nr = float(df[df["condition"] == "negative"]["valence"].mean())
-    raw_ratio = abs(nr) / abs(pr) if pr else float("nan")
-    text_ratio = abs(ne) / abs(pe) if pe else float("nan")
-    ref = raw_ratio if np.isfinite(raw_ratio) else text_ratio
+    summary = text_only_control_summary(df)
+    neu = summary["neutral_baseline"]
+    none_v = summary["none_baseline"]
+    pe = summary["pos_effect"]
+    ne = summary["neg_effect"]
+    pr = summary["pos_raw"]
+    nr = summary["neg_raw"]
+    text_ratio = summary["text_only_ratio_vs_neutral"]
+    raw_ratio = summary["text_only_ratio_raw"]
+    ref = summary["reference_ratio"]
 
     per_base = []
-    for bp in _base_runs_for(model_name, style, bank):
+    for bp in token_budget_metric_paths(STAGE_F_DIR, model_name, style, bank):
         j = json.loads(bp.read_text())
         a = j.get("asymmetry_vs_floor", {})
         dn, dp = a.get("drop_pos_img_neg_ctx"), a.get("congruent_pos_img_pos_ctx")
@@ -394,15 +311,15 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
         per_base.append({"base_run": bp.name, "max_side": j.get("max_side"),
                          "image_tokens": j.get("image_tokens", {}).get("image_tokens"),
                          "image_conditioned_ratio": img_ratio,
-                         "verdict": _amplification(img_ratio, ref)})
+                         "verdict": cross_modal_amplification(img_ratio, ref)})
 
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name, "bank": bank,
-               "keyed_by": "model + bank (no image in this pass; --max-side cannot affect it)",
-               "neutral_baseline": neu, "none_baseline": none_v, "pos_effect": pe, "neg_effect": ne,
-               "pos_raw": pr, "neg_raw": nr, "text_only_ratio_vs_neutral": text_ratio,
-               "text_only_ratio_raw": raw_ratio, "reference_ratio": ref,
-               "per_base_run": per_base, "tokenization_multi_token": multi}
-    save_json(metrics, STAGE_F_DIR / f"text_only_{key}_metrics.json")
+    metrics = artifact_metadata(
+        model=model_name, bank=bank,
+        keyed_by="model + bank (no image in this pass; --max-side cannot affect it)",
+        **summary,
+        per_base_run=per_base, tokenization_multi_token=multi,
+    )
+    save_json(metrics, out_metrics)
 
     print(f"\nStage F text-only [{model_name}] bank={bank} — {len(rows)} forwards (no images).")
     if multi:
@@ -426,39 +343,6 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     return metrics
 
 
-def _text_only_readouts(df: pd.DataFrame) -> dict:
-    """Both scales for a text-only run: the bounded valence score and an unbounded log-odds margin.
-
-    The bounded score is the paper's primary readout, but with no image some models pin it to a
-    bound: Qwen3-VL reads a bare neutral sentence as sadness at -0.996, so every sentence lands
-    at +/-1 and the |neg|/|pos| ratio comes out at 1.00 no matter what the sentences do. A ratio
-    computed from two saturated constants is not evidence that the sets are balanced; it is evidence
-    that the readout cannot see. The margin (best positive-valence label minus best negative-valence
-    label, in log-odds) has no bounds and answers the question the control is actually asking.
-
-    Two references are reported per scale. `raw` compares each polarity against zero and is the one
-    to trust when the neutral baseline is itself pinned; `vs_neutral` subtracts the neutral-sentence
-    baseline and is the one to trust when it is not. `saturation` says which situation you are in.
-    """
-    from .analyze_stage_f import _POSITIVE, _NEGATIVE
-    d = df.copy()
-    d["margin"] = [max(r["lp_" + w] for w in _POSITIVE) - max(r["lp_" + w] for w in _NEGATIVE)
-                   for _, r in d.iterrows()]
-    out = {"saturation_frac": float((d["valence"].abs() >= 0.999).mean()), "n_rows": int(len(d))}
-    for scale, col in (("bounded_valence", "valence"), ("unbounded_margin", "margin")):
-        g = lambda c: d[d["condition"] == c][col]
-        pos, neg, neu = float(g("positive").mean()), float(g("negative").mean()), float(g("neutral").mean())
-        pe, ne = pos - neu, neg - neu
-        out[scale] = {
-            "pos_raw": pos, "neg_raw": neg, "neutral_baseline": neu,
-            "ratio_raw": abs(neg) / abs(pos) if pos else float("nan"),
-            "pos_vs_neutral": pe, "neg_vs_neutral": ne,
-            "ratio_vs_neutral": abs(ne) / abs(pe) if pe else float("nan"),
-            "mirror_contrast_raw": abs(neg) - abs(pos),
-        }
-    return out
-
-
 def reanalyze_text_only(model_name: str, style: str = "chat", bank: str = "full") -> dict:
     """Recompute a text-only control from its saved parquet (CPU, no model load).
 
@@ -467,14 +351,14 @@ def reanalyze_text_only(model_name: str, style: str = "chat", bank: str = "full"
     unbounded margin, and rewrites the metrics file in place.
     """
     ensure_dirs()
-    key = slug(model_name, None, style, bank)
-    pq = STAGE_F_DIR / f"text_only_{key}.parquet"
+    pq, mpath = token_budget_artifact_paths(
+        STAGE_F_DIR, model_name, None, style, bank, text_only=True
+    )
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run --text-only first.")
     df = pd.read_parquet(pq)
-    r = _text_only_readouts(df)
+    r = text_only_readouts(df)
 
-    mpath = STAGE_F_DIR / f"text_only_{key}_metrics.json"
     m = json.loads(mpath.read_text()) if mpath.exists() else {"model": model_name, "bank": bank}
     m["readouts"] = r
     m["reanalyzed"] = run_stamp()
@@ -518,86 +402,16 @@ def reanalyze(model_name: str, max_side: int | None, bank: str = "full") -> dict
     silently recompute the full-bank parquet and overwrite the full-bank metrics.
     """
     ensure_dirs()
-    key = slug(model_name, max_side, bank=bank)
-    pq = STAGE_F_DIR / f"conflict_{key}.parquet"
+    pq, mpath = token_budget_artifact_paths(STAGE_F_DIR, model_name, max_side, bank=bank)
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run the base pass first.")
-    mpath = STAGE_F_DIR / f"conflict_{key}_metrics.json"
     tokens = json.loads(mpath.read_text()).get("image_tokens", {}) if mpath.exists() else {}
-    m = _analyze(pd.read_parquet(pq), model_name, tokens, max_side)
+    m = artifact_metadata(**token_budget_analysis_fields(
+        pd.read_parquet(pq), model_name, tokens, max_side,
+    ))
     save_json(m, mpath)
     _print(m)
     return m
-
-
-# --------------------------------------------------------------------------- aggregation
-def _trends(tab: pd.DataFrame) -> dict:
-    """Within-model and cross-model evidence on the token-budget hypothesis, kept strictly separate.
-
-    A single correlation over every row is worse than useless here, for three reasons this function
-    exists to avoid:
-
-      1. POOLING. A within-model resolution sweep (same weights, budget varied) and a cross-model
-         comparison (everything varies at once) answer different questions. Pooling them lets three
-         clustered points from one model plus one distant point from another produce r = -0.99 that
-         means nothing.
-      2. IGNORED UNCERTAINTY. Correlation uses point estimates only. Four gaps that sit inside
-         mutually overlapping 95% CIs are a flat line, however neatly ordered they happen to be.
-      3. SILENT EXCLUSION. Runs from the older fixed-path runner carry no image-token count and drop
-         out of any correlation without comment — and those were exactly the models that break the
-         pattern. Missing rows are now named, not dropped quietly.
-
-    Within-model verdict is CI-based: if every sweep CI shares a common intersection, no effect of the
-    budget is detectable regardless of the ordering of the point estimates.
-    """
-    out: dict = {}
-    have = tab.dropna(subset=["image_tokens", "override_gap"])
-    missing = tab[tab["image_tokens"].isna()]
-    if len(missing):
-        out["excluded_missing_image_tokens"] = [
-            {"model": r["model"], "source": r["source"], "override_gap": r["override_gap"]}
-            for _, r in missing.iterrows()]
-
-    # ---- within-model: one entry per model that was swept over >=2 distinct budgets
-    within = []
-    for model, g in have.groupby("model"):
-        if g["image_tokens"].nunique() < 2:
-            continue
-        lo, hi = float(g["ci_lo"].max()), float(g["ci_hi"].min())   # common intersection of all CIs
-        flat = lo <= hi
-        within.append({
-            "model": model, "n_runs": int(len(g)),
-            "tokens_min": float(g["image_tokens"].min()), "tokens_max": float(g["image_tokens"].max()),
-            "fold_range": float(g["image_tokens"].max() / g["image_tokens"].min()),
-            "gap_min": float(g["override_gap"].min()), "gap_max": float(g["override_gap"].max()),
-            "all_cis_overlap": bool(flat),
-            "discriminability_auc_range": [float(g["auc"].min()), float(g["auc"].max())]
-                                          if g["auc"].notna().any() else None,
-            "verdict": ("FLAT — every CI overlaps, so no effect of the token budget is detectable "
-                        "over this range" if flat else
-                        "MOVES — at least two CIs are disjoint across the budget range")})
-    if within:
-        out["within_model"] = within
-
-    # ---- cross-model: exactly one representative run per model (the largest budget measured)
-    reps = have.sort_values("image_tokens").groupby("model", as_index=False).last()
-    if len(reps) >= 3:
-        t, gp = reps["image_tokens"].to_numpy(float), reps["override_gap"].to_numpy(float)
-        r = float(np.corrcoef(t, gp)[0, 1])
-        loo = [float(np.corrcoef(np.delete(t, i), np.delete(gp, i))[0, 1]) for i in range(len(t))]
-        out["cross_model"] = {
-            "n_models": int(len(reps)), "models": reps["model"].tolist(),
-            "pearson_tokens_vs_gap": r, "leave_one_out_range": [min(loo), max(loo)],
-            "caveat": (f"n={len(reps)} models: a correlation this small is descriptive only, ignores "
-                       f"every CI, and confounds the budget with everything else that differs "
-                       f"between checkpoints."
-                       + (" Runs are missing image-token counts (see excluded_missing_image_tokens), "
-                          "so this omits models that may break the pattern."
-                          if "excluded_missing_image_tokens" in out else ""))}
-    elif len(reps):
-        out["cross_model"] = {"n_models": int(len(reps)),
-                              "note": "fewer than 3 models with measured image tokens — no trend reported"}
-    return out
 
 
 def _print_trends(t: dict) -> None:
@@ -642,9 +456,10 @@ def aggregate() -> dict:
         # to sentences it was never measured on. Older metrics files predate the field, so fall back
         # to the filename, which is the run key and always carries the suffix.
         bank = j.get("bank") or ("minimal" if mp.name.endswith("_minimal_metrics.json") else "full")
-        tpath = STAGE_F_DIR / (
-            f"text_only_{slug(j.get('model', ''), None, j.get('prompt_style', 'chat'), bank)}"
-            "_metrics.json")
+        _, tpath = token_budget_artifact_paths(
+            STAGE_F_DIR, j.get("model", ""), None, j.get("prompt_style", "chat"), bank,
+            text_only=True,
+        )
         text_ratio = None
         if tpath.exists():
             try:
@@ -660,15 +475,12 @@ def aggregate() -> dict:
                      "override_gap": f.get("dominance_gap"),
                      "ci_lo": f.get("dominance_gap_ci95", [None, None])[0],
                      "ci_hi": f.get("dominance_gap_ci95", [None, None])[1]})
-    cols = ["source", "model", "bank", "max_side", "image_tokens", "image_token_fraction",
-            "discriminability_gap", "auc", "text_only_ratio", "override_gap", "ci_lo", "ci_hi"]
-    tab = pd.DataFrame(rows, columns=cols)
+    tab = pd.DataFrame(rows, columns=TOKEN_BUDGET_TREND_COLUMNS)
     if len(tab):
         tab = tab.sort_values(["model", "image_tokens"], na_position="last")
-    out = {"run": run_stamp(), "git": git_hash(), "n_runs": len(tab),
-           "rows": tab.to_dict(orient="records")}
+    out = artifact_metadata(n_runs=len(tab), rows=tab.to_dict(orient="records"))
 
-    out.update(_trends(tab))
+    out.update(token_budget_trends(tab))
     save_json(out, STAGE_F_DIR / "token_budget_trend.json")
     if len(tab):
         print(tab.to_string(index=False))
@@ -689,7 +501,7 @@ def show_prompt(model_name: str, max_side: int | None = None) -> dict:
     family = "qwen" if "qwen" in model_name.lower() else "llava"
     img = Image.new("RGB", (640, 480), (127, 127, 127))
     if max_side:
-        img = _prep_image(img, max_side)
+        img = resize_long_side(img, max_side)
     sentence = NEGATIVE_CONTEXTS[0]
 
     out = {"model": model_name, "family": family, "styles": {}}
@@ -697,7 +509,7 @@ def show_prompt(model_name: str, max_side: int | None = None) -> dict:
         try:
             enc = build_inputs(processor, img, sentence, family, style)
             text = processor.tokenizer.decode(enc["input_ids"][0])
-            tok = count_image_tokens(processor, img, family, style)
+            tok = image_prompt_token_counts(processor, img, family, style, build_inputs)
             rec = {"total_prompt_tokens": int(enc["input_ids"].shape[-1]),
                    "image_tokens": tok["image_tokens"],
                    "text_scaffold_tokens": int(enc["input_ids"].shape[-1]) - tok["image_tokens"],
@@ -725,32 +537,37 @@ def show_prompt(model_name: str, max_side: int | None = None) -> dict:
     return out
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Stage F — visual token budget vs textual override")
-    ap.add_argument("--config", default="config/stage_f.yaml")
-    ap.add_argument("--model", default="Qwen/Qwen3-VL-8B-Instruct")
-    ap.add_argument("--max-side", type=int, default=None,
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Stage F — visual token budget vs textual override")
+    parser.add_argument("--config", default="config/stage_f.yaml")
+    parser.add_argument("--model", default="Qwen/Qwen3-VL-8B-Instruct")
+    parser.add_argument("--max-side", type=int, default=None,
                     help="downscale images so the long side <= N (moves the token budget on "
                          "dynamic-resolution models); omit for the model's native handling")
-    ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
-    ap.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
-    ap.add_argument("--text-only", action="store_true",
+    parser.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
+    parser.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
+    parser.add_argument("--text-only", action="store_true",
                     help="image-ablated stimulus control (keyed by model and --bank; ignores "
                          "--max-side)")
-    ap.add_argument("--bank", choices=("full", "minimal"), default="full",
+    parser.add_argument("--bank", choices=("full", "minimal"), default="full",
                     help="context bank: 'full' (6 pos / 6 neg / 2 neutral) or 'minimal' (6 "
                          "token-matched valence-only pairs, the valence-vs-event-content control). "
                          "The bank is part of the run key, so the two never overwrite each other.")
-    ap.add_argument("--prompt-style", choices=("chat", "legacy"), default="chat",
+    parser.add_argument("--prompt-style", choices=("chat", "legacy"), default="chat",
                     help="chat = processor.apply_chat_template (portable); legacy = the hand-written "
                          "Gemma scaffold used for the PUBLISHED Gemma run (Gemma only)")
-    ap.add_argument("--show-prompt", action="store_true",
+    parser.add_argument("--show-prompt", action="store_true",
                     help="print both prompt styles side by side and exit (processor only, no GPU)")
-    ap.add_argument("--reanalyze", action="store_true",
+    parser.add_argument("--reanalyze", action="store_true",
                     help="recompute from the saved parquet (CPU). With --text-only, recomputes the "
                          "stimulus control on both the bounded and the unbounded scale.")
-    ap.add_argument("--aggregate", action="store_true", help="build the cross-run trend table (CPU)")
-    a = ap.parse_args()
+    parser.add_argument("--aggregate", action="store_true",
+                        help="build the cross-run trend table (CPU)")
+    return parser
+
+
+def main() -> None:
+    a = build_parser().parse_args()
     if a.show_prompt:
         show_prompt(a.model, a.max_side)
     elif a.aggregate:

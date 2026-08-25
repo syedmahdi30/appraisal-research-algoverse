@@ -42,10 +42,11 @@ from ..data.labels import EMOTION_LABELS
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer_hf import last_token_tap, load_hf
+from .shared.hf_runtime import encode_image_prompt, last_token_tap, load_gemma_hf
+from .shared.readouts import closed_vocab_logprobs, closed_vocab_valence, first_content_token_ids
+from .shared.reporting import arbitration
+from .shared.sampling import select_extreme_rows
 from .stage_d_steering_hf import REFERENCE_DMU_NORM, build_directions, steer
-from .stage_f_patching_hf import encode
-from .stage_f_qwen import emotion_logprobs, emotion_token_ids, valence_score
 
 # Stage D no-conflict slope on raw HF (results/stage_d/steering_metrics_hf.json), the denominator the
 # paper normalizes this slope against. Published bridge value was +0.3293.
@@ -56,10 +57,7 @@ def select_conflict_cells(split: str, n_images: int) -> pd.DataFrame:
     """Both valence extremes, each to be paired with the OPPOSING context polarity."""
     from ..data.emotic import load_split as load_emotic_split
     df = load_emotic_split(split).reset_index(drop=True)
-    df = df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
-    k = n_images // 2
-    return pd.concat([df.tail(k).assign(image_group="positive"),
-                      df.head(k).assign(image_group="negative")]).reset_index(drop=True)
+    return select_extreme_rows(df, n_images)
 
 
 def run(config_path: str, limit_override: int | None = None, verify_only: bool = False) -> dict:
@@ -76,8 +74,8 @@ def run(config_path: str, limit_override: int | None = None, verify_only: bool =
     pi = probes.index("pleasantness")
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
-    model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    tok_ids = emotion_token_ids(processor)
+    model, processor = load_gemma_hf(cfg.get("model", "google/gemma-3-4b-it"))
+    tok_ids = first_content_token_ids(processor)
 
     # Build the text-derived Δμ and check it against the published norms before spending the sweep.
     # A wrong resid site does not error; it just steers with a vector that means nothing.
@@ -104,7 +102,7 @@ def run(config_path: str, limit_override: int | None = None, verify_only: bool =
         last = out.logits[0, -1].float()
         act = np.asarray(store[0], dtype=np.float32)
         return (float(predict(act[None, :], coef, inter)[0]),
-                valence_score(last, tok_ids), emotion_logprobs(last, tok_ids))
+                closed_vocab_valence(last, tok_ids), closed_vocab_logprobs(last, tok_ids))
 
     rows, n_skip, n_cells = [], 0, 0
     with last_token_tap(model, crit, "post_attention_layernorm") as store:
@@ -115,7 +113,7 @@ def run(config_path: str, limit_override: int | None = None, verify_only: bool =
             except (FileNotFoundError, OSError):
                 n_skip += 1
                 continue
-            enc = encode(processor, img, context_prompt(sentence), model.device)
+            enc = encode_image_prompt(processor, img, context_prompt(sentence), model.device)
             n_cells += 1
             p0, v0, lp0 = readout(enc, store)                       # β = 0 first: cell baseline
             rows.append(_row(r, ctx_code, sentence, 0, p0, v0, lp0))
@@ -127,8 +125,7 @@ def run(config_path: str, limit_override: int | None = None, verify_only: bool =
     df = pd.DataFrame(rows)
     df.to_parquet(STAGE_F_DIR / "arbitration_hf.parquet")
 
-    from .analyze_stage_f import _arbitration
-    arb = _arbitration(df, betas)
+    arb = arbitration(df, betas)
     ratio = arb["valence_slope"] / STAGE_D_SLOPE_HF if STAGE_D_SLOPE_HF else float("nan")
 
     metrics = {

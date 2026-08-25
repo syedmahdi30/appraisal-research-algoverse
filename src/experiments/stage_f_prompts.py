@@ -35,11 +35,14 @@ from ..bridge.boot import boot_gemma
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       TEXT_CODE)
+from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_a_steering import emotion_logprobs, emotion_token_ids, valence_score
-from .stage_f_conflict import STAGE_A_DIR_probes, _probe_and_logits, select_extreme_images
+from .shared.readouts import bridge_probe_and_logits
+from .shared.sampling import select_extreme_rows
+from .stage_a_steering import emotion_token_ids
+from .stage_f_conflict import STAGE_A_DIR_probes
 
 
 # --------------------------------------------------------------------------- prompt variants
@@ -103,7 +106,8 @@ def run_base(config_path: str, limit_override: int | None = None,
     conditions += [("negative", f"n{i}", c) for i, c in enumerate(NEGATIVE_CONTEXTS)]
     conditions += [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
 
-    sel = select_extreme_images(cfg.get("split", "test"), n_images)
+    frame = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images)
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))
     tok_ids = emotion_token_ids(bridge)
     multi = {w: r for w, r in verify_label_tokenization(bridge.tokenizer).items() if not r["single_token"]}
@@ -119,7 +123,7 @@ def run_base(config_path: str, limit_override: int | None = None,
         for variant in variants:
             for cond, ctx_id, sentence in conditions:
                 inputs = build_image_inputs(bridge, img, prompt=variant_prompt(variant, sentence))
-                probe, val, lp = _probe_and_logits(
+                probe, val, lp = bridge_probe_and_logits(
                     bridge, inputs["input_ids"], inputs["pixel_values"], name, coef, inter, tok_ids)
                 rows.append({"prompt_variant": variant, "image_path": r["image_path"],
                              "image_valence": float(r["valence"]), "image_group": r["image_group"],
@@ -153,10 +157,10 @@ def analyze(df: pd.DataFrame) -> dict:
     Reuses the SHARED `_flip_override` so these numbers are directly comparable to the base Gemma run
     and the Qwen port. Robustness verdict = every variant's dominance gap CI clears 0.
     """
-    from .analyze_stage_f import _flip_override
+    from .shared.reporting import flip_override
     per_variant = {}
     for variant, g in df.groupby("prompt_variant"):
-        per_variant[str(variant)] = _flip_override(g)
+        per_variant[str(variant)] = flip_override(g)
 
     gaps = {v: m["dominance_gap"] for v, m in per_variant.items() if m}
     lo = {v: m["dominance_gap_ci95"][0] for v, m in per_variant.items() if m}

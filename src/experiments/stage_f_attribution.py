@@ -39,12 +39,14 @@ from ..bridge.boot import boot_gemma
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       TEXT_CODE, context_prompt)
+from ..data.emotic import load_split as load_emotic_split
 from ..data.labels import EMOTION_LABELS
 from ..paths import FIGURES_DIR, STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
+from .shared.patching import find_subsequence, segment_prompt_positions, stash_activation
 from .stage_a_steering import emotion_token_ids, valence_score
-from .stage_f_conflict import select_extreme_images
+from .shared.sampling import select_extreme_rows
 
 QUESTION = "What single emotion is this person feeling?"
 
@@ -58,64 +60,31 @@ def segment_positions(bridge, input_ids) -> dict:
     ("What single emotion ..."). Template = the rest (turn markers, question, model turn, BOS).
     Returns index arrays plus decoded snippets for eyeball validation.
     """
+    segment = segment_prompt_positions(
+        bridge.tokenizer, input_ids, QUESTION, expected_image_tokens=256
+    )
     ids = input_ids[0].tolist()
-    n = len(ids)
-    # image span: maximal contiguous run of one repeated id (Gemma3 = 256 soft image tokens).
-    best = (0, 0, None)  # (start, length, id)
-    i = 0
-    while i < n:
-        j = i
-        while j + 1 < n and ids[j + 1] == ids[i]:
-            j += 1
-        if (j - i + 1) > best[1]:
-            best = (i, j - i + 1, ids[i])
-        i = j + 1
-    img_start, img_len, _ = best
-    img_end = img_start + img_len  # exclusive
-    image_idx = list(range(img_start, img_end))
-
-    # question anchor: find the token subsequence of the question (try with/without leading space).
-    q_start, q_len = None, 0
-    for anchor in (" " + QUESTION, QUESTION):
-        toks = bridge.tokenizer.encode(anchor, add_special_tokens=False)
-        q_start = _find_subseq(ids, toks)
-        if q_start is not None:
-            q_len = len(toks)
-            break
-    if q_start is None or q_start <= img_end:
-        # fall back: context = everything between image block and end-of-user turn is unknown;
-        # be conservative and treat all post-image, pre-final-8 tokens as context.
-        q_start, q_len = max(img_end, n - 12), 0
-    context_idx = list(range(img_end, q_start))
-    question_idx = list(range(q_start, min(q_start + q_len, n))) if q_len else []
-    template_idx = [k for k in range(n) if k not in set(image_idx) | set(context_idx)]
-
     dec = bridge.tokenizer.decode
     return {
-        "image": np.array(image_idx), "context": np.array(context_idx),
-        "question": np.array(question_idx), "question_ok": bool(q_len),
-        "template": np.array(template_idx), "n": n, "img_len": int(img_len),
-        "image_ok": img_len == 256,
-        "context_text": dec([ids[k] for k in context_idx]) if context_idx else "",
-        "template_text": dec([ids[k] for k in template_idx][:20]),
+        "image": np.array(segment["image"].tolist()),
+        "context": np.array(segment["context"].tolist()),
+        "question": np.array(segment["question"].tolist()),
+        "question_ok": segment["question_ok"],
+        "template": np.array(segment["template"].tolist()),
+        "n": segment["n"], "img_len": segment["img_len"],
+        "image_ok": segment["image_ok"],
+        "context_text": dec([ids[k] for k in segment["context"]]) if len(segment["context"]) else "",
+        "template_text": dec([ids[k] for k in segment["template"]][:20]),
     }
 
 
 def _find_subseq(hay, needle):
-    if not needle:
-        return None
-    for s in range(len(hay) - len(needle) + 1):
-        if hay[s:s + len(needle)] == needle:
-            return s
-    return None
+    return find_subsequence(hay, needle)
 
 
 # --------------------------------------------------------------------------- forwards + knockout
 def _stash_hook(store):
-    def hook(act, hook):  # noqa: ARG001
-        store["act"] = act.detach()
-        return act
-    return hook
+    return stash_activation(store)
 
 
 def _knockout_hook(group_idx, last):
@@ -175,7 +144,8 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
 
     # positive-image group only: its neutral valence is mid-scale (symmetric head-room), the clean
     # cell where the positive channel demonstrably collapses under the image.
-    sel = select_extreme_images(cfg.get("split", "test"), n_images * 2)
+    frame = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images * 2)
     sel = sel[sel["image_group"] == "positive"].head(n_images).reset_index(drop=True)
 
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))
