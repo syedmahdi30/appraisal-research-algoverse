@@ -513,6 +513,65 @@ def image_discriminability(df: pd.DataFrame) -> dict:
             "auc": float(auc), "n_pos": int(len(pos)), "n_neg": int(len(neg))}
 
 
+def token_budget_analysis_fields(df: pd.DataFrame, model_name: str, tokens: dict,
+                                 max_side: int | None, multi=None, n_skipped: int = 0) -> dict:
+    """Build the stable ordered scientific fields for one token-budget metrics artifact."""
+    return {
+        "model": model_name,
+        "max_side": max_side,
+        "read_out": "behavioral_valence",
+        "n_images": int(df["image_path"].nunique()) if len(df) else 0,
+        "n_rows": int(len(df)),
+        "n_skipped": n_skipped,
+        "image_tokens": tokens,
+        "image_discriminability": image_discriminability(df) if len(df) else {},
+        "asymmetry_vs_floor": asymmetry_vs_floor(df) if len(df) else {},
+        "flip_override": flip_override(df) if len(df) else {},
+        "tokenization_multi_token": multi or {},
+    }
+
+
+def text_only_control_summary(df: pd.DataFrame) -> dict:
+    """Return the historical bounded text-only summary in stable key order."""
+    neutral = float(df[df["condition"] == "neutral"]["valence"].mean())
+    no_context = float(df[df["condition"] == "none"]["valence"].mean())
+    positive_effect = float(
+        (df[df["condition"] == "positive"]["valence"] - neutral).mean()
+    )
+    negative_effect = float(
+        (df[df["condition"] == "negative"]["valence"] - neutral).mean()
+    )
+    positive_raw = float(df[df["condition"] == "positive"]["valence"].mean())
+    negative_raw = float(df[df["condition"] == "negative"]["valence"].mean())
+    raw_ratio = abs(negative_raw) / abs(positive_raw) if positive_raw else float("nan")
+    neutral_ratio = (
+        abs(negative_effect) / abs(positive_effect) if positive_effect else float("nan")
+    )
+    reference = raw_ratio if np.isfinite(raw_ratio) else neutral_ratio
+    return {
+        "neutral_baseline": neutral,
+        "none_baseline": no_context,
+        "pos_effect": positive_effect,
+        "neg_effect": negative_effect,
+        "pos_raw": positive_raw,
+        "neg_raw": negative_raw,
+        "text_only_ratio_vs_neutral": neutral_ratio,
+        "text_only_ratio_raw": raw_ratio,
+        "reference_ratio": reference,
+    }
+
+
+def cross_modal_amplification(image_ratio: float | None, reference: float) -> str:
+    """Label the image-conditioned ratio relative to its text-only reference."""
+    if image_ratio is None or not np.isfinite(reference) or not np.isfinite(image_ratio):
+        return "no base run to compare"
+    if image_ratio > 1.25 * reference:
+        return "CROSS-MODAL amplification (image inflates the ratio)"
+    if abs(image_ratio - reference) <= 0.25 * reference:
+        return "STIMULUS confound (ratios match)"
+    return "image dampens (reversed)"
+
+
 def text_only_readouts(df: pd.DataFrame) -> dict:
     """Both scales for a text-only run: the bounded valence score and an unbounded log-odds margin.
 

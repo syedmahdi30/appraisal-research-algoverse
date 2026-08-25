@@ -59,20 +59,35 @@ from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import load_config, run_stamp, save_json
 from .shared.artifacts import (artifact_metadata, ensure_output_available, run_key_suffix,
-                               token_budget_key, token_budget_metric_paths)
-from .shared.hf_runtime import load_vlm, resize_long_side
+                               token_budget_artifact_paths, token_budget_key,
+                               token_budget_metric_paths)
+from .shared.hf_runtime import image_prompt_token_counts, load_vlm, resize_long_side
 from .shared.readouts import first_content_token_ids, model_readout, user_text
 from .shared.reporting import (
     asymmetry_vs_floor,
+    cross_modal_amplification,
     flip_override,
     image_discriminability,
+    text_only_control_summary,
     text_only_readouts,
+    token_budget_analysis_fields,
     token_budget_trends,
 )
 from .shared.sampling import select_extreme_rows
 
 _text_only_readouts = text_only_readouts
 _trends = token_budget_trends
+
+BASE_RESULT_COLUMNS = [
+    "image_path", "image_valence", "image_group", "condition", "context_id",
+    "context", "text_code", "probe_readout", "valence",
+    *[f"lp_{label}" for label in EMOTION_LABELS],
+]
+
+TOKEN_BUDGET_TREND_COLUMNS = [
+    "source", "model", "bank", "max_side", "image_tokens", "image_token_fraction",
+    "discriminability_gap", "auc", "text_only_ratio", "override_gap", "ci_lo", "ci_hi",
+]
 
 
 def _conditions(bank: str = "full"):
@@ -142,30 +157,13 @@ def count_image_tokens(processor, image, family: str, style: str = "chat") -> di
     processors leave a single unexpanded placeholder and expand inside the model instead; that shows up
     as a delta of ~1 and is flagged rather than silently reported as a one-token image.
     """
-    with_img = build_inputs(processor, image, None, family, style)["input_ids"].shape[-1]
-    without = build_inputs(processor, None, None, family, style)["input_ids"].shape[-1]
-    delta = int(with_img - without)
-    return {"image_tokens": delta, "prompt_tokens_with_image": int(with_img),
-            "prompt_tokens_text_only": int(without),
-            "image_token_fraction": delta / with_img if with_img else float("nan"),
-            "expansion_ok": bool(delta > 8),
-            "note": ("" if delta > 8 else
-                     "placeholder appears UNEXPANDED at tokenization (delta<=8); the true image-token "
-                     "count is applied inside the model — read it from the model's vision config "
-                     "instead of this field.")}
+    return image_prompt_token_counts(processor, image, family, style, build_inputs)
 
 
 def _analyze(df, model_name, tokens: dict, max_side, multi=None, n_skipped=0) -> dict:
-    return artifact_metadata(
-        model=model_name, max_side=max_side,
-        read_out="behavioral_valence", n_images=int(df["image_path"].nunique()) if len(df) else 0,
-        n_rows=int(len(df)), n_skipped=n_skipped,
-        image_tokens=tokens,
-        image_discriminability=image_discriminability(df) if len(df) else {},
-        asymmetry_vs_floor=asymmetry_vs_floor(df) if len(df) else {},
-        flip_override=flip_override(df) if len(df) else {},
-        tokenization_multi_token=multi or {},
-    )
+    return artifact_metadata(**token_budget_analysis_fields(
+        df, model_name, tokens, max_side, multi=multi, n_skipped=n_skipped,
+    ))
 
 
 def _print(m: dict) -> None:
@@ -190,8 +188,10 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
              bank: str = "full") -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, max_side, style, bank)
-    out_pq = STAGE_F_DIR / f"conflict_{key}.parquet"
+    key = token_budget_key(model_name, max_side, style, bank)
+    out_pq, out_metrics = token_budget_artifact_paths(
+        STAGE_F_DIR, model_name, max_side, style, bank
+    )
     ensure_output_available(
         out_pq,
         force,
@@ -215,8 +215,10 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
             n_skip += 1
             continue
         if tokens is None:            # measured on the first real image, at the resolution actually used
-            tokens = count_image_tokens(processor, img, family, style)
-        for cond, cid, sentence in _conditions(bank):
+            tokens = image_prompt_token_counts(
+                processor, img, family, style, build_inputs
+            )
+        for cond, cid, sentence in build_conditions(bank):
             val, lp = model_readout(model, build_inputs(processor, img, sentence, family, style), tok_ids)
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
@@ -224,12 +226,14 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
                          "probe_readout": float("nan"),   # no probe off-Gemma; column kept for schema
                          "valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}})
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows, columns=BASE_RESULT_COLUMNS)
     df.to_parquet(out_pq)
-    metrics = _analyze(df, model_name, tokens or {}, max_side, multi=multi, n_skipped=n_skip)
+    metrics = artifact_metadata(**token_budget_analysis_fields(
+        df, model_name, tokens or {}, max_side, multi=multi, n_skipped=n_skip,
+    ))
     metrics["prompt_style"] = style
     metrics["bank"] = bank
-    save_json(metrics, STAGE_F_DIR / f"conflict_{key}_metrics.json")
+    save_json(metrics, out_metrics)
     _print(metrics)
     print(f"  data -> {out_pq}")
     return metrics
@@ -248,13 +252,7 @@ def _base_runs_for(model_name: str, style: str = "chat", bank: str = "full") -> 
 
 def _amplification(img_ratio: float | None, ref: float) -> str:
     """Label the image-conditioned vs text-only ratio comparison (the cross-modal amplification test)."""
-    if img_ratio is None or not np.isfinite(ref) or not np.isfinite(img_ratio):
-        return "no base run to compare"
-    if img_ratio > 1.25 * ref:
-        return "CROSS-MODAL amplification (image inflates the ratio)"
-    if abs(img_ratio - ref) <= 0.25 * ref:
-        return "STIMULUS confound (ratios match)"
-    return "image dampens (reversed)"
+    return cross_modal_amplification(img_ratio, ref)
 
 
 def run_text_only(config_path: str, model_name: str, force: bool = False, style: str = "chat",
@@ -274,8 +272,9 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     """
     load_config(config_path)
     ensure_dirs()
-    key = slug(model_name, None, style, bank)   # budget-free but bank-aware; see docstring
-    out_pq = STAGE_F_DIR / f"text_only_{key}.parquet"
+    out_pq, out_metrics = token_budget_artifact_paths(
+        STAGE_F_DIR, model_name, None, style, bank, text_only=True
+    )
     ensure_output_available(out_pq, force, f"{out_pq} already exists — pass --force to replace it.")
 
     model, processor, family = load_vlm(model_name, None)
@@ -284,7 +283,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
              if not r["single_token"]}
 
     rows = []
-    for cond, cid, sentence in _conditions(bank):
+    for cond, cid, sentence in build_conditions(bank):
         val, lp = model_readout(model, build_inputs(processor, None, sentence, family, style), tok_ids)  # image=None
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
                      "text_code": TEXT_CODE[cond], "valence": val, "argmax_emotion": max(lp, key=lp.get),
@@ -292,20 +291,19 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     df = pd.DataFrame(rows)
     df.to_parquet(out_pq)
 
-    neu = float(df[df["condition"] == "neutral"]["valence"].mean())
-    none_v = float(df[df["condition"] == "none"]["valence"].mean())
-    pe = float((df[df["condition"] == "positive"]["valence"] - neu).mean())
-    ne = float((df[df["condition"] == "negative"]["valence"] - neu).mean())
-    # raw ratio (vs 0, not vs a possibly-floored neutral) — the robust reference when a model pins
-    # its no-information baseline to the scale bound, as Qwen does.
-    pr = float(df[df["condition"] == "positive"]["valence"].mean())
-    nr = float(df[df["condition"] == "negative"]["valence"].mean())
-    raw_ratio = abs(nr) / abs(pr) if pr else float("nan")
-    text_ratio = abs(ne) / abs(pe) if pe else float("nan")
-    ref = raw_ratio if np.isfinite(raw_ratio) else text_ratio
+    summary = text_only_control_summary(df)
+    neu = summary["neutral_baseline"]
+    none_v = summary["none_baseline"]
+    pe = summary["pos_effect"]
+    ne = summary["neg_effect"]
+    pr = summary["pos_raw"]
+    nr = summary["neg_raw"]
+    text_ratio = summary["text_only_ratio_vs_neutral"]
+    raw_ratio = summary["text_only_ratio_raw"]
+    ref = summary["reference_ratio"]
 
     per_base = []
-    for bp in _base_runs_for(model_name, style, bank):
+    for bp in token_budget_metric_paths(STAGE_F_DIR, model_name, style, bank):
         j = json.loads(bp.read_text())
         a = j.get("asymmetry_vs_floor", {})
         dn, dp = a.get("drop_pos_img_neg_ctx"), a.get("congruent_pos_img_pos_ctx")
@@ -313,17 +311,15 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
         per_base.append({"base_run": bp.name, "max_side": j.get("max_side"),
                          "image_tokens": j.get("image_tokens", {}).get("image_tokens"),
                          "image_conditioned_ratio": img_ratio,
-                         "verdict": _amplification(img_ratio, ref)})
+                         "verdict": cross_modal_amplification(img_ratio, ref)})
 
     metrics = artifact_metadata(
         model=model_name, bank=bank,
         keyed_by="model + bank (no image in this pass; --max-side cannot affect it)",
-        neutral_baseline=neu, none_baseline=none_v, pos_effect=pe, neg_effect=ne,
-        pos_raw=pr, neg_raw=nr, text_only_ratio_vs_neutral=text_ratio,
-        text_only_ratio_raw=raw_ratio, reference_ratio=ref,
+        **summary,
         per_base_run=per_base, tokenization_multi_token=multi,
     )
-    save_json(metrics, STAGE_F_DIR / f"text_only_{key}_metrics.json")
+    save_json(metrics, out_metrics)
 
     print(f"\nStage F text-only [{model_name}] bank={bank} — {len(rows)} forwards (no images).")
     if multi:
@@ -355,14 +351,14 @@ def reanalyze_text_only(model_name: str, style: str = "chat", bank: str = "full"
     unbounded margin, and rewrites the metrics file in place.
     """
     ensure_dirs()
-    key = slug(model_name, None, style, bank)
-    pq = STAGE_F_DIR / f"text_only_{key}.parquet"
+    pq, mpath = token_budget_artifact_paths(
+        STAGE_F_DIR, model_name, None, style, bank, text_only=True
+    )
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run --text-only first.")
     df = pd.read_parquet(pq)
     r = text_only_readouts(df)
 
-    mpath = STAGE_F_DIR / f"text_only_{key}_metrics.json"
     m = json.loads(mpath.read_text()) if mpath.exists() else {"model": model_name, "bank": bank}
     m["readouts"] = r
     m["reanalyzed"] = run_stamp()
@@ -406,13 +402,13 @@ def reanalyze(model_name: str, max_side: int | None, bank: str = "full") -> dict
     silently recompute the full-bank parquet and overwrite the full-bank metrics.
     """
     ensure_dirs()
-    key = slug(model_name, max_side, bank=bank)
-    pq = STAGE_F_DIR / f"conflict_{key}.parquet"
+    pq, mpath = token_budget_artifact_paths(STAGE_F_DIR, model_name, max_side, bank=bank)
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run the base pass first.")
-    mpath = STAGE_F_DIR / f"conflict_{key}_metrics.json"
     tokens = json.loads(mpath.read_text()).get("image_tokens", {}) if mpath.exists() else {}
-    m = _analyze(pd.read_parquet(pq), model_name, tokens, max_side)
+    m = artifact_metadata(**token_budget_analysis_fields(
+        pd.read_parquet(pq), model_name, tokens, max_side,
+    ))
     save_json(m, mpath)
     _print(m)
     return m
@@ -460,9 +456,10 @@ def aggregate() -> dict:
         # to sentences it was never measured on. Older metrics files predate the field, so fall back
         # to the filename, which is the run key and always carries the suffix.
         bank = j.get("bank") or ("minimal" if mp.name.endswith("_minimal_metrics.json") else "full")
-        tpath = STAGE_F_DIR / (
-            f"text_only_{slug(j.get('model', ''), None, j.get('prompt_style', 'chat'), bank)}"
-            "_metrics.json")
+        _, tpath = token_budget_artifact_paths(
+            STAGE_F_DIR, j.get("model", ""), None, j.get("prompt_style", "chat"), bank,
+            text_only=True,
+        )
         text_ratio = None
         if tpath.exists():
             try:
@@ -478,9 +475,7 @@ def aggregate() -> dict:
                      "override_gap": f.get("dominance_gap"),
                      "ci_lo": f.get("dominance_gap_ci95", [None, None])[0],
                      "ci_hi": f.get("dominance_gap_ci95", [None, None])[1]})
-    cols = ["source", "model", "bank", "max_side", "image_tokens", "image_token_fraction",
-            "discriminability_gap", "auc", "text_only_ratio", "override_gap", "ci_lo", "ci_hi"]
-    tab = pd.DataFrame(rows, columns=cols)
+    tab = pd.DataFrame(rows, columns=TOKEN_BUDGET_TREND_COLUMNS)
     if len(tab):
         tab = tab.sort_values(["model", "image_tokens"], na_position="last")
     out = artifact_metadata(n_runs=len(tab), rows=tab.to_dict(orient="records"))
@@ -514,7 +509,7 @@ def show_prompt(model_name: str, max_side: int | None = None) -> dict:
         try:
             enc = build_inputs(processor, img, sentence, family, style)
             text = processor.tokenizer.decode(enc["input_ids"][0])
-            tok = count_image_tokens(processor, img, family, style)
+            tok = image_prompt_token_counts(processor, img, family, style, build_inputs)
             rec = {"total_prompt_tokens": int(enc["input_ids"].shape[-1]),
                    "image_tokens": tok["image_tokens"],
                    "text_scaffold_tokens": int(enc["input_ids"].shape[-1]) - tok["image_tokens"],
@@ -542,32 +537,37 @@ def show_prompt(model_name: str, max_side: int | None = None) -> dict:
     return out
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Stage F — visual token budget vs textual override")
-    ap.add_argument("--config", default="config/stage_f.yaml")
-    ap.add_argument("--model", default="Qwen/Qwen3-VL-8B-Instruct")
-    ap.add_argument("--max-side", type=int, default=None,
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Stage F — visual token budget vs textual override")
+    parser.add_argument("--config", default="config/stage_f.yaml")
+    parser.add_argument("--model", default="Qwen/Qwen3-VL-8B-Instruct")
+    parser.add_argument("--max-side", type=int, default=None,
                     help="downscale images so the long side <= N (moves the token budget on "
                          "dynamic-resolution models); omit for the model's native handling")
-    ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
-    ap.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
-    ap.add_argument("--text-only", action="store_true",
+    parser.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
+    parser.add_argument("--force", action="store_true", help="overwrite an existing run for this key")
+    parser.add_argument("--text-only", action="store_true",
                     help="image-ablated stimulus control (keyed by model and --bank; ignores "
                          "--max-side)")
-    ap.add_argument("--bank", choices=("full", "minimal"), default="full",
+    parser.add_argument("--bank", choices=("full", "minimal"), default="full",
                     help="context bank: 'full' (6 pos / 6 neg / 2 neutral) or 'minimal' (6 "
                          "token-matched valence-only pairs, the valence-vs-event-content control). "
                          "The bank is part of the run key, so the two never overwrite each other.")
-    ap.add_argument("--prompt-style", choices=("chat", "legacy"), default="chat",
+    parser.add_argument("--prompt-style", choices=("chat", "legacy"), default="chat",
                     help="chat = processor.apply_chat_template (portable); legacy = the hand-written "
                          "Gemma scaffold used for the PUBLISHED Gemma run (Gemma only)")
-    ap.add_argument("--show-prompt", action="store_true",
+    parser.add_argument("--show-prompt", action="store_true",
                     help="print both prompt styles side by side and exit (processor only, no GPU)")
-    ap.add_argument("--reanalyze", action="store_true",
+    parser.add_argument("--reanalyze", action="store_true",
                     help="recompute from the saved parquet (CPU). With --text-only, recomputes the "
                          "stimulus control on both the bounded and the unbounded scale.")
-    ap.add_argument("--aggregate", action="store_true", help="build the cross-run trend table (CPU)")
-    a = ap.parse_args()
+    parser.add_argument("--aggregate", action="store_true",
+                        help="build the cross-run trend table (CPU)")
+    return parser
+
+
+def main() -> None:
+    a = build_parser().parse_args()
     if a.show_prompt:
         show_prompt(a.model, a.max_side)
     elif a.aggregate:
