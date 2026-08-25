@@ -42,9 +42,8 @@ from ..data.labels import EMOTION_LABELS
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer_hf import last_token_tap, load_hf
+from .shared.hf_runtime import encode_image_prompt, last_token_tap, load_gemma_hf
 from .stage_d_steering_hf import REFERENCE_DMU_NORM, build_directions, steer
-from .stage_f_patching_hf import encode
 from .shared.readouts import closed_vocab_logprobs, closed_vocab_valence, first_content_token_ids
 from .shared.sampling import select_extreme_rows
 
@@ -74,7 +73,7 @@ def run(config_path: str, limit_override: int | None = None, verify_only: bool =
     pi = probes.index("pleasantness")
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
-    model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
+    model, processor = load_gemma_hf(cfg.get("model", "google/gemma-3-4b-it"))
     tok_ids = first_content_token_ids(processor)
 
     # Build the text-derived Δμ and check it against the published norms before spending the sweep.
@@ -113,7 +112,7 @@ def run(config_path: str, limit_override: int | None = None, verify_only: bool =
             except (FileNotFoundError, OSError):
                 n_skip += 1
                 continue
-            enc = encode(processor, img, context_prompt(sentence), model.device)
+            enc = encode_image_prompt(processor, img, context_prompt(sentence), model.device)
             n_cells += 1
             p0, v0, lp0 = readout(enc, store)                       # β = 0 first: cell baseline
             rows.append(_row(r, ctx_code, sentence, 0, p0, v0, lp0))

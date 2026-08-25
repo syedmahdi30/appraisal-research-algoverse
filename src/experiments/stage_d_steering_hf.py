@@ -40,9 +40,9 @@ from ..data.crowd_envent import load_split as load_text_split, sample_tak_subset
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_D_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
+from .shared.hf_runtime import find_language_layers, load_gemma_hf
 from .shared.readouts import closed_vocab_valence, first_content_token_ids
 from .stage_a_steering_v2 import diff_of_means
-from .stage_c_transfer_hf import find_lm_layers, load_hf
 
 # Published Δμ norms at resid_post L18 (results/stage_d/steering_metrics.json). Built from TEXT
 # activations, and the text path is exact across stacks, so a correct site reproduces these.
@@ -53,7 +53,7 @@ REFERENCE_DMU_NORM = {"pleasantness": 352.8188, "unpleasantness": 358.3771, "sud
 @contextmanager
 def resid_capture(model, layer: int):
     """Capture the LAST-token output of decoder `layer` — the raw-HF `hook_resid_post` equivalent."""
-    layers = find_lm_layers(model, verbose=False)
+    layers = find_language_layers(model, verbose=False)
     store: list = [None]
 
     def hook(_m, _i, out):
@@ -75,7 +75,7 @@ def steer(model, layer: int, z: torch.Tensor, beta: float):
     bf16 stays bf16. The layer's output is cloned rather than modified in place, and the tuple shape
     is preserved for transformers versions whose decoder layers return `(hidden, ...)`.
     """
-    layers = find_lm_layers(model, verbose=False)
+    layers = find_language_layers(model, verbose=False)
 
     def hook(_m, _i, out):
         tup = isinstance(out, tuple)
@@ -157,7 +157,7 @@ def run(config_path: str, model_name: str, limit_override: int | None = None,
     appraisals = list(cfg.get("appraisals", ["pleasantness", "unpleasantness", "suddenness"]))
     seed = int(cfg.get("seed", 0))
 
-    model, processor = load_hf(model_name)
+    model, processor = load_gemma_hf(model_name)
     tok_ids = first_content_token_ids(processor)
     dmu, norms, n_used = build_directions(model, processor, layer, n_dir, seed, appraisals)
     check = check_norms(norms)
