@@ -9,6 +9,7 @@ import pytest
 import torch
 from PIL import Image
 
+from src.experiments.shared import hf_runtime
 from src.experiments.shared.hf_runtime import (
     capture_residuals,
     encode_image_prompt,
@@ -19,6 +20,13 @@ from src.experiments.shared.hf_runtime import (
     patch_residuals,
     resize_long_side,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_language_layer_cache():
+    hf_runtime._LANGUAGE_LAYER_CACHE.clear()
+    yield
+    hf_runtime._LANGUAGE_LAYER_CACHE.clear()
 
 
 class Block(torch.nn.Module):
@@ -62,6 +70,23 @@ class ToyModel(torch.nn.Module):
         return hidden
 
 
+class SingleLayerModel(ToyModel):
+    def forward(self, hidden):
+        return self.language_model.layers[0](hidden)
+
+
+class ConversionTrackingTensor(torch.Tensor):
+    conversion_calls = []
+
+    @staticmethod
+    def __new__(cls, data):
+        return torch.as_tensor(data, dtype=torch.float64).as_subclass(cls)
+
+    def to(self, *args, **kwargs):
+        type(self).conversion_calls.append((args, kwargs))
+        return super().to(*args, **kwargs)
+
+
 def test_language_layer_discovery_excludes_vision_and_caches_by_model_identity():
     model = ToyModel()
     found = find_language_layers(model, verbose=False)
@@ -92,9 +117,12 @@ def test_capture_residuals_caches_full_sequences_and_preserves_tuple_outputs():
     assert output.tolist() == [[[2.0, 2.0], [2.0, 2.0], [2.0, 2.0]]]
 
 
-def test_residual_patch_changes_only_mapped_positions_without_mutating_layer_output():
+def test_residual_patch_changes_only_batch_zero_mapped_positions_without_mutation():
     model = ToyModel()
-    hidden = torch.zeros(1, 3, 2)
+    hidden = torch.tensor([
+        [[0.0, 0.0], [10.0, 10.0], [20.0, 20.0]],
+        [[100.0, 100.0], [110.0, 110.0], [120.0, 120.0]],
+    ])
     donor = {0: torch.tensor([[5.0, 5.0], [6.0, 6.0], [7.0, 7.0]])}
     unpatched = []
     observer = model.language_model.layers[0].register_forward_hook(
@@ -106,42 +134,64 @@ def test_residual_patch_changes_only_mapped_positions_without_mutating_layer_out
     finally:
         observer.remove()
 
-    assert unpatched[0][0, 2].tolist() == [1.0, 1.0]
+    assert unpatched[0][0, 2].tolist() == [21.0, 21.0]
     assert output[0, 0].tolist() == [2.0, 2.0]
-    assert output[0, 1].tolist() == [2.0, 2.0]
+    assert output[0, 1].tolist() == [12.0, 12.0]
     assert output[0, 2].tolist() == [7.0, 7.0]
+    assert output[1].tolist() == [
+        [102.0, 102.0],
+        [112.0, 112.0],
+        [122.0, 122.0],
+    ]
+
+
+def test_residual_patch_converts_donor_to_recipient_device_and_dtype():
+    model = ToyModel([Block()])
+    hidden = torch.zeros(1, 3, 2, dtype=torch.float32)
+    donor = ConversionTrackingTensor([
+        [1.25, 2.5],
+        [3.75, 4.5],
+        [5.25, 6.5],
+    ])
+    ConversionTrackingTensor.conversion_calls = []
+
+    with patch_residuals(model, {0: donor}, [1], [2]):
+        output = model(hidden)
+
+    assert donor.dtype == torch.float64
+    assert output.dtype == torch.float32
+    assert output[0, 2].tolist() == [3.75, 4.5]
+    assert ConversionTrackingTensor.conversion_calls == [
+        ((), {"device": output.device, "dtype": output.dtype})
+    ]
 
 
 def test_residual_patch_preserves_decoder_tuple_tail():
     block = Block(tuple_output=True)
-    model = ToyModel([block])
-    seen = []
-    observer = block.register_forward_hook(
-        lambda _module, _inputs, output: seen.append(output[1])
-    )
-    try:
-        with patch_residuals(
-            model,
-            {0: torch.tensor([[5.0, 5.0], [6.0, 6.0], [7.0, 7.0]])},
-            [0],
-            [1],
-        ):
-            output = model(torch.zeros(1, 3, 2))
-    finally:
-        observer.remove()
+    model = SingleLayerModel([block])
 
-    assert seen == [block.metadata]
-    assert output[0, 1].tolist() == [5.0, 5.0]
+    with patch_residuals(
+        model,
+        {0: torch.tensor([[5.0, 5.0], [6.0, 6.0], [7.0, 7.0]])},
+        [0],
+        [1],
+    ):
+        output = model(torch.zeros(1, 3, 2))
+
+    assert isinstance(output, tuple)
+    assert output[1] is block.metadata
+    assert output[0][0, 1].tolist() == [5.0, 5.0]
 
 
 def test_last_token_tap_uses_nested_target_and_tuple_tensor():
     model = ToyModel([TappedBlock()])
+    hidden = torch.tensor([[[1.0, 2.0], [10.0, 20.0], [100.0, 200.0]]])
 
     with last_token_tap(model, 0, "post_attention_layernorm") as store:
-        model(torch.zeros(1, 3, 2))
+        model(hidden)
 
     assert store[0].dtype == np.float32
-    assert store[0].tolist() == [3.0, 3.0]
+    assert store[0].tolist() == [103.0, 203.0]
 
 
 @pytest.mark.parametrize("helper", ["tap", "capture", "patch"])
