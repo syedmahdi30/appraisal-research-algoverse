@@ -43,9 +43,10 @@ from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
 from .shared.hf_runtime import encode_image_prompt, last_token_tap, load_gemma_hf
-from .stage_d_steering_hf import REFERENCE_DMU_NORM, build_directions, steer
 from .shared.readouts import closed_vocab_logprobs, closed_vocab_valence, first_content_token_ids
+from .shared.reporting import arbitration
 from .shared.sampling import select_extreme_rows
+from .stage_d_steering_hf import REFERENCE_DMU_NORM, build_directions, steer
 
 # Stage D no-conflict slope on raw HF (results/stage_d/steering_metrics_hf.json), the denominator the
 # paper normalizes this slope against. Published bridge value was +0.3293.
@@ -124,8 +125,7 @@ def run(config_path: str, limit_override: int | None = None, verify_only: bool =
     df = pd.DataFrame(rows)
     df.to_parquet(STAGE_F_DIR / "arbitration_hf.parquet")
 
-    from .analyze_stage_f import _arbitration
-    arb = _arbitration(df, betas)
+    arb = arbitration(df, betas)
     ratio = arb["valence_slope"] / STAGE_D_SLOPE_HF if STAGE_D_SLOPE_HF else float("nan")
 
     metrics = {

@@ -19,6 +19,39 @@ _NEGATIVE = NEGATIVE_LABELS
 CROSS_IMAGE_GROUPS = ("image", "context", "question", "structure", "text_all", "all")
 
 
+def arbitration(df, betas):
+    """Mean delta (valence, probe) vs beta relative to each cell's beta-zero baseline.
+
+    Rows are written per cell as ``[beta=0, then the betas]``. The cumulative beta-zero marker
+    therefore provides a cell key without relying on ``image_path``, which can repeat for EMOTIC
+    people annotations.
+    """
+    df = df.copy()
+    df["_cell"] = (df["beta"] == 0).cumsum()
+    base = df[df["beta"] == 0].set_index("_cell")
+    result = {"valence": {}, "probe": {}}
+    for beta in betas:
+        rows = df[df["beta"] == beta]
+        valence_delta = (
+            rows["valence"].to_numpy()
+            - base.loc[rows["_cell"], "valence"].to_numpy()
+        )
+        probe_delta = (
+            rows["probe_readout"].to_numpy()
+            - base.loc[rows["_cell"], "probe_readout"].to_numpy()
+        )
+        result["valence"][int(beta)] = float(np.mean(valence_delta))
+        result["probe"][int(beta)] = float(np.mean(probe_delta))
+    xs = sorted(result["valence"])
+    result["valence_slope"] = float(
+        np.polyfit(xs, [result["valence"][beta] for beta in xs], 1)[0]
+    )
+    result["probe_slope"] = float(
+        np.polyfit(xs, [result["probe"][beta] for beta in xs], 1)[0]
+    )
+    return result
+
+
 def same_image_verdict(recovery) -> str:
     """Interpret the established same-image probe recovery and sink decomposition."""
     probe = lambda key: recovery[key]["probe"]  # noqa: E731
