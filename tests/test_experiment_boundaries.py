@@ -54,6 +54,7 @@ class _ScopeLocals(ast.NodeVisitor):
 
     def __init__(self):
         self.names = set()
+        self.declared_outer = set()
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Store):
@@ -78,6 +79,12 @@ class _ScopeLocals(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef):
         self.names.add(node.name)
 
+    def visit_Global(self, node: ast.Global):
+        self.declared_outer.update(node.names)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal):
+        self.declared_outer.update(node.names)
+
     def visit_Lambda(self, node: ast.Lambda):
         return
 
@@ -93,7 +100,7 @@ def _scope_local_names(body) -> set[str]:
     bindings = _ScopeLocals()
     for statement in body:
         bindings.visit(statement)
-    return bindings.names
+    return bindings.names - bindings.declared_outer
 
 
 def _tracked_module(module: str) -> str | None:
@@ -217,6 +224,39 @@ class _PrivateRunnerAttributeVisitor(ast.NodeVisitor):
         self.visit(node.value)
         self.visit(node.target)
         self._unbind(_stored_names(node.target))
+
+    def visit_For(self, node: ast.For):
+        self.visit(node.iter)
+        self.visit(node.target)
+        self._unbind(_stored_names(node.target))
+        for statement in [*node.body, *node.orelse]:
+            self.visit(statement)
+
+    visit_AsyncFor = visit_For
+
+    def visit_With(self, node: ast.With):
+        for item in node.items:
+            self.visit(item.context_expr)
+            if item.optional_vars:
+                self.visit(item.optional_vars)
+                self._unbind(_stored_names(item.optional_vars))
+        for statement in node.body:
+            self.visit(statement)
+
+    visit_AsyncWith = visit_With
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler):
+        if node.type:
+            self.visit(node.type)
+        if node.name:
+            self._unbind({node.name})
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_Delete(self, node: ast.Delete):
+        for target in node.targets:
+            self.visit(target)
+        self._unbind(set().union(*(_stored_names(target) for target in node.targets)))
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         for decorator in node.decorator_list:
@@ -409,4 +449,109 @@ def test_runner_alias_reassignment_stops_private_access_detection(tmp_path, monk
     assert set(_private_runner_violations(fixture)) == {
         f"{fixture}:2 accesses _module_violation on src.experiments.analyze_stage_f",
         f"{fixture}:8 accesses _function_violation on src.experiments.analyze_stage_f",
+    }
+
+
+def test_global_and_nonlocal_declarations_preserve_alias_until_assignment(
+    tmp_path, monkeypatch
+):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "from . import analyze_stage_f as global_runner\n"
+        "\n"
+        "def global_scope():\n"
+        "    global global_runner\n"
+        "    global_runner._global_violation()\n"
+        "    global_runner = object()\n"
+        "    global_runner._global_local_only\n"
+        "\n"
+        "def outer_scope():\n"
+        "    from . import analyze_stage_f as nonlocal_runner\n"
+        "\n"
+        "    def inner_scope():\n"
+        "        nonlocal nonlocal_runner\n"
+        "        nonlocal_runner._nonlocal_violation()\n"
+        "        nonlocal_runner = object()\n"
+        "        nonlocal_runner._nonlocal_local_only\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert set(_private_runner_violations(fixture)) == {
+        f"{fixture}:5 accesses _global_violation on src.experiments.analyze_stage_f",
+        f"{fixture}:14 accesses _nonlocal_violation on src.experiments.analyze_stage_f",
+    }
+
+
+def test_for_and_async_for_targets_expire_runner_aliases(tmp_path, monkeypatch):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "from . import analyze_stage_f as runner\n"
+        "runner._for_violation()\n"
+        "for runner in rows:\n"
+        "    runner._for_local_only\n"
+        "\n"
+        "async def async_scope():\n"
+        "    import src.experiments.analyze_stage_f as async_runner\n"
+        "    async_runner._async_for_violation()\n"
+        "    async for async_runner in rows:\n"
+        "        async_runner._async_for_local_only\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert set(_private_runner_violations(fixture)) == {
+        f"{fixture}:2 accesses _for_violation on src.experiments.analyze_stage_f",
+        f"{fixture}:8 accesses _async_for_violation on src.experiments.analyze_stage_f",
+    }
+
+
+def test_with_and_async_with_targets_expire_runner_aliases(tmp_path, monkeypatch):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "from . import analyze_stage_f as runner\n"
+        "runner._with_violation()\n"
+        "with manager() as runner:\n"
+        "    runner._with_local_only\n"
+        "\n"
+        "async def async_scope():\n"
+        "    import src.experiments.analyze_stage_f as async_runner\n"
+        "    async_runner._async_with_violation()\n"
+        "    async with manager() as async_runner:\n"
+        "        async_runner._async_with_local_only\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert set(_private_runner_violations(fixture)) == {
+        f"{fixture}:2 accesses _with_violation on src.experiments.analyze_stage_f",
+        f"{fixture}:8 accesses _async_with_violation on src.experiments.analyze_stage_f",
+    }
+
+
+def test_except_target_and_del_expire_runner_aliases(tmp_path, monkeypatch):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "from . import analyze_stage_f as runner\n"
+        "runner._except_violation()\n"
+        "try:\n"
+        "    pass\n"
+        "except Exception as runner:\n"
+        "    runner._except_local_only\n"
+        "\n"
+        "import src.experiments.analyze_stage_f as deleted_runner\n"
+        "deleted_runner._del_violation()\n"
+        "del deleted_runner\n"
+        "deleted_runner._del_local_only\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert set(_private_runner_violations(fixture)) == {
+        f"{fixture}:2 accesses _except_violation on src.experiments.analyze_stage_f",
+        f"{fixture}:9 accesses _del_violation on src.experiments.analyze_stage_f",
     }
