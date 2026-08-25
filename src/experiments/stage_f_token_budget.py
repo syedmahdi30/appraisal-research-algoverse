@@ -60,6 +60,7 @@ from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import load_config, run_stamp, save_json
 from .shared.artifacts import (artifact_metadata, ensure_output_available, run_key_suffix,
                                token_budget_key, token_budget_metric_paths)
+from .shared.hf_runtime import load_vlm, resize_long_side
 from .shared.readouts import first_content_token_ids, model_readout, user_text
 from .shared.reporting import (
     asymmetry_vs_floor,
@@ -93,52 +94,11 @@ slug = token_budget_key
 
 
 # --------------------------------------------------------------------------- model dispatch
-def load_any(model_name: str, max_side: int | None = None):
-    """Load a VLM + processor by family. Returns (model, processor, family).
-
-    `max_side` is threaded into the Qwen processor as a pixel budget where the API supports it; for
-    every family the image is ALSO resized before processing (see `_prep_image`), which is the
-    family-agnostic way to move the token budget on a dynamic-resolution model.
-    """
-    from transformers import AutoProcessor
-    lname = model_name.lower()
-    if "qwen" in lname:
-        if "qwen3" in lname:
-            from transformers import Qwen3VLForConditionalGeneration as Cls
-        else:
-            from transformers import Qwen2_5_VLForConditionalGeneration as Cls
-        family = "qwen"
-        proc_kwargs = {"max_pixels": max_side * max_side} if max_side else {}
-    else:
-        try:
-            from transformers import AutoModelForImageTextToText as Cls  # llava 1.5/NeXT, paligemma, idefics
-        except ImportError:
-            from transformers import LlavaForConditionalGeneration as Cls
-        family = "llava"
-        proc_kwargs = {}
-    model = Cls.from_pretrained(model_name, torch_dtype="auto", device_map="auto").eval()
-    try:
-        processor = AutoProcessor.from_pretrained(model_name, **proc_kwargs)
-    except (TypeError, ValueError):
-        # Not every processor version accepts a pixel budget; `_prep_image` resizes anyway, so the
-        # token budget still moves. Fail soft rather than lose a GPU session to a kwarg.
-        print(f"  [warn] processor rejected {list(proc_kwargs)}; relying on image resize alone")
-        processor = AutoProcessor.from_pretrained(model_name)
-    return model, processor, family
+load_any = load_vlm
 
 
 def _prep_image(img: Image.Image, max_side: int | None) -> Image.Image:
-    """Downscale so the long side is <= max_side, preserving aspect ratio (no-op if already smaller).
-
-    On a native dynamic-resolution model this is what changes the image-token count; on a fixed-grid
-    model the count is unchanged and only the visual detail drops — which is exactly why
-    `image_discriminability` is reported next to every run.
-    """
-    if not max_side or max(img.size) <= max_side:
-        return img
-    w, h = img.size
-    scale = max_side / float(max(w, h))
-    return img.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.BICUBIC)
+    return resize_long_side(img, max_side)
 
 
 def build_inputs(processor, image, context_sentence, family: str, style: str = "chat"):
@@ -242,7 +202,7 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
     n_images = limit_override or int(cfg.get("n_images", 150))
     frame = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True)
     sel = select_extreme_rows(frame, n_images)
-    model, processor, family = load_any(model_name, max_side)
+    model, processor, family = load_vlm(model_name, max_side)
     tok_ids = first_content_token_ids(processor)
     multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
              if not r["single_token"]}
@@ -250,7 +210,7 @@ def run_base(config_path: str, model_name: str, max_side: int | None,
     tokens, rows, n_skip = None, [], 0
     for _, r in tqdm(list(sel.iterrows()), desc=f"token-budget {key}"):
         try:
-            img = _prep_image(Image.open(r["image_path"]).convert("RGB"), max_side)
+            img = resize_long_side(Image.open(r["image_path"]).convert("RGB"), max_side)
         except (FileNotFoundError, OSError):
             n_skip += 1
             continue
@@ -318,7 +278,7 @@ def run_text_only(config_path: str, model_name: str, force: bool = False, style:
     out_pq = STAGE_F_DIR / f"text_only_{key}.parquet"
     ensure_output_available(out_pq, force, f"{out_pq} already exists — pass --force to replace it.")
 
-    model, processor, family = load_any(model_name, None)
+    model, processor, family = load_vlm(model_name, None)
     tok_ids = first_content_token_ids(processor)
     multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
              if not r["single_token"]}
@@ -546,7 +506,7 @@ def show_prompt(model_name: str, max_side: int | None = None) -> dict:
     family = "qwen" if "qwen" in model_name.lower() else "llava"
     img = Image.new("RGB", (640, 480), (127, 127, 127))
     if max_side:
-        img = _prep_image(img, max_side)
+        img = resize_long_side(img, max_side)
     sentence = NEGATIVE_CONTEXTS[0]
 
     out = {"model": model_name, "family": family, "styles": {}}

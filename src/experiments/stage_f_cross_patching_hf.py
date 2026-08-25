@@ -45,6 +45,13 @@ from ..data.conflict_contexts import context_prompt
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
+from .shared.hf_runtime import (
+    capture_residuals,
+    encode_image_prompt,
+    last_token_tap,
+    load_gemma_hf,
+    patch_residuals,
+)
 from .shared.patching import (CROSS_IMAGE_CONTEXT_BANKS, cross_image_groups,
                               cross_image_recovery, probe_recovery_valid,
                               segment_prompt_positions)
@@ -52,8 +59,7 @@ from .shared.readouts import QUESTION, first_content_token_ids
 from .shared.reporting import (CROSS_IMAGE_GROUPS, cross_image_metrics,
                                print_cross_image_report)
 from .shared.sampling import select_ranked_pairs
-from .stage_f_patching_hf import (CANDIDATE_TAPS, encode, patch_resid, readout,
-                                  resid_capture_full)
+from .stage_f_patching_hf import CANDIDATE_TAPS, readout
 
 GROUPS = CROSS_IMAGE_GROUPS
 CONTEXT_BANKS = CROSS_IMAGE_CONTEXT_BANKS
@@ -71,8 +77,6 @@ def select_pairs(split: str, n_pairs: int) -> tuple[pd.DataFrame, pd.DataFrame]:
 def run(config_path: str, limit_override: int | None = None, layers_override: str | None = None,
         context_polarity: str = "neutral", context_idx: int = 0,
         tap: str = "post_attention_layernorm") -> dict:
-    from .stage_c_transfer_hf import last_token_tap, load_hf
-
     cfg = load_config(config_path)
     ensure_dirs()
     crit = int(cfg.get("critical_layer", 18))
@@ -95,7 +99,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
     pos, neg = select_pairs(cfg.get("split", "test"), n_pairs)
     n_pairs = min(n_pairs, len(pos), len(neg))
 
-    model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
+    model, processor = load_gemma_hf(cfg.get("model", "google/gemma-3-4b-it"))
     tok_ids = first_content_token_ids(processor)
     if not probe_recovery_valid(patch_layers, crit):
         print(f"  NOTE: band {patch_layers[0]}-{patch_layers[-1]} reaches the L{crit} probe tap, so the "
@@ -111,8 +115,12 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
             except (FileNotFoundError, OSError):
                 n_skip += 1
                 continue
-            enc_d = encode(processor, dimg, context_prompt(ctx), model.device)   # donor  = POSITIVE img
-            enc_r = encode(processor, rimg, context_prompt(ctx), model.device)   # recip. = NEGATIVE img
+            enc_d = encode_image_prompt(
+                processor, dimg, context_prompt(ctx), model.device
+            )   # donor  = POSITIVE img
+            enc_r = encode_image_prompt(
+                processor, rimg, context_prompt(ctx), model.device
+            )   # recip. = NEGATIVE img
             if enc_d["input_ids"].shape[-1] != enc_r["input_ids"].shape[-1]:
                 seg_bad += 1                       # identical text ⇒ should never differ
                 continue
@@ -125,7 +133,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
                 seg_bad += 1
                 continue
 
-            with resid_capture_full(model, patch_layers) as cap:
+            with capture_residuals(model, patch_layers) as cap:
                 pos_probe, pos_val = readout(model, enc_d, store, coef, inter, tok_ids)
                 donor = dict(cap)
             neg_probe, neg_val = readout(model, enc_r, store, coef, inter, tok_ids)
@@ -137,7 +145,9 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
                    "pos_val": pos_val, "neg_val": neg_val}
             for g in GROUPS:
                 idx = groups[g]
-                with patch_resid(model, donor, idx, idx):   # identical input_ids ⇒ donor idx == recip idx
+                with patch_residuals(
+                    model, donor, idx, idx
+                ):   # identical input_ids ⇒ donor idx == recip idx
                     p_probe, p_val = readout(model, enc_r, store, coef, inter, tok_ids)
                 row[f"patch_{g}_probe"] = p_probe
                 row[f"patch_{g}_val"] = p_val
