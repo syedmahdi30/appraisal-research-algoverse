@@ -52,6 +52,25 @@ def test_arbitration_aligns_each_steered_row_to_its_own_cell_baseline():
     assert result["probe_slope"] == pytest.approx(1.5)
 
 
+def test_analyzer_arbitration_compatibility_alias_is_the_shared_implementation():
+    from src.experiments import analyze_stage_f
+
+    frame = pd.DataFrame(
+        [
+            {"beta": 0, "valence": 1.0, "probe_readout": 4.0},
+            {"beta": -1, "valence": 0.5, "probe_readout": 3.0},
+            {"beta": 1, "valence": 2.5, "probe_readout": 5.0},
+        ]
+    )
+
+    assert analyze_stage_f._arbitration is arbitration
+    result = analyze_stage_f._arbitration(frame, [-1, 1])
+    assert result["valence"] == {-1: -0.5, 1: 1.5}
+    assert result["probe"] == {-1: -1.0, 1: 1.0}
+    assert result["valence_slope"] == pytest.approx(1.0)
+    assert result["probe_slope"] == pytest.approx(1.0)
+
+
 def test_qwen_runner_import_does_not_require_stage_c_sklearn_dependency():
     script = """
 import builtins
