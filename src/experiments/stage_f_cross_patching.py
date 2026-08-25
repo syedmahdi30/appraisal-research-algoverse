@@ -38,13 +38,13 @@ from tqdm import tqdm
 
 from ..bridge.boot import boot_gemma
 from ..bridge.multimodal import build_image_inputs
-from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
-                                      context_prompt)
+from ..data.conflict_contexts import context_prompt
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .shared.patching import (bridge_patch_hook, cross_image_groups, cross_image_recovery,
-                              probe_recovery_valid, segment_prompt_positions)
+from .shared.patching import (CROSS_IMAGE_CONTEXT_BANKS, bridge_patch_hook, cross_image_groups,
+                              cross_image_recovery, probe_recovery_valid,
+                              segment_prompt_positions)
 from .shared.readouts import QUESTION, bridge_probe_readout
 from .shared.reporting import (CROSS_IMAGE_GROUPS, cross_image_metrics, cross_image_verdict,
                                print_cross_image_report)
@@ -54,7 +54,7 @@ from .stage_a_steering import emotion_token_ids
 # image = the visual-valence test; context/question/structure = did image valence broadcast into text?;
 # text_all = all non-image alignable tokens; all = everything but the read-out query (≈100% sanity).
 GROUPS = CROSS_IMAGE_GROUPS
-CONTEXT_BANKS = {"neutral": NEUTRAL_CONTEXTS, "positive": POSITIVE_CONTEXTS, "negative": NEGATIVE_CONTEXTS}
+CONTEXT_BANKS = CROSS_IMAGE_CONTEXT_BANKS
 
 
 def _cross_groups(seg: dict) -> tuple[dict, dict]:

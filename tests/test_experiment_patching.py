@@ -1,3 +1,7 @@
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -44,6 +48,50 @@ class _Tokenizer:
 
 def _token_ids():
     return {label: index for index, label in enumerate(EMOTION_LABELS)}
+
+
+def _import_with_blocked_package(module_name, blocked_package):
+    script = f"""
+import importlib
+import importlib.abc
+import sys
+import types
+
+sys.modules["torch"] = types.ModuleType("torch")
+
+class BlockedPackageFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == {blocked_package!r} or fullname.startswith({blocked_package!r} + "."):
+            raise ModuleNotFoundError("blocked import dependency: " + fullname)
+        return None
+
+sys.meta_path.insert(0, BlockedPackageFinder())
+importlib.import_module({module_name!r})
+"""
+    return subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=Path(__file__).parents[1],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_cross_hf_import_does_not_require_transformerbridge_package():
+    result = _import_with_blocked_package(
+        "src.experiments.stage_f_cross_patching_hf", "src.bridge"
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("module_name", [
+    "src.experiments.stage_f_patching_hf",
+    "src.experiments.stage_f_cross_patching_hf",
+])
+def test_raw_hf_patching_imports_do_not_require_sklearn(module_name):
+    result = _import_with_blocked_package(module_name, "sklearn")
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_find_subsequence_and_segment_prompt_positions_preserve_token_boundaries():

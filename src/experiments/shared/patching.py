@@ -4,9 +4,16 @@ from __future__ import annotations
 import numpy as np
 import torch
 
+from ...data.conflict_contexts import NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS
+
 SAME_IMAGE_GROUPS = (
     "image", "question", "bos", "prefix_delim", "suffix_delim", "structure", "text_all"
 )
+CROSS_IMAGE_CONTEXT_BANKS = {
+    "neutral": NEUTRAL_CONTEXTS,
+    "positive": POSITIVE_CONTEXTS,
+    "negative": NEGATIVE_CONTEXTS,
+}
 
 
 def find_subsequence(haystack, needle) -> int | None:
