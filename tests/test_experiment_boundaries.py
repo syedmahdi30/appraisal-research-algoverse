@@ -49,13 +49,11 @@ def _argument_names(arguments: ast.arguments) -> set[str]:
     return names
 
 
-class _ScopeBindings(ast.NodeVisitor):
-    """Collect names and runner-module aliases bound directly in one lexical scope."""
+class _ScopeLocals(ast.NodeVisitor):
+    """Collect names Python treats as local without descending into nested scopes."""
 
-    def __init__(self, path: Path):
-        self.path = path
+    def __init__(self):
         self.names = set()
-        self.runners = {}
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Store):
@@ -65,18 +63,11 @@ class _ScopeBindings(ast.NodeVisitor):
         for alias in node.names:
             local_name = alias.asname or alias.name.split(".")[0]
             self.names.add(local_name)
-            if _runner_name(alias.name):
-                access_path = alias.asname or alias.name
-                self.runners[tuple(access_path.split("."))] = alias.name
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
-        module = _resolved_from_module(self.path, node)
         for alias in node.names:
             local_name = alias.asname or alias.name
             self.names.add(local_name)
-            if module in ("src.experiments", "experiments") and _runner_name(alias.name):
-                runner_module = f"src.experiments.{alias.name}"
-                self.runners[(local_name,)] = runner_module
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         self.names.add(node.name)
@@ -98,11 +89,28 @@ class _ScopeBindings(ast.NodeVisitor):
     visit_GeneratorExp = visit_ListComp
 
 
-def _scope_bindings(path: Path, body) -> _ScopeBindings:
-    bindings = _ScopeBindings(path)
+def _scope_local_names(body) -> set[str]:
+    bindings = _ScopeLocals()
     for statement in body:
         bindings.visit(statement)
-    return bindings
+    return bindings.names
+
+
+def _tracked_module(module: str) -> str | None:
+    if module in ("src.experiments", "experiments"):
+        return "src.experiments"
+    runner = _runner_name(module)
+    return f"src.experiments.{runner}" if runner else None
+
+
+def _stored_names(node) -> set[str]:
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return set().union(*(_stored_names(element) for element in node.elts))
+    if isinstance(node, ast.Starred):
+        return _stored_names(node.value)
+    return set()
 
 
 def _attribute_parts(node: ast.Attribute) -> tuple[str, ...] | None:
@@ -117,7 +125,7 @@ def _attribute_parts(node: ast.Attribute) -> tuple[str, ...] | None:
 
 
 class _PrivateRunnerAttributeVisitor(ast.NodeVisitor):
-    """Find private attributes accessed through runner-module imports, respecting scopes."""
+    """Track imports and rebindings in statement order, then reject private runner access."""
 
     def __init__(self, path: Path):
         self.path = path
@@ -128,35 +136,87 @@ class _PrivateRunnerAttributeVisitor(ast.NodeVisitor):
         self._visit_scope(tree.body, {})
         return sorted(self.violations)
 
-    def _visit_scope(self, body, inherited, argument_names=()):
-        local = _scope_bindings(self.path, body)
-        local_names = local.names | set(argument_names)
-        effective = {
-            access_path: module
-            for access_path, module in inherited.items()
-            if access_path[0] not in local_names
-        }
-        effective.update(local.runners)
+    def _visit_scope(self, body, inherited):
         previous = self.bindings
-        self.bindings = effective
+        self.bindings = dict(inherited)
         for statement in body:
             self.visit(statement)
         self.bindings = previous
+
+    def _unbind(self, names):
+        names = set(names)
+        self.bindings = {
+            access_path: module
+            for access_path, module in self.bindings.items()
+            if access_path[0] not in names
+        }
+
+    def _private_access(self, parts, access_path, module):
+        if parts[:len(access_path)] != access_path:
+            return None
+        remainder = parts[len(access_path):]
+        if module == "src.experiments":
+            if len(remainder) < 2 or not _runner_name(remainder[0]):
+                return None
+            return (
+                f"src.experiments.{remainder[0]}", remainder[1]
+            ) if remainder[1].startswith("_") else None
+        if remainder and remainder[0].startswith("_"):
+            return module, remainder[0]
+        return None
 
     def visit_Attribute(self, node: ast.Attribute):
         parts = _attribute_parts(node)
         if parts:
             for access_path, module in self.bindings.items():
-                if (
-                    len(parts) > len(access_path)
-                    and parts[:len(access_path)] == access_path
-                    and parts[len(access_path)].startswith("_")
-                ):
-                    private_name = parts[len(access_path)]
+                private_access = self._private_access(parts, access_path, module)
+                if private_access:
+                    runner_module, private_name = private_access
                     self.violations.add(
-                        f"{self.path}:{node.lineno} accesses {private_name} on {module}"
+                        f"{self.path}:{node.lineno} accesses {private_name} on {runner_module}"
                     )
         self.generic_visit(node)
+
+    def visit_Import(self, node: ast.Import):
+        for alias in node.names:
+            local_name = alias.asname or alias.name.split(".")[0]
+            self._unbind({local_name})
+            module = _tracked_module(alias.name)
+            if module:
+                access_path = alias.asname or alias.name
+                self.bindings[tuple(access_path.split("."))] = module
+
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        source_module = _resolved_from_module(self.path, node)
+        for alias in node.names:
+            local_name = alias.asname or alias.name
+            self._unbind({local_name})
+            module = _tracked_module(f"{source_module}.{alias.name}".strip("."))
+            if module:
+                self.bindings[(local_name,)] = module
+
+    def visit_Assign(self, node: ast.Assign):
+        self.visit(node.value)
+        for target in node.targets:
+            self.visit(target)
+        self._unbind(set().union(*(_stored_names(target) for target in node.targets)))
+
+    def visit_AnnAssign(self, node: ast.AnnAssign):
+        self.visit(node.annotation)
+        if node.value:
+            self.visit(node.value)
+        self.visit(node.target)
+        self._unbind(_stored_names(node.target))
+
+    def visit_AugAssign(self, node: ast.AugAssign):
+        self.visit(node.target)
+        self.visit(node.value)
+        self._unbind(_stored_names(node.target))
+
+    def visit_NamedExpr(self, node: ast.NamedExpr):
+        self.visit(node.value)
+        self.visit(node.target)
+        self._unbind(_stored_names(node.target))
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         for decorator in node.decorator_list:
@@ -164,14 +224,27 @@ class _PrivateRunnerAttributeVisitor(ast.NodeVisitor):
         for default in [*node.args.defaults, *node.args.kw_defaults]:
             if default is not None:
                 self.visit(default)
-        self._visit_scope(node.body, self.bindings, _argument_names(node.args))
+        local_names = _scope_local_names(node.body) | _argument_names(node.args)
+        inherited = {
+            access_path: module
+            for access_path, module in self.bindings.items()
+            if access_path[0] not in local_names
+        }
+        self._visit_scope(node.body, inherited)
+        self._unbind({node.name})
 
     visit_AsyncFunctionDef = visit_FunctionDef
 
     def visit_ClassDef(self, node: ast.ClassDef):
         for expression in [*node.decorator_list, *node.bases, *node.keywords]:
             self.visit(expression)
-        self._visit_scope(node.body, self.bindings)
+        inherited = {
+            access_path: module
+            for access_path, module in self.bindings.items()
+            if access_path[0] not in _scope_local_names(node.body)
+        }
+        self._visit_scope(node.body, inherited)
+        self._unbind({node.name})
 
     def visit_Lambda(self, node: ast.Lambda):
         previous = self.bindings
@@ -286,3 +359,54 @@ def test_runner_module_aliases_allow_public_and_unrelated_private_attributes(
     fixture = Path("src/experiments/stage_f_fixture.py")
 
     assert _private_runner_violations(fixture) == []
+
+
+def test_private_runner_access_through_parent_package_aliases_is_rejected(
+    tmp_path, monkeypatch
+):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "import src.experiments as experiments_alias\n"
+        "experiments_alias.analyze_stage_f._module_private()\n"
+        "\n"
+        "def absolute_function():\n"
+        "    import src.experiments as local_experiments\n"
+        "    local_experiments.stage_f_qwen._absolute_private()\n"
+        "\n"
+        "def from_function():\n"
+        "    from src import experiments as imported_experiments\n"
+        "    imported_experiments.analyze_stage_f._from_private()\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert set(_private_runner_violations(fixture)) == {
+        f"{fixture}:2 accesses _module_private on src.experiments.analyze_stage_f",
+        f"{fixture}:6 accesses _absolute_private on src.experiments.stage_f_qwen",
+        f"{fixture}:10 accesses _from_private on src.experiments.analyze_stage_f",
+    }
+
+
+def test_runner_alias_reassignment_stops_private_access_detection(tmp_path, monkeypatch):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "from . import analyze_stage_f as runner\n"
+        "runner._module_violation()\n"
+        "runner = object()\n"
+        "runner._module_local_only\n"
+        "\n"
+        "def function_scope():\n"
+        "    import src.experiments.analyze_stage_f as local_runner\n"
+        "    local_runner._function_violation()\n"
+        "    local_runner = object()\n"
+        "    local_runner._function_local_only\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert set(_private_runner_violations(fixture)) == {
+        f"{fixture}:2 accesses _module_violation on src.experiments.analyze_stage_f",
+        f"{fixture}:8 accesses _function_violation on src.experiments.analyze_stage_f",
+    }
