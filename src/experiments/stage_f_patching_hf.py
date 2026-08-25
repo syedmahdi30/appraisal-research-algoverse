@@ -48,16 +48,15 @@ from tqdm import tqdm
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS, context_prompt
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
-from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
 from .shared.patching import (SAME_IMAGE_GROUPS, aligned_patch_groups, same_image_recovery,
                               segment_prompt_positions)
-from .stage_c_transfer_hf import CANDIDATE_TAPS, find_lm_layers, last_token_tap, load_hf
 from .shared.readouts import QUESTION, closed_vocab_valence, first_content_token_ids
 from .shared.reporting import same_image_verdict
 from .shared.sampling import select_extreme_rows
 
 GROUPS = SAME_IMAGE_GROUPS
+CANDIDATE_TAPS = ("self_attn", "self_attn.o_proj", "post_attention_layernorm")
 
 # Published bridge results, keyed by the (pos_idx, neg_idx) context pair they were actually run on.
 # Keyed explicitly because the two published pairs are NOT (0,2) and (1,0): pair 2 is (4,0), the
@@ -95,6 +94,8 @@ def resid_capture_full(model, layers):
     on). Full sequence, not last-token, because patching needs the donor's values at arbitrary
     positions.
     """
+    from .stage_c_transfer_hf import find_lm_layers
+
     lm = find_lm_layers(model, verbose=False)
     store: dict[int, torch.Tensor] = {}
     handles = []
@@ -124,6 +125,8 @@ def patch_resid(model, donor: dict[int, torch.Tensor], donor_idx, recip_idx):
     rather than written in place, and the tuple shape is preserved for transformers versions whose
     decoder layers return `(hidden, ...)`.
     """
+    from .stage_c_transfer_hf import find_lm_layers
+
     lm = find_lm_layers(model, verbose=False)
     di = torch.as_tensor(np.asarray(donor_idx), dtype=torch.long)
     ri = torch.as_tensor(np.asarray(recip_idx), dtype=torch.long)
@@ -151,6 +154,8 @@ def patch_resid(model, donor: dict[int, torch.Tensor], donor_idx, recip_idx):
 
 def readout(model, enc, store, coef, inter, tok_ids) -> tuple[float, float]:
     """One forward -> (frozen-probe read-out at the tap, behavioural valence). `store` is the tap."""
+    from ..probes.evaluate import predict
+
     with torch.no_grad():
         out = model(**enc)
     act = np.asarray(store[0], dtype=np.float32)
@@ -179,6 +184,8 @@ def verify_tap(cfg, tap: str) -> dict:
       1. the frozen probe separates positive- from negative-context runs in the right direction,
       2. segmentation finds a 256-token image block, the question, and all alignable groups.
     """
+    from .stage_c_transfer_hf import last_token_tap, load_hf
+
     crit = int(cfg.get("critical_layer", 18))
     probes = load_probes(STAGE_A_DIR / "probes.npz")
     pi = probes.index("pleasantness")
@@ -228,6 +235,8 @@ def verify_tap(cfg, tap: str) -> dict:
 def run(config_path: str, limit_override: int | None = None, layers_override: str | None = None,
         pos_idx: int | None = None, neg_idx: int | None = None,
         tap: str = "post_attention_layernorm") -> dict:
+    from .stage_c_transfer_hf import last_token_tap, load_hf
+
     cfg = load_config(config_path)
     ensure_dirs()
     crit = int(cfg.get("critical_layer", 18))

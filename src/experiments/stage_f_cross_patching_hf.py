@@ -45,17 +45,18 @@ from ..data.conflict_contexts import context_prompt
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .shared.patching import (cross_image_groups, cross_image_recovery,
-                              probe_recovery_valid, segment_prompt_positions)
+from .shared.patching import (CROSS_IMAGE_CONTEXT_BANKS, cross_image_groups,
+                              cross_image_recovery, probe_recovery_valid,
+                              segment_prompt_positions)
 from .shared.readouts import QUESTION, first_content_token_ids
 from .shared.reporting import (CROSS_IMAGE_GROUPS, cross_image_metrics,
                                print_cross_image_report)
 from .shared.sampling import select_ranked_pairs
-from .stage_c_transfer_hf import CANDIDATE_TAPS, last_token_tap, load_hf
-from .stage_f_cross_patching import CONTEXT_BANKS
-from .stage_f_patching_hf import encode, patch_resid, readout, resid_capture_full
+from .stage_f_patching_hf import (CANDIDATE_TAPS, encode, patch_resid, readout,
+                                  resid_capture_full)
 
 GROUPS = CROSS_IMAGE_GROUPS
+CONTEXT_BANKS = CROSS_IMAGE_CONTEXT_BANKS
 
 PARQUET = STAGE_F_DIR / "cross_patching_hf.parquet"
 METRICS = STAGE_F_DIR / "cross_patching_hf_metrics.json"
@@ -70,6 +71,8 @@ def select_pairs(split: str, n_pairs: int) -> tuple[pd.DataFrame, pd.DataFrame]:
 def run(config_path: str, limit_override: int | None = None, layers_override: str | None = None,
         context_polarity: str = "neutral", context_idx: int = 0,
         tap: str = "post_attention_layernorm") -> dict:
+    from .stage_c_transfer_hf import last_token_tap, load_hf
+
     cfg = load_config(config_path)
     ensure_dirs()
     crit = int(cfg.get("critical_layer", 18))
