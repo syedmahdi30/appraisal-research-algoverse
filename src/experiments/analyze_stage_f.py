@@ -30,6 +30,7 @@ from .common import git_hash, run_stamp, save_json
 from .shared.reporting import (
     NEGATIVE_LABELS as _NEGATIVE,
     POSITIVE_LABELS as _POSITIVE,
+    arbitration as _arbitration,
     asymmetry_vs_floor as _asymmetry_vs_floor,
     cell_means as _cell_means,
     flip_override as _flip_override,
@@ -91,29 +92,6 @@ def _condition_breakdown(df) -> dict:
                     "probe": float(cell["probe_readout"].mean()),
                     "context": str(cell["context"].iloc[0])}
     return out
-
-
-def _arbitration(df, betas):
-    """Mean Δ (valence, probe) vs β on incongruent cells, relative to each cell's β=0 baseline.
-
-    Aligns each steered row to its own baseline by CELL, not image_path: EMOTIC is per-person, so
-    the same image_path recurs and cannot key the baseline. Rows are written per cell as
-    [β=0, then the betas], so `(beta==0).cumsum()` labels each cell uniquely.
-    """
-    df = df.copy()
-    df["_cell"] = (df["beta"] == 0).cumsum()
-    base = df[df["beta"] == 0].set_index("_cell")
-    res = {"valence": {}, "probe": {}}
-    for b in betas:
-        sub = df[df["beta"] == b]
-        dv = sub["valence"].to_numpy() - base.loc[sub["_cell"], "valence"].to_numpy()
-        dp = sub["probe_readout"].to_numpy() - base.loc[sub["_cell"], "probe_readout"].to_numpy()
-        res["valence"][int(b)] = float(np.mean(dv))
-        res["probe"][int(b)] = float(np.mean(dp))
-    xs = sorted(res["valence"])
-    res["valence_slope"] = float(np.polyfit(xs, [res["valence"][b] for b in xs], 1)[0])
-    res["probe_slope"] = float(np.polyfit(xs, [res["probe"][b] for b in xs], 1)[0])
-    return res
 
 
 def run(config_path: str | None = None, base_pq=None) -> dict:

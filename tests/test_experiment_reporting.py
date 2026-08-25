@@ -8,6 +8,7 @@ import pytest
 
 from src.data.labels import EMOTION_LABELS
 from src.experiments.shared.reporting import (
+    arbitration,
     content_mean_frame,
     correlation,
     flip_override,
@@ -29,6 +30,26 @@ def test_correlation_filters_nonfinite_pairs_and_keeps_schema():
     assert result["n"] == 3
     assert result["pearson"] == pytest.approx(1.0)
     assert result["spearman"] == 1.0
+
+
+def test_arbitration_aligns_each_steered_row_to_its_own_cell_baseline():
+    frame = pd.DataFrame(
+        [
+            {"beta": 0, "valence": 1.0, "probe_readout": 10.0},
+            {"beta": -1, "valence": 0.0, "probe_readout": 9.0},
+            {"beta": 1, "valence": 3.0, "probe_readout": 11.0},
+            {"beta": 0, "valence": 2.0, "probe_readout": 20.0},
+            {"beta": -1, "valence": 0.0, "probe_readout": 18.0},
+            {"beta": 1, "valence": 4.0, "probe_readout": 22.0},
+        ]
+    )
+
+    result = arbitration(frame, [-1, 1])
+
+    assert result["valence"] == {-1: -1.5, 1: 2.0}
+    assert result["probe"] == {-1: -1.5, 1: 1.5}
+    assert result["valence_slope"] == pytest.approx(1.75)
+    assert result["probe_slope"] == pytest.approx(1.5)
 
 
 def test_qwen_runner_import_does_not_require_stage_c_sklearn_dependency():
