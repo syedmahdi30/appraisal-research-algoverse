@@ -54,7 +54,8 @@ class _ScopeLocals(ast.NodeVisitor):
 
     def __init__(self):
         self.names = set()
-        self.declared_outer = set()
+        self.global_names = set()
+        self.nonlocal_names = set()
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Store):
@@ -80,10 +81,10 @@ class _ScopeLocals(ast.NodeVisitor):
         self.names.add(node.name)
 
     def visit_Global(self, node: ast.Global):
-        self.declared_outer.update(node.names)
+        self.global_names.update(node.names)
 
     def visit_Nonlocal(self, node: ast.Nonlocal):
-        self.declared_outer.update(node.names)
+        self.nonlocal_names.update(node.names)
 
     def visit_Lambda(self, node: ast.Lambda):
         return
@@ -96,11 +97,16 @@ class _ScopeLocals(ast.NodeVisitor):
     visit_GeneratorExp = visit_ListComp
 
 
-def _scope_local_names(body) -> set[str]:
-    bindings = _ScopeLocals()
+def _scope_info(body) -> _ScopeLocals:
+    scope = _ScopeLocals()
     for statement in body:
-        bindings.visit(statement)
-    return bindings.names - bindings.declared_outer
+        scope.visit(statement)
+    return scope
+
+
+def _scope_local_names(body) -> set[str]:
+    scope = _scope_info(body)
+    return scope.names - scope.global_names - scope.nonlocal_names
 
 
 def _tracked_module(module: str) -> str | None:
@@ -136,27 +142,59 @@ class _PrivateRunnerAttributeVisitor(ast.NodeVisitor):
 
     def __init__(self, path: Path):
         self.path = path
-        self.bindings = {}
+        self.scopes = []
         self.violations = set()
 
+    @property
+    def bindings(self):
+        return self.scopes[-1]["bindings"]
+
     def scan(self, tree: ast.Module) -> list[str]:
-        self._visit_scope(tree.body, {})
+        self._visit_scope(
+            tree.body,
+            inherited={},
+            kind="module",
+            local_names=_scope_local_names(tree.body),
+        )
         return sorted(self.violations)
 
-    def _visit_scope(self, body, inherited):
-        previous = self.bindings
-        self.bindings = dict(inherited)
+    def _visit_scope(self, body, inherited, kind, local_names):
+        self.scopes.append({
+            "kind": kind,
+            "bindings": dict(inherited),
+            "local_names": set(local_names),
+        })
         for statement in body:
             self.visit(statement)
-        self.bindings = previous
+        self.scopes.pop()
 
     def _unbind(self, names):
         names = set(names)
-        self.bindings = {
+        for access_path in list(self.bindings):
+            if access_path[0] in names:
+                del self.bindings[access_path]
+
+    @staticmethod
+    def _bindings_for_names(scope, names):
+        return {
             access_path: module
-            for access_path, module in self.bindings.items()
-            if access_path[0] not in names
+            for access_path, module in scope["bindings"].items()
+            if access_path[0] in names
         }
+
+    def _declared_bindings(self, global_names, nonlocal_names):
+        declared = {}
+        if global_names:
+            module_scope = next(scope for scope in self.scopes if scope["kind"] == "module")
+            declared.update(self._bindings_for_names(module_scope, global_names))
+        for name in nonlocal_names:
+            for scope in reversed(self.scopes):
+                if scope["kind"] != "function":
+                    continue
+                if name in scope["local_names"]:
+                    declared.update(self._bindings_for_names(scope, {name}))
+                    break
+        return declared
 
     def _private_access(self, parts, access_path, module):
         if parts[:len(access_path)] != access_path:
@@ -264,13 +302,17 @@ class _PrivateRunnerAttributeVisitor(ast.NodeVisitor):
         for default in [*node.args.defaults, *node.args.kw_defaults]:
             if default is not None:
                 self.visit(default)
-        local_names = _scope_local_names(node.body) | _argument_names(node.args)
+        scope = _scope_info(node.body)
+        local_names = (
+            scope.names - scope.global_names - scope.nonlocal_names
+        ) | _argument_names(node.args)
         inherited = {
             access_path: module
             for access_path, module in self.bindings.items()
             if access_path[0] not in local_names
         }
-        self._visit_scope(node.body, inherited)
+        inherited.update(self._declared_bindings(scope.global_names, scope.nonlocal_names))
+        self._visit_scope(node.body, inherited, kind="function", local_names=local_names)
         self._unbind({node.name})
 
     visit_AsyncFunctionDef = visit_FunctionDef
@@ -278,24 +320,31 @@ class _PrivateRunnerAttributeVisitor(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef):
         for expression in [*node.decorator_list, *node.bases, *node.keywords]:
             self.visit(expression)
+        scope = _scope_info(node.body)
+        local_names = scope.names - scope.global_names - scope.nonlocal_names
         inherited = {
             access_path: module
             for access_path, module in self.bindings.items()
-            if access_path[0] not in _scope_local_names(node.body)
+            if access_path[0] not in local_names
         }
-        self._visit_scope(node.body, inherited)
+        inherited.update(self._declared_bindings(scope.global_names, scope.nonlocal_names))
+        self._visit_scope(node.body, inherited, kind="class", local_names=local_names)
         self._unbind({node.name})
 
     def visit_Lambda(self, node: ast.Lambda):
-        previous = self.bindings
         argument_names = _argument_names(node.args)
-        self.bindings = {
+        inherited = {
             access_path: module
-            for access_path, module in previous.items()
+            for access_path, module in self.bindings.items()
             if access_path[0] not in argument_names
         }
+        self.scopes.append({
+            "kind": "function",
+            "bindings": inherited,
+            "local_names": argument_names,
+        })
         self.visit(node.body)
-        self.bindings = previous
+        self.scopes.pop()
 
 
 def _private_runner_violations(path: Path) -> list[str]:
@@ -555,3 +604,52 @@ def test_except_target_and_del_expire_runner_aliases(tmp_path, monkeypatch):
         f"{fixture}:2 accesses _except_violation on src.experiments.analyze_stage_f",
         f"{fixture}:9 accesses _del_violation on src.experiments.analyze_stage_f",
     }
+
+
+def test_global_declaration_recovers_module_alias_through_parameter_shadow(
+    tmp_path, monkeypatch
+):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "from . import analyze_stage_f as runner\n"
+        "\n"
+        "def outer_scope(runner):\n"
+        "    def inner_scope():\n"
+        "        global runner\n"
+        "        runner._global_violation()\n"
+        "        runner = object()\n"
+        "        runner._global_local_only\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert _private_runner_violations(fixture) == [
+        f"{fixture}:6 accesses _global_violation on src.experiments.analyze_stage_f"
+    ]
+
+
+def test_nonlocal_declaration_skips_class_namespace_for_enclosing_function_alias(
+    tmp_path, monkeypatch
+):
+    experiments = tmp_path / "src" / "experiments"
+    experiments.mkdir(parents=True)
+    (experiments / "stage_f_fixture.py").write_text(
+        "def outer_scope():\n"
+        "    from . import analyze_stage_f as runner\n"
+        "\n"
+        "    class Scope:\n"
+        "        runner = object()\n"
+        "\n"
+        "        def inner_scope(self):\n"
+        "            nonlocal runner\n"
+        "            runner._nonlocal_violation()\n"
+        "            runner = object()\n"
+        "            runner._nonlocal_local_only\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    fixture = Path("src/experiments/stage_f_fixture.py")
+
+    assert _private_runner_violations(fixture) == [
+        f"{fixture}:9 accesses _nonlocal_violation on src.experiments.analyze_stage_f"
+    ]
