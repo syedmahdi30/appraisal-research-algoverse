@@ -168,6 +168,26 @@ def resize_long_side(image: Image.Image, max_side: int | None) -> Image.Image:
     )
 
 
+def image_prompt_token_counts(processor, image, family: str, style: str, input_builder) -> dict:
+    """Measure the processor-level prompt expansion caused by one image."""
+    with_image = input_builder(processor, image, None, family, style)["input_ids"].shape[-1]
+    without_image = input_builder(processor, None, None, family, style)["input_ids"].shape[-1]
+    delta = int(with_image - without_image)
+    return {
+        "image_tokens": delta,
+        "prompt_tokens_with_image": int(with_image),
+        "prompt_tokens_text_only": int(without_image),
+        "image_token_fraction": delta / with_image if with_image else float("nan"),
+        "expansion_ok": bool(delta > 8),
+        "note": (
+            "" if delta > 8 else
+            "placeholder appears UNEXPANDED at tokenization (delta<=8); the true image-token "
+            "count is applied inside the model — read it from the model's vision config "
+            "instead of this field."
+        ),
+    }
+
+
 def encode_image_prompt(processor, image, prompt: str, device) -> dict:
     """Encode one image/prompt pair and move each returned tensor to ``device``."""
     encoded = processor(text=prompt, images=[image], return_tensors="pt")

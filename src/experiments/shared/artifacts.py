@@ -27,6 +27,18 @@ def token_budget_key(model_name: str, max_side: int | None,
     return key + run_key_suffix(style, bank)
 
 
+def token_budget_artifact_paths(root: Path, model_name: str, max_side: int | None,
+                                style: str = "chat", bank: str = "full", *,
+                                text_only: bool = False) -> tuple[Path, Path]:
+    """Return the historical token-budget data and metrics paths for one run."""
+    prefix = "text_only" if text_only else "conflict"
+    key = token_budget_key(
+        model_name, None if text_only else max_side, style=style, bank=bank
+    )
+    stem = f"{prefix}_{key}"
+    return root / f"{stem}.parquet", root / f"{stem}_metrics.json"
+
+
 def token_budget_metric_paths(root: Path, model_name: str, style: str = "chat",
                               bank: str = "full") -> list[Path]:
     """Return this model's base metrics, limited to the requested context bank."""
