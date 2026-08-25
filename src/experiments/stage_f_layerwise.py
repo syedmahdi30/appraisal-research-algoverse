@@ -35,9 +35,10 @@ from ..bridge.hooks import keep_language_taps
 from ..bridge.multimodal import build_image_inputs
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       TEXT_CODE, context_prompt)
+from ..data.emotic import load_split as load_emotic_split
 from ..paths import FIGURES_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_f_conflict import select_extreme_images
+from .shared.sampling import select_extreme_rows
 
 CONDS = ("neutral", "negative", "positive")
 
@@ -61,7 +62,8 @@ def run(config_path: str, limit_override: int | None = None) -> dict:
                   + [("negative", f"n{i}", c) for i, c in enumerate(NEGATIVE_CONTEXTS)]
                   + [("positive", f"p{i}", c) for i, c in enumerate(POSITIVE_CONTEXTS)])
 
-    sel = select_extreme_images(cfg.get("split", "test"), n_images * 2)
+    frame = load_emotic_split(cfg.get("split", "test")).reset_index(drop=True)
+    sel = select_extreme_rows(frame, n_images * 2)
     sel = sel[sel["image_group"] == "positive"].head(n_images).reset_index(drop=True)
 
     bridge = boot_gemma(cfg.get("model", "google/gemma-3-4b-it"), device=cfg.get("device", "cuda"))

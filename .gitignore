@@ -7,6 +7,10 @@ venv/
 .pytest_cache/
 .ipynb_checkpoints/
 
+# Agent worktrees and execution ledgers
+.worktrees/
+.superpowers/
+
 # OS
 .DS_Store
 
@@ -39,3 +43,11 @@ compass_artifact_*.md
 
 # EMOTIC-derived processed tables anywhere (gated — never redistribute)
 **/data/processed/
+paper/build/
+paper-build/
+
+# macOS metadata
+.DS_Store
+
+# Superseded drafts are kept as source; their built PDFs are regenerable
+archive/**/*.pdf

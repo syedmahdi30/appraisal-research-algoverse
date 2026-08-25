@@ -14,8 +14,8 @@ content-token-mean sensitivity analysis for label-length bias. Sequence runs use
 paths, keyed by model for non-default checkpoints, so they cannot overwrite first-subtoken artifacts
 or another LLaVA-family run.
 
-Reuses the model-agnostic scoring/selection from `stage_f_qwen` (emotion_token_ids, readout,
-select_extreme_images, _user_text); only the model load and the chat template are LLaVA-specific.
+Reuses model-agnostic scoring/selection from `shared`; only the model load and the chat template are
+LLaVA-specific.
 Run in the `requirements-qwen.txt` env (recent transformers with
 `AutoModelForImageTextToText` + llava-hf support). Needs the EMOTIC test parquet staged.
 
@@ -36,43 +36,28 @@ from tqdm import tqdm
 from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSITIVE_CONTEXTS,
                                       TEXT_CODE)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
-from ..paths import STAGE_F_DIR, ensure_dirs
-from .common import git_hash, load_config, run_stamp, save_json
+from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
+from .common import load_config, run_stamp, save_json
 from .multitoken_scoring import score_label_sequences
-from .stage_f_qwen import _user_text, emotion_token_ids, readout, select_extreme_images
-from .stage_f_token_budget import slug
+from .shared.artifacts import artifact_metadata, llava_artifact_paths
+from .shared.readouts import first_content_token_ids, model_readout, user_text
+from .shared.reporting import (
+    asymmetry_vs_floor,
+    content_mean_frame,
+    flip_override,
+    sequence_result_columns,
+)
+from .shared.sampling import select_extreme_rows
 
 DEFAULT_MODEL = "llava-hf/llava-1.5-7b-hf"
 
 
 def _artifact_paths(score_mode: str, *, text_only: bool, model_name: str = DEFAULT_MODEL):
-    if score_mode not in {"first-subtoken", "sequence"}:
-        raise ValueError(f"unknown score mode: {score_mode}")
-    prefix = "text_only" if text_only else "conflict"
-    suffix = "" if score_mode == "first-subtoken" else "_sequence"
-    model_key = "llava" if model_name == DEFAULT_MODEL else slug(model_name, None)
-    stem = f"{prefix}_{model_key}{suffix}"
-    return STAGE_F_DIR / f"{stem}.parquet", STAGE_F_DIR / f"{stem}_metrics.json"
+    return llava_artifact_paths(STAGE_F_DIR, score_mode, text_only, model_name, DEFAULT_MODEL)
 
 
-def _sequence_columns(result: dict) -> dict:
-    summed = result["sequence_sum"]
-    mean = result["content_mean"]
-    columns = {"valence": summed["valence"], "valence_content_mean": mean["valence"]}
-    for label in EMOTION_LABELS:
-        columns[f"lp_{label}"] = summed["logprobs"][label]
-        columns[f"lp_content_mean_{label}"] = mean["logprobs"][label]
-        columns[f"score_sequence_sum_{label}"] = summed["scores"][label]
-        columns[f"score_content_mean_{label}"] = mean["scores"][label]
-    return columns
-
-
-def _content_mean_frame(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    out["valence"] = out["valence_content_mean"]
-    for label in EMOTION_LABELS:
-        out[f"lp_{label}"] = out[f"lp_content_mean_{label}"]
-    return out
+_sequence_columns = sequence_result_columns
+_content_mean_frame = content_mean_frame
 
 
 def _pad_token_id(processor) -> int:
@@ -110,7 +95,7 @@ def build_inputs(processor, image, context_sentence):
     the processor) at the head of the user turn: `USER: <image>\\n{context} {question} ASSISTANT:`.
     """
     content = ([{"type": "image"}] if image is not None else []) + \
-              [{"type": "text", "text": _user_text(context_sentence)}]
+              [{"type": "text", "text": user_text(context_sentence)}]
     messages = [{"role": "user", "content": content}]
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     imgs = [image] if image is not None else None
@@ -125,22 +110,22 @@ def _analyze_and_print(df, model_name, multi=None, n_skipped=0,
     Uses the SHARED `analyze_stage_f` metrics so LLaVA lands in the same table as Gemma + Qwen. Also
     the CPU `--reanalyze` entry point.
     """
-    from .analyze_stage_f import _asymmetry_vs_floor, _flip_override
-    asym = _asymmetry_vs_floor(df) if len(df) else {}
-    flip = _flip_override(df) if len(df) else {}
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "score_mode": score_mode,
-               "score_rule": ("sum of teacher-forced conditional token log probabilities"
-                              if score_mode == "sequence" else "first content sub-token"),
-               "read_out": "behavioral_valence", "n_images": int(df["image_path"].nunique()) if len(df) else 0,
-               "n_skipped": n_skipped, "n_rows": int(len(df)),
-               "asymmetry_vs_floor": asym, "flip_override": flip, "tokenization_multi_token": multi or {}}
+    asym = asymmetry_vs_floor(df) if len(df) else {}
+    flip = flip_override(df) if len(df) else {}
+    metrics = artifact_metadata(
+        model=model_name, score_mode=score_mode,
+        score_rule=("sum of teacher-forced conditional token log probabilities"
+                    if score_mode == "sequence" else "first content sub-token"),
+        read_out="behavioral_valence", n_images=int(df["image_path"].nunique()) if len(df) else 0,
+        n_skipped=n_skipped, n_rows=int(len(df)),
+        asymmetry_vs_floor=asym, flip_override=flip, tokenization_multi_token=multi or {},
+    )
     if score_mode == "sequence" and len(df):
-        mean_df = _content_mean_frame(df)
+        mean_df = content_mean_frame(df)
         metrics["sensitivity_content_mean"] = {
             "score_rule": "mean conditional log probability over content tokens after shared prefix",
-            "asymmetry_vs_floor": _asymmetry_vs_floor(mean_df),
-            "flip_override": _flip_override(mean_df),
+            "asymmetry_vs_floor": asymmetry_vs_floor(mean_df),
+            "flip_override": flip_override(mean_df),
         }
     _, metrics_path = _artifact_paths(score_mode, text_only=False, model_name=model_name)
     save_json(metrics, metrics_path)
@@ -184,7 +169,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
     cfg = load_config(config_path)
     ensure_dirs()
     n_images = limit_override or int(cfg.get("n_images", 150))
-    sel = select_extreme_images(n_images)
+    sel = select_extreme_rows(pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet").reset_index(drop=True), n_images)
     model, processor = load_llava(model_name)
     token_report = verify_label_tokenization(processor.tokenizer)
     multi = {w: r for w, r in token_report.items() if not r["single_token"]}
@@ -193,7 +178,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
         label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
         pad_token_id = _pad_token_id(processor)
     else:
-        tok_ids = emotion_token_ids(processor)
+        tok_ids = first_content_token_ids(processor)
         label_ids = None
         pad_token_id = None
 
@@ -214,9 +199,9 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
                     pad_token_id=pad_token_id,
                     label_batch_size=label_batch_size,
                 )
-                readout_columns = _sequence_columns(scored)
+                readout_columns = sequence_result_columns(scored)
             else:
-                val, lp = readout(model, inputs, tok_ids)
+                val, lp = model_readout(model, inputs, tok_ids)
                 readout_columns = {"valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}}
             rows.append({"image_path": r["image_path"], "image_valence": float(r["valence"]),
                          "image_group": r["image_group"], "condition": cond, "context_id": cid,
@@ -264,7 +249,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
         label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
         pad_token_id = _pad_token_id(processor)
     else:
-        tok_ids = emotion_token_ids(processor)
+        tok_ids = first_content_token_ids(processor)
         label_ids = None
         pad_token_id = None
 
@@ -279,11 +264,11 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
                 pad_token_id=pad_token_id,
                 label_batch_size=label_batch_size,
             )
-            readout_columns = _sequence_columns(scored)
+            readout_columns = sequence_result_columns(scored)
             val = readout_columns["valence"]
             lp = {label: readout_columns[f"lp_{label}"] for label in EMOTION_LABELS}
         else:
-            val, lp = readout(model, inputs, tok_ids)
+            val, lp = model_readout(model, inputs, tok_ids)
             readout_columns = {"valence": val, **{f"lp_{w}": lp[w] for w in EMOTION_LABELS}}
         rows.append({"condition": cond, "context_id": cid, "context": sentence or "",
                      "text_code": TEXT_CODE[cond], "argmax_emotion": max(lp, key=lp.get),
@@ -308,16 +293,17 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
         if dn is not None and dp:
             img_ratio = abs(dn) / abs(dp)
 
-    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "score_mode": score_mode,
-               "score_rule": ("sum of teacher-forced conditional token log probabilities"
-                              if score_mode == "sequence" else "first content sub-token"),
-               "neutral_baseline": neu,
-               "pos_effect": pe, "neg_effect": ne, "pos_raw": pr, "neg_raw": nr,
-               "text_only_ratio_vs_neutral": text_ratio, "text_only_ratio_raw": raw_ratio,
-               "image_conditioned_ratio": img_ratio, "tokenization_multi_token": multi}
+    metrics = artifact_metadata(
+        model=model_name, score_mode=score_mode,
+        score_rule=("sum of teacher-forced conditional token log probabilities"
+                    if score_mode == "sequence" else "first content sub-token"),
+        neutral_baseline=neu,
+        pos_effect=pe, neg_effect=ne, pos_raw=pr, neg_raw=nr,
+        text_only_ratio_vs_neutral=text_ratio, text_only_ratio_raw=raw_ratio,
+        image_conditioned_ratio=img_ratio, tokenization_multi_token=multi,
+    )
     if score_mode == "sequence":
-        mean_df = _content_mean_frame(df)
+        mean_df = content_mean_frame(df)
         mneu = float(mean_df[mean_df["condition"] == "neutral"]["valence"].mean())
         mpe = float((mean_df[mean_df["condition"] == "positive"]["valence"] - mneu).mean())
         mne = float((mean_df[mean_df["condition"] == "negative"]["valence"] - mneu).mean())

@@ -15,12 +15,9 @@ turn-boundary result is EXPECTED to survive. That is precisely why it has to be 
 assumed: it is the mechanism claim the paper's §6 rests on, and "expected to survive" is not a
 result. This module re-runs it end to end on raw HF.
 
-WHAT IS DELIBERATELY SHARED WITH THE BRIDGE VERSION. `_aligned_groups`, `_recovery` and `_verdict`
-are imported from `stage_f_patching`, not reimplemented. They are pure numpy/pandas and touch no
-model; importing them guarantees the two runs are aggregated identically, which is the whole point of
-a re-score. (`src.bridge.boot` imports transformer_lens lazily, so this import boots nothing.)
-`segment_positions` is likewise imported and fed a tokenizer shim --- it only ever touches
-`.tokenizer`.
+WHAT IS DELIBERATELY SHARED WITH THE BRIDGE VERSION. Alignment, recovery, verdict, and prompt
+segmentation come from `experiments.shared`; they are pure numpy/pandas/token operations and touch no
+model. Both runners therefore aggregate identically without either backend importing the other.
 
 THE TAP. The probe was fit on the bridge's `blocks.18.hook_attn_out`. The raw-HF equivalent is
 `post_attention_layernorm`, NOT `self_attn`: Gemma post-norms the attention output before the
@@ -40,8 +37,6 @@ Published reference (bridge): assistant-turn boundary 65% / 57% across the two p
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
-
 import numpy as np
 import pandas as pd
 import torch
@@ -51,12 +46,22 @@ from tqdm import tqdm
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS, context_prompt
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
-from ..probes.evaluate import predict
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer_hf import CANDIDATE_TAPS, find_lm_layers, last_token_tap, load_hf
-from .stage_f_attribution import segment_positions
-from .stage_f_patching import GROUPS, _aligned_groups, _recovery, _verdict
-from .stage_f_qwen import emotion_token_ids, valence_score
+from .shared.hf_runtime import (
+    capture_residuals,
+    encode_image_prompt,
+    last_token_tap,
+    load_gemma_hf,
+    patch_residuals,
+)
+from .shared.patching import (SAME_IMAGE_GROUPS, aligned_patch_groups, same_image_recovery,
+                              segment_prompt_positions)
+from .shared.readouts import QUESTION, closed_vocab_valence, first_content_token_ids
+from .shared.reporting import same_image_verdict
+from .shared.sampling import select_extreme_rows
+
+GROUPS = SAME_IMAGE_GROUPS
+CANDIDATE_TAPS = ("self_attn", "self_attn.o_proj", "post_attention_layernorm")
 
 # Published bridge results, keyed by the (pos_idx, neg_idx) context pair they were actually run on.
 # Keyed explicitly because the two published pairs are NOT (0,2) and (1,0): pair 2 is (4,0), the
@@ -84,91 +89,32 @@ class _TokShim:
         self.tokenizer = tokenizer
 
 
-# --------------------------------------------------------------------------- resid_post plumbing
-@contextmanager
-def resid_capture_full(model, layers):
-    """Capture the FULL-sequence output of each decoder layer in `layers`.
-
-    A raw-HF decoder layer's output IS the residual stream after that block, i.e. the equivalent of
-    TransformerLens `blocks.{L}.hook_resid_post` (same identification `stage_d_steering_hf` relies
-    on). Full sequence, not last-token, because patching needs the donor's values at arbitrary
-    positions.
-    """
-    lm = find_lm_layers(model, verbose=False)
-    store: dict[int, torch.Tensor] = {}
-    handles = []
-
-    def make(layer_i):
-        def hook(_m, _i, out):
-            t = out[0] if isinstance(out, tuple) else out
-            store[layer_i] = t[0].detach()          # [seq, d]
-        return hook
-
-    for layer_i in layers:
-        handles.append(lm[layer_i].register_forward_hook(make(layer_i)))
-    try:
-        yield store
-    finally:
-        for h in handles:
-            h.remove()
+# --------------------------------------------------------------------------- raw-HF compatibility façades
+resid_capture_full = capture_residuals
+encode = encode_image_prompt
 
 
-@contextmanager
 def patch_resid(model, donor: dict[int, torch.Tensor], donor_idx, recip_idx):
-    """Overwrite recipient resid_post at `recip_idx` with the donor's values at `donor_idx`.
-
-    Applied at every layer in `donor` simultaneously, so the group's pathway stays pinned to the
-    donor through the read-out (the bridge version's contract: a single layer would be re-mixed
-    downstream by the still-negative context, giving a lower bound). The layer output is cloned
-    rather than written in place, and the tuple shape is preserved for transformers versions whose
-    decoder layers return `(hidden, ...)`.
-    """
-    lm = find_lm_layers(model, verbose=False)
-    di = torch.as_tensor(np.asarray(donor_idx), dtype=torch.long)
-    ri = torch.as_tensor(np.asarray(recip_idx), dtype=torch.long)
-    handles = []
-
-    def make(layer_i):
-        src = donor[layer_i]
-        vals = src[di.to(src.device)]                 # [len(idx), d]
-
-        def hook(_m, _i, out):
-            tup = isinstance(out, tuple)
-            h = (out[0] if tup else out).clone()
-            h[0, ri.to(h.device), :] = vals.to(device=h.device, dtype=h.dtype)
-            return (h,) + tuple(out[1:]) if tup else h
-        return hook
-
-    for layer_i in donor:
-        handles.append(lm[layer_i].register_forward_hook(make(layer_i)))
-    try:
-        yield
-    finally:
-        for h in handles:
-            h.remove()
+    return patch_residuals(model, donor, donor_idx, recip_idx)
 
 
 def readout(model, enc, store, coef, inter, tok_ids) -> tuple[float, float]:
     """One forward -> (frozen-probe read-out at the tap, behavioural valence). `store` is the tap."""
+    from ..probes.evaluate import predict
+
     with torch.no_grad():
         out = model(**enc)
     act = np.asarray(store[0], dtype=np.float32)
     probe = float(predict(act[None, :], coef, inter)[0])
-    return probe, valence_score(out.logits[0, -1].float(), tok_ids)
+    return probe, closed_vocab_valence(out.logits[0, -1].float(), tok_ids)
 
 
 # --------------------------------------------------------------------------- data
 def select_positive_images(split: str, n: int) -> pd.DataFrame:
-    """The n highest-valence EMOTIC rows. Mirrors `stage_f_conflict.select_extreme_images`'s
-    positive half, inlined so this module has no path back to the bridge stack."""
+    """The n highest-valence EMOTIC rows, tagged as the positive group."""
     df = load_emotic_split(split).reset_index(drop=True)
-    df = df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
-    return df.tail(n).assign(image_group="positive").reset_index(drop=True)
-
-
-def encode(processor, image, prompt: str, device):
-    enc = processor(text=prompt, images=[image], return_tensors="pt")
-    return {k: v.to(device) for k, v in enc.items()}
+    selected = select_extreme_rows(df, n * 2)
+    return selected[selected["image_group"] == "positive"].reset_index(drop=True)
 
 
 # --------------------------------------------------------------------------- tap verification
@@ -184,8 +130,8 @@ def verify_tap(cfg, tap: str) -> dict:
     pi = probes.index("pleasantness")
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
-    model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    tok_ids = emotion_token_ids(processor)
+    model, processor = load_gemma_hf(cfg.get("model", "google/gemma-3-4b-it"))
+    tok_ids = first_content_token_ids(processor)
     sel = select_positive_images(cfg.get("split", "test"), 8)
     pos_ctx, neg_ctx = POSITIVE_CONTEXTS[0], NEGATIVE_CONTEXTS[2]
 
@@ -196,15 +142,19 @@ def verify_tap(cfg, tap: str) -> dict:
                 img = Image.open(r["image_path"]).convert("RGB")
             except (FileNotFoundError, OSError):
                 continue
-            enc_p = encode(processor, img, context_prompt(pos_ctx), model.device)
-            enc_n = encode(processor, img, context_prompt(neg_ctx), model.device)
+            enc_p = encode_image_prompt(processor, img, context_prompt(pos_ctx), model.device)
+            enc_n = encode_image_prompt(processor, img, context_prompt(neg_ctx), model.device)
             p_probe, _ = readout(model, enc_p, store, coef, inter, tok_ids)
             n_probe, _ = readout(model, enc_n, store, coef, inter, tok_ids)
             gaps.append(p_probe - n_probe)
             shim = _TokShim(processor.tokenizer)
-            sd = segment_positions(shim, enc_p["input_ids"].cpu())
-            sr = segment_positions(shim, enc_n["input_ids"].cpu())
-            _, ok = _aligned_groups(sd, sr)
+            sd = segment_prompt_positions(
+                shim.tokenizer, enc_p["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            sr = segment_prompt_positions(
+                shim.tokenizer, enc_n["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            _, ok = aligned_patch_groups(sd, sr)
             seg_ok += int(all(ok.get(g) for g in GROUPS) and sd["image_ok"] and sd["question_ok"])
             n += 1
 
@@ -246,8 +196,8 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
     coef, inter = probes.coef[pi], probes.intercept[pi]
 
     sel = select_positive_images(cfg.get("split", "test"), n_images)
-    model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    tok_ids = emotion_token_ids(processor)
+    model, processor = load_gemma_hf(cfg.get("model", "google/gemma-3-4b-it"))
+    tok_ids = first_content_token_ids(processor)
     shim = _TokShim(processor.tokenizer)
 
     rows, n_skip, seg_bad = [], 0, 0
@@ -258,16 +208,24 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
             except (FileNotFoundError, OSError):
                 n_skip += 1
                 continue
-            enc_d = encode(processor, img, context_prompt(pos_ctx), model.device)   # donor: +ctx
-            enc_r = encode(processor, img, context_prompt(neg_ctx), model.device)   # recipient: -ctx
-            seg_d = segment_positions(shim, enc_d["input_ids"].cpu())
-            seg_r = segment_positions(shim, enc_r["input_ids"].cpu())
-            groups, ok = _aligned_groups(seg_d, seg_r)
+            enc_d = encode_image_prompt(
+                processor, img, context_prompt(pos_ctx), model.device
+            )   # donor: +ctx
+            enc_r = encode_image_prompt(
+                processor, img, context_prompt(neg_ctx), model.device
+            )   # recipient: -ctx
+            seg_d = segment_prompt_positions(
+                shim.tokenizer, enc_d["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            seg_r = segment_prompt_positions(
+                shim.tokenizer, enc_r["input_ids"].cpu(), QUESTION, expected_image_tokens=256
+            )
+            groups, ok = aligned_patch_groups(seg_d, seg_r)
             if not all(ok.get(g) for g in GROUPS):
                 seg_bad += 1
                 continue
 
-            with resid_capture_full(model, patch_layers) as donor:
+            with capture_residuals(model, patch_layers) as donor:
                 pos_probe, pos_val = readout(model, enc_d, store, coef, inter, tok_ids)
                 donor = dict(donor)                      # detach from the context manager's store
             neg_probe, neg_val = readout(model, enc_r, store, coef, inter, tok_ids)
@@ -276,7 +234,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
                    "pos_val": pos_val, "neg_val": neg_val}
             for g in GROUPS:
                 di, ri = groups[g]
-                with patch_resid(model, donor, di, ri):
+                with patch_residuals(model, donor, di, ri):
                     p_probe, p_val = readout(model, enc_r, store, coef, inter, tok_ids)
                 row[f"patch_{g}_probe"] = p_probe
                 row[f"patch_{g}_val"] = p_val
@@ -284,7 +242,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
 
     df = pd.DataFrame(rows)
     df.to_parquet(STAGE_F_DIR / "patching_hf.parquet")
-    rec = _recovery(df)
+    rec = same_image_recovery(df, GROUPS)
 
     metrics = {
         "run": run_stamp(), "git": git_hash(), "stack": "raw_hf", "tap": tap,
@@ -292,7 +250,7 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
         "n_images": len(df), "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
         "donor_pos_context": pos_ctx, "recipient_neg_context": neg_ctx,
         "pos_idx": pj, "neg_idx": ni,
-        "recovery": rec, "verdict": _verdict(rec),
+        "recovery": rec, "verdict": same_image_verdict(rec),
         "note": ("raw-HF re-score of the bridge result. recovery = (patched-neg)/(pos-neg) at the "
                  f"L{crit} {tap} read-out; decoder-layer outputs (= resid_post) patched over "
                  f"{patch_layers}. Aggregation is imported from stage_f_patching so the two runs "

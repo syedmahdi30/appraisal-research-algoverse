@@ -19,9 +19,10 @@ fall back on.
 The 0--12 and 13--17 bands DO have a valid probe column. This module reports probe and valence side by
 side for every band, so a divergence between them localises the damage instead of just flagging it.
 
-Shared with the bridge version by import, never reimplemented: `_cross_groups`, `_recovery` (with its
-clustered bootstrap and shared resamples), `_metrics`, `_print`, `_probe_valid`. Aggregation must be
-identical for a re-score to mean anything. Model plumbing comes from `stage_f_patching_hf`.
+Shared with the bridge version through `experiments.shared`, never reimplemented: token groups,
+clustered-bootstrap recovery with shared resamples, metrics, printing, and probe-validity gating.
+Aggregation stays identical for a re-score to mean anything. Raw-HF model plumbing stays in the
+raw-HF modules.
 
     python -m src.experiments.stage_f_cross_patching_hf --layers 0-12
     python -m src.experiments.stage_f_cross_patching_hf --layers 13-17
@@ -35,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 
-import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
@@ -45,28 +45,33 @@ from ..data.conflict_contexts import context_prompt
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer_hf import CANDIDATE_TAPS, last_token_tap, load_hf
-from .stage_f_attribution import segment_positions
-from .stage_f_cross_patching import (CONTEXT_BANKS, GROUPS, _cross_groups, _metrics, _print,
-                                     _probe_valid, _recovery)
-from .stage_f_patching_hf import _TokShim, encode, patch_resid, readout, resid_capture_full
-from .stage_f_qwen import emotion_token_ids
+from .shared.hf_runtime import (
+    capture_residuals,
+    encode_image_prompt,
+    last_token_tap,
+    load_gemma_hf,
+    patch_residuals,
+)
+from .shared.patching import (CROSS_IMAGE_CONTEXT_BANKS, cross_image_groups,
+                              cross_image_recovery, probe_recovery_valid,
+                              segment_prompt_positions)
+from .shared.readouts import QUESTION, first_content_token_ids
+from .shared.reporting import (CROSS_IMAGE_GROUPS, cross_image_metrics,
+                               print_cross_image_report)
+from .shared.sampling import select_ranked_pairs
+from .stage_f_patching_hf import CANDIDATE_TAPS, readout
+
+GROUPS = CROSS_IMAGE_GROUPS
+CONTEXT_BANKS = CROSS_IMAGE_CONTEXT_BANKS
 
 PARQUET = STAGE_F_DIR / "cross_patching_hf.parquet"
 METRICS = STAGE_F_DIR / "cross_patching_hf_metrics.json"
 
 
 def select_pairs(split: str, n_pairs: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Rank-matched (highest-valence, lowest-valence) EMOTIC pairs, maximising the image-valence gap.
-
-    Mirrors `stage_f_conflict.select_extreme_images` + the bridge module's rank pairing, inlined so
-    this module has no path back to the bridge stack.
-    """
+    """Rank-matched extreme EMOTIC pairs, maximizing the image-valence gap."""
     df = load_emotic_split(split).reset_index(drop=True)
-    df = df[np.isfinite(df["valence"].to_numpy(dtype=float))].sort_values("valence")
-    pos = df.tail(n_pairs).sort_values("valence", ascending=False).reset_index(drop=True)
-    neg = df.head(n_pairs).sort_values("valence").reset_index(drop=True)
-    return pos, neg
+    return select_ranked_pairs(df, n_pairs)
 
 
 def run(config_path: str, limit_override: int | None = None, layers_override: str | None = None,
@@ -94,10 +99,9 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
     pos, neg = select_pairs(cfg.get("split", "test"), n_pairs)
     n_pairs = min(n_pairs, len(pos), len(neg))
 
-    model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    tok_ids = emotion_token_ids(processor)
-    shim = _TokShim(processor.tokenizer)
-    if not _probe_valid(patch_layers, crit):
+    model, processor = load_gemma_hf(cfg.get("model", "google/gemma-3-4b-it"))
+    tok_ids = first_content_token_ids(processor)
+    if not probe_recovery_valid(patch_layers, crit):
         print(f"  NOTE: band {patch_layers[0]}-{patch_layers[-1]} reaches the L{crit} probe tap, so the "
               f"probe column is invariant-by-construction. This band is scored on BEHAVIOURAL VALENCE "
               f"— the readout the bridge corrupts, and the reason this re-run exists.")
@@ -111,18 +115,25 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
             except (FileNotFoundError, OSError):
                 n_skip += 1
                 continue
-            enc_d = encode(processor, dimg, context_prompt(ctx), model.device)   # donor  = POSITIVE img
-            enc_r = encode(processor, rimg, context_prompt(ctx), model.device)   # recip. = NEGATIVE img
+            enc_d = encode_image_prompt(
+                processor, dimg, context_prompt(ctx), model.device
+            )   # donor  = POSITIVE img
+            enc_r = encode_image_prompt(
+                processor, rimg, context_prompt(ctx), model.device
+            )   # recip. = NEGATIVE img
             if enc_d["input_ids"].shape[-1] != enc_r["input_ids"].shape[-1]:
                 seg_bad += 1                       # identical text ⇒ should never differ
                 continue
-            seg = segment_positions(shim, enc_r["input_ids"].cpu())   # identical for both runs
-            groups, ok = _cross_groups(seg)
+            seg = segment_prompt_positions(
+                processor.tokenizer, enc_r["input_ids"].cpu(), QUESTION,
+                expected_image_tokens=256,
+            )                                                       # identical for both runs
+            groups, ok = cross_image_groups(seg)
             if not all(ok.get(g) for g in GROUPS):
                 seg_bad += 1
                 continue
 
-            with resid_capture_full(model, patch_layers) as cap:
+            with capture_residuals(model, patch_layers) as cap:
                 pos_probe, pos_val = readout(model, enc_d, store, coef, inter, tok_ids)
                 donor = dict(cap)
             neg_probe, neg_val = readout(model, enc_r, store, coef, inter, tok_ids)
@@ -134,7 +145,9 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
                    "pos_val": pos_val, "neg_val": neg_val}
             for g in GROUPS:
                 idx = groups[g]
-                with patch_resid(model, donor, idx, idx):   # identical input_ids ⇒ donor idx == recip idx
+                with patch_residuals(
+                    model, donor, idx, idx
+                ):   # identical input_ids ⇒ donor idx == recip idx
                     p_probe, p_val = readout(model, enc_r, store, coef, inter, tok_ids)
                 row[f"patch_{g}_probe"] = p_probe
                 row[f"patch_{g}_val"] = p_val
@@ -142,12 +155,19 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
 
     df = pd.DataFrame(rows)
     df.to_parquet(PARQUET)
-    rec = _recovery(df)
-    metrics = _metrics(rec, patch_layers, crit, ctx, context_polarity, len(rows), n_skip, seg_bad)
+    rec = cross_image_recovery(df, GROUPS)
+    metrics = cross_image_metrics(
+        rec, patch_layers, crit, ctx, context_polarity, len(rows), n_skip, seg_bad,
+        run_stamp=run_stamp(), git_hash=git_hash(),
+    )
     metrics["stack"] = "raw_hf"
     metrics["tap"] = tap
     save_json(metrics, METRICS)
-    _print(rec, metrics, patch_layers)
+    print_cross_image_report(
+        rec, metrics, patch_layers,
+        STAGE_F_DIR / "cross_patching.parquet",
+        STAGE_F_DIR / "cross_patching_metrics.json",
+    )
     print(f"  (raw HF re-score; data -> {PARQUET}   metrics -> {METRICS})")
     return metrics
 
@@ -164,13 +184,20 @@ def reanalyze(config_path: str, layers_override: str | None = None) -> dict:
         patch_layers = list(range(a, b + 1))
     else:
         patch_layers = old.get("patch_layers", []) or [0, 0]
-    rec = _recovery(df)
-    metrics = _metrics(rec, patch_layers, old.get("critical_layer", 18), old.get("context", ""),
-                       old.get("context_polarity", "neutral"), int(len(df)),
-                       old.get("n_skipped", 0), old.get("n_segmentation_dropped", 0))
+    rec = cross_image_recovery(df, GROUPS)
+    metrics = cross_image_metrics(
+        rec, patch_layers, old.get("critical_layer", 18), old.get("context", ""),
+        old.get("context_polarity", "neutral"), int(len(df)),
+        old.get("n_skipped", 0), old.get("n_segmentation_dropped", 0),
+        run_stamp=run_stamp(), git_hash=git_hash(),
+    )
     metrics["stack"] = "raw_hf"
     save_json(metrics, METRICS)
-    _print(rec, metrics, patch_layers)
+    print_cross_image_report(
+        rec, metrics, patch_layers,
+        STAGE_F_DIR / "cross_patching.parquet",
+        STAGE_F_DIR / "cross_patching_metrics.json",
+    )
     return metrics
 
 

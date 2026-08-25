@@ -46,8 +46,8 @@ from ..data.conflict_contexts import (NEGATIVE_CONTEXTS, NEUTRAL_CONTEXTS, POSIT
                                       TEXT_CODE, context_prompt)
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, load_probes, run_stamp, save_json
-from .stage_c_transfer_hf import find_lm_layers, load_hf
-from .stage_f_patching_hf import encode, select_positive_images
+from .shared.hf_runtime import encode_image_prompt, find_language_layers, load_gemma_hf
+from .stage_f_patching_hf import select_positive_images
 
 CONDS = ("neutral", "negative", "positive")
 
@@ -60,7 +60,7 @@ def dual_lens(model, tap: str = "post_attention_layernorm"):
     position, and caching every layer at full sequence length for 840 forwards would be pointless
     memory traffic.
     """
-    layers = find_lm_layers(model, verbose=False)
+    layers = find_language_layers(model, verbose=False)
     resid: dict[int, np.ndarray] = {}
     attn: dict[int, np.ndarray] = {}
     handles = []
@@ -100,8 +100,8 @@ def run(config_path: str, limit_override: int | None = None,
                   + [("positive", f"p{i}", c) for i, c in enumerate(POSITIVE_CONTEXTS)])
 
     sel = select_positive_images(cfg.get("split", "test"), n_images)
-    model, processor = load_hf(cfg.get("model", "google/gemma-3-4b-it"))
-    n_layers = len(find_lm_layers(model, verbose=False))
+    model, processor = load_gemma_hf(cfg.get("model", "google/gemma-3-4b-it"))
+    n_layers = len(find_language_layers(model, verbose=False))
 
     rows, n_skip, n_ok = [], 0, 0
     with dual_lens(model, tap) as (resid, attn):
@@ -112,7 +112,7 @@ def run(config_path: str, limit_override: int | None = None,
                 n_skip += 1
                 continue
             for cond, cid, sentence in conditions:
-                enc = encode(processor, img, context_prompt(sentence), model.device)
+                enc = encode_image_prompt(processor, img, context_prompt(sentence), model.device)
                 with torch.no_grad():
                     model(**enc)
                 for L in range(n_layers):

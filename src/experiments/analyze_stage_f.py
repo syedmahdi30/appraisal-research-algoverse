@@ -25,120 +25,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ..data.labels import EMOTION_LABELS
 from ..paths import FIGURES_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, run_stamp, save_json
+from .shared.reporting import (
+    NEGATIVE_LABELS as _NEGATIVE,
+    POSITIVE_LABELS as _POSITIVE,
+    arbitration as _arbitration,
+    asymmetry_vs_floor as _asymmetry_vs_floor,
+    cell_means as _cell_means,
+    flip_override as _flip_override,
+    minimal_pair_asymmetry as _minimal_pair_asymmetry,
+)
 
 STAGE_D_SLOPE = 0.33  # Stage D pleasantness single-direction Δvalence slope (reference)
-
-# Valence categories of the argmax emotion (copied from stage_a_steering to keep this analyzer
-# import-light — it also runs in the Qwen venv, which lacks the bridge / crowd-enVENT stack).
-_POSITIVE = ("joy", "pride", "relief", "trust")
-_NEGATIVE = ("anger", "boredom", "disgust", "fear", "guilt", "sadness", "shame")
-
-
-def _flip_override(df, n_boot: int = 2000, seed: int = 0) -> dict:
-    """Cross-model-comparable OVERRIDE rate from the argmax emotion's valence category.
-
-    Calibration-free (uses WHICH emotion the model picks, not the continuous score — Gemma's valence
-    is negatively skewed and Qwen's saturates, so a raw sign threshold is not comparable). A conflict
-    forward is an OVERRIDE when the context wins the valence category against the image:
-      * positive image + negative context → argmax emotion is NEGATIVE-valence
-      * negative image + positive context → argmax emotion is POSITIVE-valence
-    Aggregated per image (mean over the context bank) and bootstrapped over images (clustered CI).
-    Negativity dominance = neg-context override rate > pos-context override rate.
-    """
-    lp = [f"lp_{w}" for w in EMOTION_LABELS]
-    if not set(lp).issubset(df.columns):
-        return {}
-    cat = {w: ("pos" if w in _POSITIVE else "neg" if w in _NEGATIVE else "other") for w in EMOTION_LABELS}
-    d = df.copy()
-    d["_cat"] = [cat[EMOTION_LABELS[i]] for i in d[lp].to_numpy().argmax(axis=1)]
-
-    def per_image(group, cond, win):
-        g = d[(d["image_group"] == group) & (d["condition"] == cond)]
-        return g.groupby("image_path")["_cat"].apply(lambda s: float((s == win).mean())).to_numpy()
-
-    pn = per_image("positive", "negative", "neg")   # neg ctx overrides a positive image
-    np_ = per_image("negative", "positive", "pos")  # pos ctx overrides a negative image
-    if not len(pn) or not len(np_):
-        return {}
-    neg_ov, pos_ov = float(pn.mean()), float(np_.mean())
-    rng = np.random.default_rng(seed)
-    boot = np.array([pn[rng.integers(0, len(pn), len(pn))].mean()
-                     - np_[rng.integers(0, len(np_), len(np_))].mean() for _ in range(n_boot)])
-    ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
-    return {"neg_ctx_overrides_pos_img": neg_ov, "pos_ctx_overrides_neg_img": pos_ov,
-            "dominance_gap": neg_ov - pos_ov, "dominance_gap_ci95": ci,
-            "n_pos_images": int(len(pn)), "n_neg_images": int(len(np_))}
-
-
-def _minimal_pair_asymmetry(df, n_boot: int = 2000, seed: int = 0) -> dict:
-    """Within-item, within-EVENT valence asymmetry for the minimal-pair bank (context_id `mp{i}`).
-
-    The minimal-pair control holds each event constant and flips only the valence word, so for a given
-    image a pair's negative and positive members differ ONLY in valence. This is the tightest test of
-    negativity dominance available: for each image and each pair, compare the negative member's effect
-    to the positive member's effect vs that image's own NEUTRAL baseline —
-        Δneg = v(neg member) − v(neutral),  Δpos = v(pos member) − v(neutral),  d = |Δneg| − |Δpos|.
-    Reported on the positive-image group (the clean cell, symmetric head-room). The contrast is PAIRED
-    (same photo, same event), so we test it with a Wilcoxon signed-rank over images and a clustered
-    bootstrap over images — stronger than the across-item aggregate because event and image are held
-    fixed. Returns {} for non-minimal banks (no `mp*` context ids).
-    """
-    if "context_id" not in df.columns:
-        return {}
-    pairs = sorted({c for c in df["context_id"].dropna().unique()
-                    if isinstance(c, str) and c.startswith("mp")})
-    if not pairs:
-        return {}
-    try:  # short "won ↔ lost" labels; optional (analyzer also runs in the probe-free Qwen venv)
-        from ..data.conflict_contexts import MINIMAL_PAIRS
-        swap = {f"mp{i}": s for i, (_, _, s) in enumerate(MINIMAL_PAIRS)}
-    except Exception:
-        swap = {}
-
-    g = df[df["image_group"] == "positive"]
-    neu = g[g["condition"] == "neutral"].groupby("image_path")["valence"].mean()
-    if neu.empty:
-        return {}
-
-    per_pair, img_asym = {}, {}   # img_asym: image_path -> [d over pairs]
-    for cid in pairs:
-        sub = g[g["context_id"] == cid]
-        posv = sub[sub["condition"] == "positive"].groupby("image_path")["valence"].mean()
-        negv = sub[sub["condition"] == "negative"].groupby("image_path")["valence"].mean()
-        dneg_l, dpos_l = [], []
-        for img in neu.index:
-            if img in posv.index and img in negv.index:
-                dn, dp = float(negv[img] - neu[img]), float(posv[img] - neu[img])
-                dneg_l.append(dn); dpos_l.append(dp)
-                img_asym.setdefault(img, []).append(abs(dn) - abs(dp))
-        if dneg_l:
-            mn, mp = float(np.mean(dneg_l)), float(np.mean(dpos_l))
-            per_pair[cid] = {"swap": swap.get(cid, ""), "neg_effect": mn, "pos_effect": mp,
-                             "asymmetry": abs(mn) - abs(mp),
-                             "ratio": abs(mn) / abs(mp) if mp != 0 else float("inf"),
-                             "n_images": len(dneg_l)}
-    imgs = sorted(img_asym)
-    per_img = np.array([np.mean(img_asym[i]) for i in imgs])
-    if not len(per_img):
-        return {}
-    rng = np.random.default_rng(seed)
-    boot = np.array([per_img[rng.integers(0, len(per_img), len(per_img))].mean()
-                     for _ in range(n_boot)])
-    ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
-    wp = None
-    try:
-        from scipy.stats import wilcoxon
-        if np.any(per_img != 0):
-            wp = float(wilcoxon(per_img, alternative="greater").pvalue)
-    except Exception:
-        pass
-    return {"image_group": "positive", "n_pairs": len(per_pair), "n_images": len(imgs),
-            "paired_asymmetry": float(per_img.mean()), "ci95": ci, "wilcoxon_p_greater": wp,
-            "per_pair": per_pair}
-
 
 def _z(x):
     x = np.asarray(x, dtype=float)
@@ -193,137 +92,6 @@ def _condition_breakdown(df) -> dict:
                     "probe": float(cell["probe_readout"].mean()),
                     "context": str(cell["context"].iloc[0])}
     return out
-
-
-def _cell_means(df, value):
-    """2x2 (image_group x context polarity) means of `value`, plus no-context/neutral references."""
-    out = {}
-    for grp in ("positive", "negative"):
-        for cond in ("none", "positive", "negative", "neutral"):
-            cell = df[(df["image_group"] == grp) & (df["condition"] == cond)][value]
-            if len(cell):
-                out[f"{grp}_img/{cond}_ctx"] = float(cell.mean())
-    return out
-
-
-def _asymmetry_vs_floor(df, n_boot: int = 2000, seed: int = 0) -> dict:
-    """Is the positive-image + negative-context valence 'drop' a real negativity asymmetry, or just
-    ceiling/floor geometry?
-
-    Two competing accounts of the celebrated drop, with a sharp differential prediction:
-      * CEILING/FLOOR — positive images sit near the valence ceiling, so a negative context has the
-        most ROOM to pull them down; negative images sit near the floor, so a positive context has the
-        most room to pull them up. Geometry predicts the two INCONGRUENT effects are equal in
-        magnitude: |Δ(pos-img, neg-ctx)| ≈ |Δ(neg-img, pos-ctx)|, and the CONGRUENT (same-polarity)
-        contexts barely move (already saturated).
-      * NEGATIVITY ASYMMETRY — negative context wins BEYOND geometry: |drop| ≫ |rise|.
-
-    All effects are per-image, vs that image's own NEUTRAL-context valence (the within-structure
-    baseline; no-context is excluded upstream), averaged over the context bank. We report:
-      - drop  = mean incongruent effect for positive images (negative context)   [expected < 0]
-      - rise  = mean incongruent effect for negative images (positive context)   [expected > 0]
-      - asymmetry_index = |drop| − |rise| with a bootstrap 95% CI over images (0 ⇒ symmetric geometry)
-      - a Mann–Whitney test on the per-image |incongruent effect| between the two groups
-      - a HEADROOM-NORMALIZED pull |effect| / (distance from the image's neutral valence to the
-        empirical valence bound it is moving toward): if geometry alone drives the drop, the two
-        normalized pulls match; a residual gap is the part not explained by the floor.
-    """
-    d = df.copy()
-    # per-image block id: the base pass writes each image as [none, <contexts...>], so cumsum on the
-    # `none` row uniquely labels each image (EMOTIC image_path recurs → cannot key on it).
-    d["_img"] = (d["condition"] == "none").cumsum()
-    # empirical valence bounds (robust) define the ceiling/floor the effects move toward.
-    v_lo, v_hi = (float(x) for x in np.percentile(d["valence"].to_numpy(dtype=float), [5, 95]))
-
-    def per_image(group, incong_cond, cong_cond):
-        """One row per image in `group`: incongruent- and congruent-context effect vs its neutral."""
-        recs = []
-        for _, blk in d[d["image_group"] == group].groupby("_img"):
-            neu = blk.loc[blk["condition"] == "neutral", "valence"]
-            inc = blk.loc[blk["condition"] == incong_cond, "valence"]
-            con = blk.loc[blk["condition"] == cong_cond, "valence"]
-            if len(neu) and len(inc):
-                recs.append({"neutral": float(neu.mean()),
-                             "incong": float(inc.mean() - neu.mean()),
-                             "cong": float(con.mean() - neu.mean()) if len(con) else np.nan})
-        return pd.DataFrame(recs)
-
-    pos = per_image("positive", "negative", "positive")  # drop (incong) + ceiling-saturating cong
-    neg = per_image("negative", "positive", "negative")  # rise (incong) + floor-saturating cong
-    if pos.empty or neg.empty:
-        return {"note": "insufficient positive/negative image cells to test asymmetry"}
-
-    drop = float(pos["incong"].mean())   # ≤ 0
-    rise = float(neg["incong"].mean())   # ≥ 0
-    asym_index = abs(drop) - abs(rise)
-
-    rng = np.random.default_rng(seed)
-    pi, ni = pos["incong"].to_numpy(), neg["incong"].to_numpy()
-    boot = np.empty(n_boot)
-    for k in range(n_boot):
-        bp = pi[rng.integers(0, len(pi), len(pi))]
-        bn = ni[rng.integers(0, len(ni), len(ni))]
-        boot[k] = abs(bp.mean()) - abs(bn.mean())
-    ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
-
-    from scipy.stats import mannwhitneyu
-    mw = mannwhitneyu(np.abs(pi), np.abs(ni), alternative="greater")  # H1: |drop| > |rise|
-
-    # headroom-normalized pull: |effect| / room toward the bound it moves to.
-    pos_room = (pos["neutral"] - v_lo).clip(lower=1e-6)
-    neg_room = (v_hi - neg["neutral"]).clip(lower=1e-6)
-    pull_drop = float((pos["incong"].abs() / pos_room).mean())
-    pull_rise = float((neg["incong"].abs() / neg_room).mean())
-
-    # verdict: symmetric (geometry) if the CI on |drop|−|rise| straddles 0.
-    symmetric = ci[0] <= 0 <= ci[1]
-    if symmetric:
-        interp = ("CEILING/FLOOR — the drop and the mirror rise are statistically indistinguishable "
-                  "in magnitude (asymmetry CI straddles 0); the 'sharp drop' is saturation geometry, "
-                  "not a negativity-specific effect.")
-    elif asym_index > 0:
-        interp = (f"RESIDUAL NEGATIVITY ASYMMETRY — the drop exceeds the geometry-mirrored rise by "
-                  f"{asym_index:+.3f} valence (CI {ci[0]:+.3f},{ci[1]:+.3f}); negative context moves "
-                  f"valence more than the floor alone allows.")
-    else:
-        interp = (f"REVERSE ASYMMETRY — the positive-context rise exceeds the drop by "
-                  f"{-asym_index:+.3f}; if anything positive context is stronger here.")
-
-    return {
-        "drop_pos_img_neg_ctx": drop, "rise_neg_img_pos_ctx": rise,
-        "congruent_pos_img_pos_ctx": float(pos["cong"].mean()),
-        "congruent_neg_img_neg_ctx": float(neg["cong"].mean()),
-        "asymmetry_index": asym_index, "asymmetry_ci95": ci, "symmetric": bool(symmetric),
-        "mannwhitney_u": float(mw.statistic), "mannwhitney_p_greater": float(mw.pvalue),
-        "valence_bounds_p5_p95": [v_lo, v_hi],
-        "headroom_norm_pull_drop": pull_drop, "headroom_norm_pull_rise": pull_rise,
-        "headroom_norm_asymmetry": pull_drop - pull_rise,
-        "n_pos_images": int(len(pos)), "n_neg_images": int(len(neg)),
-        "interpretation": interp,
-    }
-
-
-def _arbitration(df, betas):
-    """Mean Δ (valence, probe) vs β on incongruent cells, relative to each cell's β=0 baseline.
-
-    Aligns each steered row to its own baseline by CELL, not image_path: EMOTIC is per-person, so
-    the same image_path recurs and cannot key the baseline. Rows are written per cell as
-    [β=0, then the betas], so `(beta==0).cumsum()` labels each cell uniquely.
-    """
-    df = df.copy()
-    df["_cell"] = (df["beta"] == 0).cumsum()
-    base = df[df["beta"] == 0].set_index("_cell")
-    res = {"valence": {}, "probe": {}}
-    for b in betas:
-        sub = df[df["beta"] == b]
-        dv = sub["valence"].to_numpy() - base.loc[sub["_cell"], "valence"].to_numpy()
-        dp = sub["probe_readout"].to_numpy() - base.loc[sub["_cell"], "probe_readout"].to_numpy()
-        res["valence"][int(b)] = float(np.mean(dv))
-        res["probe"][int(b)] = float(np.mean(dp))
-    xs = sorted(res["valence"])
-    res["valence_slope"] = float(np.polyfit(xs, [res["valence"][b] for b in xs], 1)[0])
-    res["probe_slope"] = float(np.polyfit(xs, [res["probe"][b] for b in xs], 1)[0])
-    return res
 
 
 def run(config_path: str | None = None, base_pq=None) -> dict:
