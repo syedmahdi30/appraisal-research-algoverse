@@ -18,7 +18,16 @@ def user_text(context_sentence: str | None) -> str:
 
 
 def first_content_token_ids(processor) -> dict[str, int]:
-    """Return each label's first non-whitespace token, rejecting collapsed vocabularies."""
+    """Return each label's first non-whitespace token, rejecting collapsed vocabularies.
+
+    The skip-to-non-whitespace step is load-bearing, not defensive tidying. Naively taking
+    `encode(" " + label)[0]` breaks on LLaMA/SentencePiece tokenizers (e.g. LLaVA-1.5): they emit
+    the leading space as a STANDALONE '▁' token, so `[0]` returns that same space id for EVERY
+    label → all 13 collapse to one id → a uniform softmax → a constant, degenerate read-out, with
+    valence pinned at (4−7)/13 = −0.231. Taking the first token that decodes to non-whitespace is
+    unchanged for BPE tokenizers (Gemma/Qwen already carry the word in their first token). The
+    distinctness guard below makes a collapse fail loudly instead of silently producing −0.231.
+    """
     tokenizer = processor.tokenizer
     token_ids = {}
     for label in EMOTION_LABELS:

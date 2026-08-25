@@ -20,7 +20,13 @@ def run_key_suffix(style: str = "chat", bank: str = "full") -> str:
 
 def token_budget_key(model_name: str, max_side: int | None,
                      style: str = "chat", bank: str = "full") -> str:
-    """Historical model, token-budget, style, and bank artifact key."""
+    """Historical model, token-budget, style, and bank artifact key.
+
+    Every component is in the key so that runs cannot collide. `bank` in particular: a minimal-pair
+    run and a full-bank run of the same model are different experiments, and a shared path would
+    silently overwrite one with the other — the failure mode that destroyed three published numbers
+    before per-run paths were introduced. Do not shorten this key to "simplify" a filename.
+    """
     key = model_key(model_name)
     if max_side:
         key = f"{key}_px{max_side}"
