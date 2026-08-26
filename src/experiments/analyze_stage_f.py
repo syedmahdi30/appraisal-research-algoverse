@@ -255,26 +255,49 @@ def _plot(cells, arb, fig_name: str = "stage_f_conflict.png"):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    ncol = 3 if arb else 2
-    fig, axes = plt.subplots(1, ncol, figsize=(4.2 * ncol, 4.0), squeeze=False)
-    for ax, ro in zip(axes[0], ("probe_readout", "valence")):
-        groups = ("positive", "negative")
-        conds = ("positive", "negative")
+    groups = ("positive", "negative")
+    conds = ("positive", "negative")
+
+    # Only models whose internal states the probe was fit on carry a probe readout;
+    # for the others the column is all-NaN by design (see stage_f_llava.py). Plotting
+    # it anyway produced an empty axes box in the figures that shipped to the paper.
+    panel_labels = {"probe_readout": "probe readout (a.u.)",
+                    "valence": "behavioral valence"}
+    panels = [ro for ro in ("probe_readout", "valence")
+              if any(np.isfinite(cells.get(ro, {}).get(f"{g}_img/{c}_ctx", np.nan))
+                     for g in groups for c in conds)]
+    if not panels:
+        raise ValueError("no readout has finite cell means; nothing to plot")
+
+    ncol = len(panels) + (1 if arb else 0)
+    # Widen past the per-panel size when few panels survive, so the suptitle is not
+    # clipped on a single-panel (no-probe) model.
+    fig, axes = plt.subplots(1, ncol, figsize=(max(4.2 * ncol, 6.4), 4.0), squeeze=False)
+    for ax, ro in zip(axes[0], panels):
         x = np.arange(len(groups))
         for j, cond in enumerate(conds):
             vals = [cells[ro].get(f"{g}_img/{cond}_ctx", np.nan) for g in groups]
-            ax.bar(x + (j - 0.5) * 0.35, vals, 0.35, label=f"{cond} ctx")
-        ax.set_xticks(x); ax.set_xticklabels([f"{g} img" for g in groups])
-        ax.set_title(ro); ax.legend(fontsize=7); ax.axhline(0, color="gray", lw=0.5)
+            ax.bar(x + (j - 0.5) * 0.35, vals, 0.35, label=f"{cond} context")
+        ax.set_xticks(x); ax.set_xticklabels([f"{g} image" for g in groups])
+        # With one surviving panel the title would just repeat the y-label.
+        if len(panels) > 1:
+            ax.set_title(panel_labels[ro])
+        ax.set_ylabel(panel_labels[ro])
+        ax.legend(fontsize=7); ax.axhline(0, color="gray", lw=0.5)
     if arb:
-        ax = axes[0][2]
+        ax = axes[0][len(panels)]
         xs = sorted(arb["valence"])
         ax.plot(xs, [arb["valence"][b] for b in xs], "-o", label="behavioral valence")
         ax.plot(xs, [arb["probe"][b] for b in xs], "k:", label="probe (upstream ~0)")
         ax.axhline(0, color="gray", lw=0.5)
         ax.set_title(f"arbitration (slope {arb['valence_slope']:+.2f})")
         ax.set_xlabel("β  (pleasantness Δμ)"); ax.set_ylabel("Δ vs β=0"); ax.legend(fontsize=7)
-    fig.suptitle("Stage F — modality conflict: image vs text cues, and steering arbitration")
+    # No internal stage name here: these figures ship in the paper, where the LaTeX
+    # caption carries the description. Only claim arbitration when it was measured.
+    title = "Modality conflict: image vs. context valence"
+    if arb:
+        title += ", with steering arbitration"
+    fig.suptitle(title, fontsize=11)
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIGURES_DIR / fig_name, dpi=130)
