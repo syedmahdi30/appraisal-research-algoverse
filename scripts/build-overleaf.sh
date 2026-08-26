@@ -32,4 +32,17 @@ for pair in "long:vlm4rwd:8" "short:interp4discovery:5"; do
     fail=1
   fi
 done
+
+# Re-zip only after every venue verified. The zips are what actually gets
+# uploaded, so leaving them behind a regenerated tree would ship stale source.
+if [ "$fail" -eq 0 ]; then
+  for dir in vlm4rwd interp4discovery; do
+    rm -f "overleaf/$dir.zip"
+    ( cd "overleaf/$dir" && zip -qr "../$dir.zip" . -x '.*' )
+    printf '  %-18s re-zipped -> overleaf/%s.zip\n' "$dir" "$dir"
+  done
+else
+  echo "  verification failed - zips left untouched"
+fi
+
 exit $fail
