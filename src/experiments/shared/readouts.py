@@ -11,6 +11,19 @@ POSITIVE = ("joy", "pride", "relief", "trust")
 NEGATIVE = ("anger", "boredom", "disgust", "fear", "guilt", "sadness", "shame")
 
 
+def processor_pad_token_id(processor) -> int:
+    """Return a usable pad id for teacher-forced label batching."""
+    tokenizer = processor.tokenizer
+    pad_token_id = (
+        tokenizer.pad_token_id
+        if tokenizer.pad_token_id is not None
+        else tokenizer.eos_token_id
+    )
+    if pad_token_id is None:
+        raise ValueError("tokenizer defines neither pad_token_id nor eos_token_id")
+    return int(pad_token_id)
+
+
 def user_text(context_sentence: str | None) -> str:
     """Build the stable user-visible prompt text for an optional context."""
     context = "" if not context_sentence else f"Context: {context_sentence} "

@@ -11,6 +11,7 @@ from src.experiments.shared.readouts import (
     closed_vocab_valence,
     first_content_token_ids,
     model_readout,
+    processor_pad_token_id,
     user_text,
 )
 from src.experiments.shared.sampling import select_extreme_rows, select_ranked_pairs
@@ -41,6 +42,22 @@ def test_readout_contract_and_prompt_text():
     logprobs = closed_vocab_logprobs(logits, ids)
     assert sum(math.exp(value) for value in logprobs.values()) == pytest.approx(1.0)
     assert closed_vocab_valence(logits, ids) > 0
+
+
+def test_processor_pad_token_id_uses_pad_then_eos_and_rejects_missing_ids():
+    class Tokenizer:
+        pad_token_id = 7
+        eos_token_id = 9
+
+    class Processor:
+        tokenizer = Tokenizer()
+
+    assert processor_pad_token_id(Processor()) == 7
+    Processor.tokenizer.pad_token_id = None
+    assert processor_pad_token_id(Processor()) == 9
+    Processor.tokenizer.eos_token_id = None
+    with pytest.raises(ValueError, match="neither pad_token_id nor eos_token_id"):
+        processor_pad_token_id(Processor())
 
 
 def test_extreme_selection_preserves_published_order_and_pairing():

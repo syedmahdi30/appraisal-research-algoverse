@@ -84,11 +84,24 @@ def capture_residuals(model, layers):
 
 
 @contextmanager
-def patch_residuals(model, donor: dict[int, torch.Tensor], donor_indices, recipient_indices):
-    """Patch mapped residual positions at every decoder layer present in ``donor``."""
+def patch_residuals(
+    model,
+    donor: dict[int, torch.Tensor],
+    donor_indices,
+    recipient_indices,
+    *,
+    patch_all_batch_rows: bool = False,
+):
+    """Patch mapped residual positions at each captured decoder layer.
+
+    The established single-example runners patch batch row zero. Teacher-forced label scoring opts
+    into broadcasting because each batch row is a candidate continuation of the same prompt.
+    """
     language_layers = find_language_layers(model, verbose=False)
     donor_index = torch.as_tensor(np.asarray(donor_indices), dtype=torch.long)
     recipient_index = torch.as_tensor(np.asarray(recipient_indices), dtype=torch.long)
+    if len(donor_index) != len(recipient_index):
+        raise ValueError("donor and recipient patch indices must have equal length")
     handles = []
 
     def make_hook(layer_index):
@@ -98,7 +111,8 @@ def patch_residuals(model, donor: dict[int, torch.Tensor], donor_indices, recipi
         def hook(_module, _inputs, output):
             is_tuple = isinstance(output, tuple)
             hidden = (output[0] if is_tuple else output).clone()
-            hidden[0, recipient_index.to(hidden.device), :] = values.to(
+            batch_rows = slice(None) if patch_all_batch_rows else 0
+            hidden[batch_rows, recipient_index.to(hidden.device), :] = values.to(
                 device=hidden.device, dtype=hidden.dtype
             )
             return (hidden,) + tuple(output[1:]) if is_tuple else hidden

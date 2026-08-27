@@ -204,6 +204,37 @@ def same_image_recovery(df, groups) -> dict:
     return out
 
 
+def behavioral_same_image_recovery(df, groups, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Aggregate behavioral recovery with paired bootstrap resampling over image rows."""
+    if df.empty:
+        return {"pos_val": float("nan"), "neg_val": float("nan")}
+    positive = df["pos_val"].to_numpy(dtype=float)
+    negative = df["neg_val"].to_numpy(dtype=float)
+    out = {"pos_val": float(positive.mean()), "neg_val": float(negative.mean())}
+    denominator = out["pos_val"] - out["neg_val"]
+    rng = np.random.default_rng(seed)
+    bootstrap_indices = rng.integers(0, len(df), (n_boot, len(df))) if n_boot else []
+    for group in groups:
+        patched = df[f"patch_{group}_val"].to_numpy(dtype=float)
+        estimate = (
+            float((patched.mean() - out["neg_val"]) / denominator)
+            if denominator else float("nan")
+        )
+        bootstrap_values = []
+        for indices in bootstrap_indices:
+            sampled_denominator = positive[indices].mean() - negative[indices].mean()
+            if sampled_denominator:
+                bootstrap_values.append(
+                    (patched[indices].mean() - negative[indices].mean()) / sampled_denominator
+                )
+        ci = (
+            [float(value) for value in np.percentile(bootstrap_values, [2.5, 97.5])]
+            if bootstrap_values else [float("nan"), float("nan")]
+        )
+        out[group] = {"val": estimate, "ci95": ci}
+    return out
+
+
 def _bootstrap_recovery(patch, positive, negative, bootstrap_indices) -> tuple[float, list]:
     numerator, denominator = patch - negative, positive - negative
     mean_denominator = denominator.mean()
