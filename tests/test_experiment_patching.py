@@ -10,6 +10,7 @@ import torch
 from src.data.labels import EMOTION_LABELS
 from src.experiments.shared.patching import (
     aligned_patch_groups,
+    behavioral_same_image_recovery,
     bridge_patch_hook,
     cross_image_groups,
     cross_image_recovery,
@@ -19,6 +20,7 @@ from src.experiments.shared.patching import (
     segment_prompt_positions,
     stash_activation,
 )
+from src.experiments.shared.hf_runtime import patch_residuals
 from src.experiments.shared.readouts import bridge_probe_and_logits, bridge_probe_readout
 from src.experiments.shared.reporting import (
     cross_image_metrics,
@@ -179,6 +181,60 @@ def test_same_image_recovery_preserves_schema_and_group_order():
     assert list(recovery) == ["pos_probe", "neg_probe", "pos_val", "neg_val", "second", "first"]
     assert recovery["second"] == {"probe": pytest.approx(0.5), "val": pytest.approx(0.5)}
     assert recovery["first"] == {"probe": pytest.approx(0.25), "val": pytest.approx(0.25)}
+
+
+def test_behavioral_recovery_bootstraps_paired_image_rows():
+    """Dropping baseline pairing would give the wrong recovery under heterogeneous image gaps."""
+    frame = pd.DataFrame({
+        "pos_val": [1.0, 3.0],
+        "neg_val": [0.0, 1.0],
+        "patch_image_val": [0.5, 2.0],
+        "patch_text_all_val": [1.0, 3.0],
+    })
+
+    recovery = behavioral_same_image_recovery(
+        frame, ("image", "text_all"), n_boot=20, seed=7
+    )
+
+    assert recovery["pos_val"] == 2.0
+    assert recovery["neg_val"] == 0.5
+    assert recovery["image"]["val"] == pytest.approx(0.5)
+    assert recovery["text_all"]["val"] == pytest.approx(1.0)
+    assert len(recovery["image"]["ci95"]) == 2
+
+
+class _LanguageModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layers = torch.nn.ModuleList([torch.nn.Identity()])
+
+
+class _TinyVLM(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.language_model = _LanguageModel()
+
+
+def test_raw_hf_patch_broadcasts_donor_prompt_state_to_every_label_batch_row():
+    """Patching only row zero would leave 12 of 13 teacher-forced labels unpatched."""
+    model = _TinyVLM()
+    donor = {0: torch.tensor([
+        [10.0, 11.0], [20.0, 21.0], [30.0, 31.0], [40.0, 41.0]
+    ])}
+    recipient = torch.zeros((3, 5, 2))
+
+    with patch_residuals(
+        model,
+        donor,
+        donor_indices=[1, 3],
+        recipient_indices=[0, 2],
+        patch_all_batch_rows=True,
+    ):
+        patched = model.language_model.layers[0](recipient)
+
+    assert patched[:, 0, :].tolist() == [[20.0, 21.0]] * 3
+    assert patched[:, 2, :].tolist() == [[40.0, 41.0]] * 3
+    assert patched[:, 1, :].tolist() == [[0.0, 0.0]] * 3
 
 
 def test_same_image_verdict_preserves_sink_interpretation():

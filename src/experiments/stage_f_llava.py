@@ -40,7 +40,12 @@ from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import load_config, run_stamp, save_json
 from .multitoken_scoring import score_label_sequences
 from .shared.artifacts import artifact_metadata, llava_artifact_paths
-from .shared.readouts import first_content_token_ids, model_readout, user_text
+from .shared.readouts import (
+    first_content_token_ids,
+    model_readout,
+    processor_pad_token_id,
+    user_text,
+)
 from .shared.reporting import (
     asymmetry_vs_floor,
     content_mean_frame,
@@ -58,14 +63,6 @@ def _artifact_paths(score_mode: str, *, text_only: bool, model_name: str = DEFAU
 
 _sequence_columns = sequence_result_columns
 _content_mean_frame = content_mean_frame
-
-
-def _pad_token_id(processor) -> int:
-    tok = processor.tokenizer
-    pad = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
-    if pad is None:
-        raise ValueError("tokenizer defines neither pad_token_id nor eos_token_id")
-    return int(pad)
 
 
 def _conditions():
@@ -176,7 +173,7 @@ def run_base(config_path: str, model_name: str, limit_override: int | None = Non
     if score_mode == "sequence":
         tok_ids = None
         label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
-        pad_token_id = _pad_token_id(processor)
+        pad_token_id = processor_pad_token_id(processor)
     else:
         tok_ids = first_content_token_ids(processor)
         label_ids = None
@@ -247,7 +244,7 @@ def run_text_only(config_path: str, model_name: str, score_mode: str = "first-su
     if score_mode == "sequence":
         tok_ids = None
         label_ids = {label: token_report[label]["ids"] for label in EMOTION_LABELS}
-        pad_token_id = _pad_token_id(processor)
+        pad_token_id = processor_pad_token_id(processor)
     else:
         tok_ids = first_content_token_ids(processor)
         label_ids = None
