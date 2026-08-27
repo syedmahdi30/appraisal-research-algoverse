@@ -100,7 +100,7 @@ We then ask where the model keeps each cue's signal. In \gemma{}, a frozen text-
 Our contributions are:
 \begin{itemize}\setlength\itemsep{0pt}
   \item A controlled behavioral test of valence asymmetry in VLMs: holding the photograph and event fixed and flipping one valence word, negative context moves \qwen{}'s image-grounded judgment four to five times farther than positive context, with all six tested pairs in agreement, while the same sentence pairs without an image show no detectable difference.
-  \item A mechanistic account in \gemma{} of where each cue's effect lives: a frozen text-trained valence probe transfers to image-conditioned states, and activation patching shows downstream text positions are sufficient to restore most of the context-driven difference and an increasing share of the image-driven difference with depth.
+  \item A mechanistic account in \gemma{} of where each cue's effect lives: a frozen text-trained valence probe transfers to image-conditioned states, and activation patching, which copies activations from one run into another to see which states carry an effect, shows downstream text positions are sufficient to restore most of the context-driven difference and an increasing share of the image-driven difference with depth.
   \item A measurement caution from testing four models and three readouts: effect size and sometimes sign depend on scoring choices, most sharply when a multi-token emotion label is scored by its first token instead of in full, so we report a controlled asymmetry in the tested setup, not a universal architectural claim.
 \end{itemize}
 \fi
@@ -140,7 +140,7 @@ Following \citet{tak2025}, we train a ridge probe for pleasantness on crowd-enVE
 \section{Reading and steering valence across modalities}
 \label{sec:foundations}
 
-The probe is fit on \gemma{} text states and its site selected at layer 18 on validation ($r^2=0.641$, a selection statistic, not a held-out estimate). Applied frozen to image-conditioned states it tracks EMOTIC valence ($\rho=+0.510$, $n=7{,}280$; polarity AUC $0.912$), exceeds all 100 norm-matched random directions, and retains semipartial $\rho=+0.201$ after a neutral and a detailed caption control. That supports a valence-sensitive space both modalities influence, not shared upstream computation \citep{nikankin2025}. Appendix~\ref{app:foundations} gives the training, the controls, and the text-only steering sweep.
+The probe is fit on \gemma{} text states and its site selected at layer 18 on validation ($r^2=0.641$, a selection statistic, not a held-out estimate). Applied frozen to image-conditioned states it tracks EMOTIC valence ($\rho=+0.510$, $n=7{,}280$; polarity AUC $0.912$), exceeds all 100 norm-matched random directions, and retains a semipartial $\rho=+0.201$, its own contribution once a neutral and a detailed caption of the image are accounted for. That supports a valence-sensitive space both modalities influence, not shared upstream computation \citep{nikankin2025}. Appendix~\ref{app:foundations} gives the training, the controls, and the text-only steering sweep.
 
 \else
 \section{Results and analysis}
@@ -148,7 +148,7 @@ The probe is fit on \gemma{} text states and its site selected at layer 18 on va
 \subsection{Reading and steering valence across modalities}
 \label{sec:foundations}
 
-Before studying conflict, we establish the internal readout (Appendix~\ref{app:foundations}). Pleasantness peaks at Gemma layer 18 with validation $r^2=0.641$; this selects the site; it is not a held-out result. Applied frozen to image-conditioned states, the probe tracks EMOTIC valence ($\rho=+0.510$, $n=7{,}280$; polarity AUC $0.912$), exceeds 100 norm-matched random directions, and retains semipartial $\rho=+0.201$ after two caption controls. Adding the separate text-derived direction changes image-conditioned behavior monotonically (slope $+0.336$ versus $-0.035$ for a random direction). This supports a valence-sensitive space both modalities influence, not shared upstream computation \citep{nikankin2025}.
+Before studying conflict, we establish the internal readout (Appendix~\ref{app:foundations}). Pleasantness peaks at Gemma layer 18 with validation $r^2=0.641$; this selects the site; it is not a held-out result. Applied frozen to image-conditioned states, the probe tracks EMOTIC valence ($\rho=+0.510$, $n=7{,}280$; polarity AUC $0.912$), exceeds 100 norm-matched random directions, and retains a semipartial $\rho=+0.201$, its own contribution once two caption controls are accounted for. Adding the separate text-derived direction changes image-conditioned behavior monotonically (slope $+0.336$ versus $-0.035$ for a random direction). This supports a valence-sensitive space both modalities influence, not shared upstream computation \citep{nikankin2025}.
 \fi
 
 \ifshort
