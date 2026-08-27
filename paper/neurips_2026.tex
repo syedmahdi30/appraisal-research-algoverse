@@ -109,9 +109,26 @@ Our contributions are:
 \section{Related work}
 \label{sec:related}
 
-Prior work shows that text can override vision and that modality preference varies with task, prompt, and model \citep{deng2025blindfaith, mixedsignals2025, contextvqa2026, signpost2026}. Work on stored-knowledge conflict localizes different mechanisms \citep{nooralahzadeh2026, lietzow2026, seeingoverrides2026}; our competing text instead appears in the prompt. We isolate whether matched positive and negative contexts exert different pull.
+\paragraph{Modality conflict in VLMs.}
+Several lines of work create mismatched image-text pairs and ask which modality the model follows. \citet{deng2025blindfaith} show that VLMs disproportionately trust text when it has been corrupted, while \citet{mixedsignals2025} find that the preferred modality varies with task complexity and model. Contradictory persuasive text can override clear visual evidence across 11 VLMs \citep{contextvqa2026}, including in geolocation \citep{signpost2026}. Misleading instructions can also become \emph{more} influential when an image is present \citep{camel2025}. These studies show that image-text conflict is real and can matter for safety. They examine factors such as relevance, task difficulty, and the relation between the cues, but do not isolate whether matched positive and negative text exert different pull. We test that question in both conflict directions and across model designs.
 
-Emotion benchmarks and mechanistic studies examine affect recognition and intervention \citep{kosti2019, mosear2025, veena2026, tak2025}, while activation patching tests which states are sufficient to restore an output difference \citep{meng2022, patchingbestpractices}. Image information can become available at text positions \citep{basu2024, whatsintheimage2025}, and task vectors can transfer across modalities \citep{luo2025}. Our contribution is narrower: controlled valence conflict and a text-estimated valence intervention. Human negativity dominance motivates the hypothesis \citep{rozin2001, baumeister2001}; we do not equate the model behavior with the human construct. Appendix~\ref{app:related} gives the full positioning.
+\paragraph{Different kinds of conflict.}
+A complementary line of work studies conflicts between visual input and knowledge stored in the model's weights. \citet{nooralahzadeh2026} find that image tokens carry nearly all of the effect when a model must override such prior knowledge; \citet{lietzow2026} identify a small set of late attention heads involved in that override; \citet{seeingoverrides2026} steer the resulting decisions; and \citet{unraveling2024} both detect such conflicts and mitigate them by suppressing logits from the less confident modality. Our setting differs because the competing text appears directly in the prompt. In \gemma{}, even the image's decision-relevant signal becomes recoverable from text positions over depth. The location of conflict resolution may therefore depend on the kind of conflict, the network depth, and the model design.
+
+\paragraph{Emotion and affect in multimodal models.}
+EMOTIC and related datasets are widely used to test VLM emotion recognition \citep{kosti2019, etesam2024, agarwal2026}. Other benchmarks study emotion conflicts between audio and vision \citep{mosear2025, emomm2026}. VEENA \citep{veena2026} identifies and intervenes on emotion-related circuits in large VLMs, but studies matching rather than conflicting cues and does not test valence asymmetry. In text-only LLMs, \citet{tak2025} locate appraisal-related information and steer emotion judgments, providing the method we build on. \citet{negbeforepos2026} report that positive and negative valence are processed differently across layers. We extend that question to behavioral conflicts between images and text.
+
+\paragraph{Mechanistic interpretability of VLMs.}
+Activation patching and causal tracing are established tools for testing which internal states are sufficient to restore an output difference \citep{meng2022, patchingbestpractices, attributionpatching}. Prior VLM studies show that image information becomes available from text or query positions in early-to-middle layers \citep{basu2024, whatsintheimage2025, narrowgate2024, towardsinterp2024}, and that middle-layer attention at the last token helps combine the modalities \citep{fcct2026}. Our contribution is to compare the states affected by each cue during conflict, not to establish image-to-text transfer itself. \citet{luo2025} show cross-modal transfer for \emph{task vectors}: a vector estimated from examples in one modality can trigger the corresponding task in another. That is the closest prior evidence for transferring an intervention vector across modalities, but it is not a demonstration of a valence direction. We instead ask whether a direction estimated from pleasant and unpleasant text examples can move an image-conditioned judgment when image and text disagree. \citet{nikankin2025} find largely separate circuits for similar visual and textual tasks, which remains compatible with different upstream computations affecting the same downstream states. \citet{conflictchallenges2025} find a linearly decodable \emph{conflict} signal in intermediate layers and present correlational evidence that conflict detection and resolution are separable. Our layerwise probe instead reads the sentence's valence, not conflict detection, and our replacement experiments test which states can restore an output difference; we do not equate the two signals. Other work finds that delimiter and assistant-header tokens can collect information from across a prompt \citep{xiao2024, activedormant2024, zhang2026anydepth}. In \gemma{} the context difference is split between the question tokens and the tokens before the model's answer (\S\ref{sec:patching}), so our data do not single out the turn scaffold.
+
+\paragraph{Human affective science.}
+Negativity dominance \citep{rozin2001} and ``bad is stronger than good'' \citep{baumeister2001} are foundational asymmetries in human evaluation, and situational sentences modulate facial-affect perception \citep{aviezer2008, aviezer2012}. We use this literature as motivation; whether VLM valence asymmetries share anything computational with the human construct is an open question our operationalization (cross-modal override) does not settle.
+
+\paragraph{Steering vectors.}
+Difference-of-means steering can change model outputs, but that does not by itself reveal what computation changed \citep{steeringunreliability2025, steeringnonident2026}. We compare our valence direction with random directions of the same norm and with a direction for a different appraisal. We therefore claim only that steering changes the outcome under conflict, not that it changes how strongly the model weights each cue (\S\ref{sec:arbitration}).
+
+% Positioning kept from the compressed version: these two hedges are load-bearing.
+Our contribution is narrower: controlled valence conflict and a text-estimated valence intervention. Human negativity dominance motivates the hypothesis \citep{rozin2001, baumeister2001}; we do not equate the model behavior with the human construct.
 \fi
 
 \section{Experimental framework}
@@ -234,14 +251,7 @@ In the mid band, where both readouts are valid, they disagree about which group 
 
 The same broad set of downstream text positions can therefore restore differences caused by either the context or the image. This identifies a plausible meeting point for the two cues, not the computation that resolves their competition. It also does not show whether visual information continues to move into text positions while negative context is winning. In a confirmatory run with fixed negative context, the image-driven valence gap shrinks from $0.87$ to $0.08$. That small denominator makes late-layer recovery unstable, so we could not answer the question. Mid-layer image-position recovery is $85\%$ (CI $[51,150]$), but the wide interval prevents a stronger conclusion.
 
-\subsubsection{A text-derived direction still moves the answer under conflict}
-\label{sec:arbitration}
-
-Finally, we test whether the text-derived direction of \S\ref{sec:foundations} can change a judgment during conflict. On 150 conflict trials, adding the pleasantness direction at layer 18 moves behavioral valence with a slope of $+0.335$ per unit of intervention strength. The earlier no-conflict run gives a similar descriptive slope, $+0.336$, but it is not a matched control and we did not test equivalence; the supported claim is that the intervention remains effective under conflict. Before the sweep, we verified that the direction's length matched the reference value at this internal site (relative error $0.14\%$), guarding against an intervention at the wrong layer output.
-
-The frozen probe readout is flat under this intervention (slope $+0.000$). That is expected rather than a null result: the probe tap sits inside layer 18, upstream of the residual-stream injection at the same layer, so it is invariant to steering by construction. We report it to show the injection is acting where we claim.
-
-This intervention changes the outcome, but it does not show that the competition between the cues changed: a general output-valence direction could shift the final score without changing either cue's weight. The natural next step is to test whether the intervention changes override rates or cue coefficients.
+A text-derived valence direction added at layer 18 also remains effective while an image contradicts the sentence; Appendix~\ref{sec:arbitration} reports that sweep.
 \fi
 
 \ifshort
@@ -443,10 +453,13 @@ EMOTIC annotates individual people, but we present the whole image without a bou
 \input{tables/models}
 \fi
 
+\ifshort
+% Long build carries the full positioning in \S\ref{sec:related}; only the
+% 5-page build, which has no main-text related-work section, needs it here.
 \section{Extended related work}
 \label{app:related}
 
-\ifshort The main text carries no related-work section at this length; the full positioning, with the citations each claim rests on, is given here.\else \S\ref{sec:related} compresses this material to fit the page limit. The full positioning, with the citations each claim rests on, follows.\fi
+The main text carries no related-work section at this length; the full positioning, with the citations each claim rests on, is given here.
 
 \paragraph{Modality conflict in VLMs.}
 Several lines of work create mismatched image-text pairs and ask which modality the model follows. \citet{deng2025blindfaith} show that VLMs disproportionately trust text when it has been corrupted, while \citet{mixedsignals2025} find that the preferred modality varies with task complexity and model. Contradictory persuasive text can override clear visual evidence across 11 VLMs \citep{contextvqa2026}, including in geolocation \citep{signpost2026}. Misleading instructions can also become \emph{more} influential when an image is present \citep{camel2025}. These studies show that image-text conflict is real and can matter for safety. They examine factors such as relevance, task difficulty, and the relation between the cues, but do not isolate whether matched positive and negative text exert different pull. We test that question in both conflict directions and across model designs.
@@ -465,6 +478,8 @@ Negativity dominance \citep{rozin2001} and ``bad is stronger than good'' \citep{
 
 \paragraph{Steering vectors.}
 Difference-of-means steering can change model outputs, but that does not by itself reveal what computation changed \citep{steeringunreliability2025, steeringnonident2026}. We compare our valence direction with random directions of the same norm and with a direction for a different appraisal. We therefore claim only that steering changes the outcome under conflict, not that it changes how strongly the model weights each cue (\S\ref{sec:arbitration}).
+
+\fi
 
 \section{Broader impacts and responsible use}
 \label{app:impacts}
@@ -568,6 +583,15 @@ We steer 150 EMOTIC test images at the post-layer residual stream of layer 18. W
     \bottomrule
   \end{tabular}
 \end{table}
+
+\subsection{Does the text-derived direction still move the answer under conflict?}
+\label{sec:arbitration}
+
+Finally, we test whether the text-derived direction of \S\ref{sec:foundations} can change a judgment during conflict. On 150 conflict trials, adding the pleasantness direction at layer 18 moves behavioral valence with a slope of $+0.335$ per unit of intervention strength. The earlier no-conflict run gives a similar descriptive slope, $+0.336$, but it is not a matched control and we did not test equivalence; the supported claim is that the intervention remains effective under conflict. Before the sweep, we verified that the direction's length matched the reference value at this internal site (relative error $0.14\%$), guarding against an intervention at the wrong layer output.
+
+The frozen probe readout is flat under this intervention (slope $+0.000$). That is expected rather than a null result: the probe tap sits inside layer 18, upstream of the residual-stream injection at the same layer, so it is invariant to steering by construction. We report it to show the injection is acting where we claim.
+
+This intervention changes the outcome, but it does not show that the competition between the cues changed: a general output-valence direction could shift the final score without changing either cue's weight. The natural next step is to test whether the intervention changes override rates or cue coefficients.
 
 \subsection{Combining directions (supporting evidence)}
 In a 30-image pilot, combinations of text-derived appraisal directions produce specific emotions predicted by appraisal theory. Neither component alone produces anger: unpleasantness alone favors fear, while other-responsibility with its valence component removed favors joy. Combining the two at matched norm makes anger the top emotion on $97\%$ of images. This matches the appraisal prediction \emph{anger = negative + other-caused}. The pilot is supporting evidence that the appraisal directions have meaningful structure; it is not required for the conflict claims.
