@@ -14,6 +14,7 @@ from src.experiments.shared.patching import (
     bridge_patch_hook,
     cross_image_groups,
     cross_image_recovery,
+    collapse_duplicate_image_rows,
     find_subsequence,
     probe_recovery_valid,
     same_image_recovery,
@@ -179,8 +180,12 @@ def test_same_image_recovery_preserves_schema_and_group_order():
     recovery = same_image_recovery(frame, ("second", "first"))
 
     assert list(recovery) == ["pos_probe", "neg_probe", "pos_val", "neg_val", "second", "first"]
-    assert recovery["second"] == {"probe": pytest.approx(0.5), "val": pytest.approx(0.5)}
-    assert recovery["first"] == {"probe": pytest.approx(0.25), "val": pytest.approx(0.25)}
+    assert recovery["second"]["probe"] == pytest.approx(0.5)
+    assert recovery["second"]["val"] == pytest.approx(0.5)
+    assert recovery["second"]["probe_ci95"] == [0.5, 0.5]
+    assert recovery["second"]["val_ci95"] == [0.5, 0.5]
+    assert recovery["first"]["probe"] == pytest.approx(0.25)
+    assert recovery["first"]["val"] == pytest.approx(0.25)
 
 
 def test_behavioral_recovery_bootstraps_paired_image_rows():
@@ -201,6 +206,33 @@ def test_behavioral_recovery_bootstraps_paired_image_rows():
     assert recovery["image"]["val"] == pytest.approx(0.5)
     assert recovery["text_all"]["val"] == pytest.approx(1.0)
     assert len(recovery["image"]["ci95"]) == 2
+
+
+def test_same_image_recovery_weights_each_unique_image_once():
+    """Repeated rows for one image must not receive extra weight in the estimate or bootstrap."""
+    frame = pd.DataFrame({
+        "image_path": ["repeated.jpg"] * 5 + ["single.jpg"],
+        "image_valence": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        "pos_val": [1.0] * 6,
+        "neg_val": [0.0] * 6,
+        "patch_image_val": [0.0] * 5 + [1.0],
+    })
+
+    collapsed = collapse_duplicate_image_rows(frame)
+    recovery = behavioral_same_image_recovery(frame, ("image",), n_boot=100, seed=11)
+
+    assert collapsed["image_path"].tolist() == ["repeated.jpg", "single.jpg"]
+    assert recovery["image"]["val"] == pytest.approx(0.5)
+
+
+def test_duplicate_image_rows_must_have_identical_readouts():
+    frame = pd.DataFrame({
+        "image_path": ["same.jpg", "same.jpg"],
+        "pos_val": [1.0, 2.0],
+    })
+
+    with pytest.raises(ValueError, match="inconsistent model read-outs"):
+        collapse_duplicate_image_rows(frame)
 
 
 class _LanguageModel(torch.nn.Module):

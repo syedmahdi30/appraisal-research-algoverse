@@ -27,7 +27,7 @@ from tqdm import tqdm
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
 from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
-from .common import git_hash, load_config, run_stamp, save_json
+from .common import load_config, metrics_provenance, save_json
 from .multitoken_scoring import score_label_sequences
 from .shared.artifacts import model_key
 from .shared.hf_runtime import capture_residuals, find_language_layers, patch_residuals
@@ -35,6 +35,7 @@ from .shared.patching import (
     SAME_IMAGE_GROUPS,
     aligned_patch_groups,
     behavioral_same_image_recovery,
+    same_image_resampling_metadata,
     segment_prompt_positions,
 )
 from .shared.readouts import QUESTION, processor_pad_token_id
@@ -135,18 +136,21 @@ def _analyze(
     data_path: Path,
     metrics_path: Path,
     n_boot: int = 2000,
+    source_provenance: dict | None = None,
 ) -> dict:
     recovery = behavioral_same_image_recovery(df, GROUPS, n_boot=n_boot)
+    sample_metadata = same_image_resampling_metadata(df)
     metrics = {
-        "run": run_stamp(),
-        "git": git_hash(),
+        **metrics_provenance(source_provenance),
         "model": model_name,
         "read_out": "behavioral_valence",
         "score_mode": "sequence",
         "score_rule": SCORE_RULE,
         "n_layers": n_layers,
         "patch_layers": patch_layers,
-        "n_images": int(len(df)),
+        **sample_metadata,
+        "bootstrap_samples": n_boot,
+        "bootstrap_seed": 0,
         "n_skipped": n_skipped,
         "donor_positive_context": donor_context,
         "recipient_negative_context": recipient_context,
@@ -156,7 +160,8 @@ def _analyze(
     save_json(metrics, metrics_path)
 
     print(
-        f"\nStage F [LLaVA: {model_name}] sequence patching — {len(df)} positive images "
+        f"\nStage F [LLaVA: {model_name}] sequence patching — {metrics['n_images']} unique "
+        f"positive images from {metrics['n_rows']} rows "
         f"({n_skipped} skipped); decoder layers {patch_layers[0]}-{patch_layers[-1]} of "
         f"{n_layers}."
     )
@@ -291,6 +296,7 @@ def reanalyze(model_name: str = DEFAULT_MODEL, n_boot: int = 2000) -> dict:
         data_path=data_path,
         metrics_path=metrics_path,
         n_boot=n_boot,
+        source_provenance=previous,
     )
 
 

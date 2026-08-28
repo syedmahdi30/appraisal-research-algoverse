@@ -76,6 +76,37 @@ def git_hash() -> str | None:
         return None
 
 
+def git_worktree_dirty() -> bool | None:
+    """Whether tracked or untracked files differ from HEAD, or ``None`` if unavailable."""
+    import subprocess
+
+    try:
+        from ..paths import ROOT
+
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return bool(out.stdout.strip()) if out.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def metrics_provenance(source: dict | None = None) -> dict:
+    """Keep forward-run provenance while recording a later CPU reanalysis separately."""
+    analysis_run = run_stamp()
+    analysis_git = git_hash()
+    if source:
+        return {
+            "run": source.get("run"),
+            "git": source.get("git"),
+            "analysis_run": analysis_run,
+            "analysis_git": analysis_git,
+            "analysis_git_dirty": git_worktree_dirty(),
+        }
+    return {"run": analysis_run, "git": analysis_git}
+
+
 def _json_default(o):
     if isinstance(o, (np.floating, np.integer)):
         return o.item()

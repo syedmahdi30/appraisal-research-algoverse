@@ -46,7 +46,7 @@ from tqdm import tqdm
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS, context_prompt
 from ..data.emotic import load_split as load_emotic_split
 from ..paths import STAGE_A_DIR, STAGE_F_DIR, ensure_dirs
-from .common import git_hash, load_config, load_probes, run_stamp, save_json
+from .common import load_config, load_probes, metrics_provenance, save_json
 from .shared.hf_runtime import (
     capture_residuals,
     encode_image_prompt,
@@ -54,8 +54,13 @@ from .shared.hf_runtime import (
     load_gemma_hf,
     patch_residuals,
 )
-from .shared.patching import (SAME_IMAGE_GROUPS, aligned_patch_groups, same_image_recovery,
-                              segment_prompt_positions)
+from .shared.patching import (
+    SAME_IMAGE_GROUPS,
+    aligned_patch_groups,
+    same_image_recovery,
+    same_image_resampling_metadata,
+    segment_prompt_positions,
+)
 from .shared.readouts import QUESTION, closed_vocab_valence, first_content_token_ids
 from .shared.reporting import same_image_verdict
 from .shared.sampling import select_extreme_rows
@@ -242,25 +247,50 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
 
     df = pd.DataFrame(rows)
     df.to_parquet(STAGE_F_DIR / "patching_hf.parquet")
-    rec = same_image_recovery(df, GROUPS)
-
-    metrics = {
-        "run": run_stamp(), "git": git_hash(), "stack": "raw_hf", "tap": tap,
+    meta = {
+        "stack": "raw_hf", "tap": tap,
         "critical_layer": crit, "patch_layers": patch_layers,
-        "n_images": len(df), "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
+        "n_skipped": n_skip, "n_segmentation_dropped": seg_bad,
         "donor_pos_context": pos_ctx, "recipient_neg_context": neg_ctx,
         "pos_idx": pj, "neg_idx": ni,
-        "recovery": rec, "verdict": same_image_verdict(rec),
         "note": ("raw-HF re-score of the bridge result. recovery = (patched-neg)/(pos-neg) at the "
                  f"L{crit} {tap} read-out; decoder-layer outputs (= resid_post) patched over "
-                 f"{patch_layers}. Aggregation is imported from stage_f_patching so the two runs "
-                 "are directly comparable."),
+                 f"{patch_layers}. Estimates and paired confidence intervals weight each unique "
+                 "image_path once."),
+    }
+    return _analyze_and_print(df, meta)
+
+
+def _analyze_and_print(
+    df: pd.DataFrame,
+    meta: dict,
+    *,
+    n_boot: int = 2000,
+    source_provenance: dict | None = None,
+) -> dict:
+    """Aggregate a completed raw-HF sweep without loading the model."""
+    rec = same_image_recovery(df, GROUPS, n_boot=n_boot)
+    metrics = {
+        **metrics_provenance(source_provenance),
+        **meta,
+        **same_image_resampling_metadata(df),
+        "bootstrap_samples": n_boot,
+        "bootstrap_seed": 0,
+        "recovery": rec,
+        "verdict": same_image_verdict(rec),
     }
     save_json(metrics, STAGE_F_DIR / "patching_hf_metrics.json")
 
+    pj, ni = int(meta.get("pos_idx", 0)), int(meta.get("neg_idx", 2))
+    pos_ctx = meta.get("donor_pos_context", "")
+    neg_ctx = meta.get("recipient_neg_context", "")
+    patch_layers = meta.get("patch_layers", [])
+    n_skip = int(meta.get("n_skipped", 0))
+    seg_bad = int(meta.get("n_segmentation_dropped", 0))
     pub = PUBLISHED_BY_PAIR.get((pj, ni))
     pair = PAIR_LABEL.get((pj, ni), f"pos{pj}/neg{ni} — NO published comparator")
-    print(f"\nStage F patching (RAW HF) — {len(df)} positive images "
+    print(f"\nStage F patching (RAW HF) — {metrics['n_images']} unique positive images from "
+          f"{metrics['n_rows']} rows "
           f"({n_skip} skipped, {seg_bad} seg-dropped); patch resid_post {patch_layers[0]}-{patch_layers[-1]}.")
     print(f"  donor +ctx: \"{pos_ctx[:40]}\"   recipient -ctx: \"{neg_ctx[:40]}\"   [{pair}]")
     print(f"  baselines: probe pos {rec['pos_probe']:+.3f} / neg {rec['neg_probe']:+.3f}  |  "
@@ -279,6 +309,33 @@ def run(config_path: str, limit_override: int | None = None, layers_override: st
     return metrics
 
 
+def reanalyze(n_boot: int = 2000) -> dict:
+    """Recompute unique-image recovery and confidence intervals from parquet on CPU."""
+    ensure_dirs()
+    data_path = STAGE_F_DIR / "patching_hf.parquet"
+    metrics_path = STAGE_F_DIR / "patching_hf_metrics.json"
+    if not data_path.exists():
+        raise FileNotFoundError(f"{data_path} missing — run the raw-HF patching pass first.")
+    if not metrics_path.exists():
+        raise FileNotFoundError(
+            f"{metrics_path} missing — patch metadata is required for reanalysis."
+        )
+    previous = load_config(metrics_path)
+    meta = {
+        key: previous.get(key)
+        for key in (
+            "stack", "tap", "critical_layer", "patch_layers", "n_skipped",
+            "n_segmentation_dropped", "donor_pos_context", "recipient_neg_context",
+            "pos_idx", "neg_idx", "note",
+        )
+    }
+    if not meta.get("patch_layers"):
+        raise ValueError(f"{metrics_path} does not record a patch layer band")
+    return _analyze_and_print(
+        pd.read_parquet(data_path), meta, n_boot=n_boot, source_provenance=previous
+    )
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Stage F same-image patching on raw HF (bridge-free re-score)")
@@ -291,7 +348,12 @@ def main() -> None:
                     help="raw-HF equivalent of the bridge's blocks.L.hook_attn_out")
     ap.add_argument("--verify-tap", action="store_true",
                     help="check the read-out site and segmentation, then exit")
+    ap.add_argument("--reanalyze", action="store_true",
+                    help="recompute unique-image recovery + CIs from parquet on CPU")
     args = ap.parse_args()
+    if args.reanalyze:
+        reanalyze()
+        return
     if args.verify_tap:
         verify_tap(load_config(args.config), args.tap)
         return
