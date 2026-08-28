@@ -61,10 +61,11 @@ def test_segmentation_must_contain_expanded_image_and_all_aligned_groups():
 
 def test_analysis_records_sequence_scoring_and_recovery_metadata(tmp_path):
     frame = pd.DataFrame({
-        "pos_val": [1.0, 1.0],
-        "neg_val": [-1.0, -1.0],
+        "image_path": ["same.jpg", "same.jpg", "other.jpg"],
+        "pos_val": [1.0, 1.0, 1.0],
+        "neg_val": [-1.0, -1.0, -1.0],
         **{
-            f"patch_{group}_val": [0.0, 0.0]
+            f"patch_{group}_val": [0.0, 0.0, 0.0]
             for group in (
                 "image", "question", "bos", "prefix_delim", "suffix_delim", "structure",
                 "text_all",
@@ -83,11 +84,22 @@ def test_analysis_records_sequence_scoring_and_recovery_metadata(tmp_path):
         data_path=tmp_path / "rows.parquet",
         metrics_path=tmp_path / "metrics.json",
         n_boot=20,
+        source_provenance={"run": "forward-run", "git": "forward-git"},
     )
 
     assert metrics["score_mode"] == "sequence"
     assert metrics["score_rule"] == "sum of teacher-forced conditional token log probabilities"
     assert metrics["n_images"] == 2
+    assert metrics["n_rows"] == 3
+    assert metrics["n_unique_images"] == 2
+    assert metrics["resampling_unit"] == "unique image_path"
+    assert metrics["bootstrap_samples"] == 20
+    assert metrics["bootstrap_seed"] == 0
+    assert metrics["run"] == "forward-run"
+    assert metrics["git"] == "forward-git"
+    assert metrics["analysis_run"]
+    assert "analysis_git" in metrics
+    assert "analysis_git_dirty" in metrics
     assert metrics["patch_layers"] == [11, 12]
     assert metrics["recovery"]["image"]["val"] == pytest.approx(0.5)
     assert metrics["n_skipped"] == 1

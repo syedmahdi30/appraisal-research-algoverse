@@ -36,9 +36,15 @@ from tqdm import tqdm
 from ..data.conflict_contexts import NEGATIVE_CONTEXTS, POSITIVE_CONTEXTS
 from ..data.labels import EMOTION_LABELS
 from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
-from .common import git_hash, load_config, run_stamp, save_json
-from .shared.patching import (SAME_IMAGE_GROUPS, aligned_patch_groups, find_subsequence,
-                              segment_prompt_positions)
+from .common import load_config, metrics_provenance, save_json
+from .shared.patching import (
+    SAME_IMAGE_GROUPS,
+    aligned_patch_groups,
+    behavioral_same_image_recovery,
+    find_subsequence,
+    same_image_resampling_metadata,
+    segment_prompt_positions,
+)
 from .shared.readouts import closed_vocab_valence, first_content_token_ids
 from .shared.sampling import select_extreme_rows
 from .stage_f_qwen import DEFAULT_MODEL, QUESTION, build_inputs, load_qwen
@@ -195,13 +201,24 @@ def run(config_path: str, model_name: str, limit_override: int | None = None,
     return _analyze_and_print(df, meta)
 
 
-def _analyze_and_print(df, meta) -> dict:
-    rec = _recovery(df)
-    metrics = {"run": run_stamp(), "git": git_hash(), "read_out": "behavioral_valence",
-               "n_images": int(len(df)), "recovery": rec, "verdict": _verdict(rec), **meta}
+def _analyze_and_print(
+    df, meta, *, n_boot: int = 2000, source_provenance: dict | None = None
+) -> dict:
+    rec = behavioral_same_image_recovery(df, GROUPS, n_boot=n_boot)
+    metrics = {
+        **metrics_provenance(source_provenance),
+        **meta,
+        "read_out": "behavioral_valence",
+        **same_image_resampling_metadata(df),
+        "bootstrap_samples": n_boot,
+        "bootstrap_seed": 0,
+        "recovery": rec,
+        "verdict": _verdict(rec),
+    }
     save_json(metrics, STAGE_F_DIR / "patching_qwen_metrics.json")
     band = meta.get("patch_band", [])
-    print(f"\nStage F [Qwen: {meta.get('model')}] patching — {len(df)} positive images "
+    print(f"\nStage F [Qwen: {meta.get('model')}] patching — {metrics['n_images']} unique "
+          f"positive images from {metrics['n_rows']} rows "
           f"({meta.get('n_skipped', 0)} skipped, {meta.get('n_segmentation_dropped', 0)} seg-dropped); "
           f"patch decoder layers {band[0] if band else '?'}-{band[-1] if band else '?'} of "
           f"{meta.get('n_layers', '?')}.")
@@ -215,34 +232,24 @@ def _analyze_and_print(df, meta) -> dict:
     return metrics
 
 
-def reanalyze(config_path: str) -> dict:
+def reanalyze(config_path: str, n_boot: int = 2000) -> dict:  # noqa: ARG001 - CLI symmetry
     """Recompute recovery + CIs from the saved parquet — CPU only, no model load."""
     ensure_dirs()
     pq = STAGE_F_DIR / "patching_qwen.parquet"
     if not pq.exists():
         raise FileNotFoundError(f"{pq} missing — run the Qwen patching pass first.")
     mpath = STAGE_F_DIR / "patching_qwen_metrics.json"
-    meta = {k: load_config(mpath).get(k) for k in
-            ("model", "n_layers", "patch_band", "n_skipped", "n_segmentation_dropped")} if mpath.exists() else {}
-    return _analyze_and_print(pd.read_parquet(pq), meta)
-
-
-def _recovery(df, n_boot: int = 2000, seed: int = 0) -> dict:
-    """Recovery per group with a 95% CI bootstrapped over images (clustered)."""
-    pos, neg = df["pos_val"].to_numpy(), df["neg_val"].to_numpy()
-    out = {"pos_val": float(pos.mean()), "neg_val": float(neg.mean())}
-    d = out["pos_val"] - out["neg_val"]
-    rng = np.random.default_rng(seed)
-    boots = rng.integers(0, len(df), (n_boot, len(df))) if len(df) else None
-    for g in GROUPS:
-        pv = df[f"patch_{g}_val"].to_numpy()
-        r = float((pv.mean() - out["neg_val"]) / d) if d else float("nan")
-        ci = [float("nan"), float("nan")]
-        if boots is not None and d:
-            bs = [(pv[b].mean() - neg[b].mean()) / (pos[b].mean() - neg[b].mean()) for b in boots]
-            ci = [float(x) for x in np.percentile(bs, [2.5, 97.5])]
-        out[g] = {"val": r, "ci95": ci}
-    return out
+    previous = load_config(mpath) if mpath.exists() else {}
+    meta = {
+        key: previous.get(key)
+        for key in (
+            "model", "n_layers", "patch_band", "n_skipped", "n_segmentation_dropped",
+            "donor_pos_context", "recipient_neg_context",
+        )
+    }
+    return _analyze_and_print(
+        pd.read_parquet(pq), meta, n_boot=n_boot, source_provenance=previous
+    )
 
 
 def _verdict(rec) -> str:

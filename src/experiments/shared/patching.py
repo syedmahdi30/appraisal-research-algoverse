@@ -185,51 +185,100 @@ def bridge_patch_hook(recipient_indices, donor_values):
     return hook
 
 
-def same_image_recovery(df, groups) -> dict:
-    """Aggregate same-image recovery from mean patched and baseline read-outs."""
-    out = {key: float(df[key].mean()) for key in ("pos_probe", "neg_probe", "pos_val", "neg_val")}
-    probe_delta = out["pos_probe"] - out["neg_probe"]
-    valence_delta = out["pos_val"] - out["neg_val"]
+def collapse_duplicate_image_rows(df, image_column: str = "image_path"):
+    """Return one deterministic row per image, validating repeated measurements first.
+
+    Stage F selection can contain multiple annotations that resolve to the same underlying image.
+    Those rows are not independent experimental units. Repeated model read-outs for an identical
+    image must also be identical; a mismatch is raised instead of being silently averaged.
+
+    Frames without ``image_column`` retain their historical one-row-per-unit behavior, which keeps
+    the helper usable for small synthetic tests and legacy artifacts without path provenance.
+    """
+    frame = df.reset_index(drop=True).copy()
+    if frame.empty or image_column not in frame:
+        return frame
+    if frame[image_column].isna().any():
+        raise ValueError(f"{image_column} contains missing values; bootstrap units are ambiguous")
+
+    duplicated = frame[frame.duplicated(image_column, keep=False)]
+    numeric_columns = [
+        column
+        for column in frame.select_dtypes(include=[np.number]).columns
+        if column.startswith(("pos_", "neg_", "patch_"))
+    ]
+    for image_path, repeated in duplicated.groupby(image_column, sort=False):
+        if not numeric_columns:
+            continue
+        values = repeated[numeric_columns].to_numpy(dtype=float)
+        if not np.allclose(values, values[:1], rtol=1e-7, atol=1e-9, equal_nan=True):
+            raise ValueError(
+                f"repeated image {image_path!r} has inconsistent model read-outs"
+            )
+    return frame.drop_duplicates(image_column, keep="first").reset_index(drop=True)
+
+
+def same_image_resampling_metadata(df, image_column: str = "image_path") -> dict:
+    """Describe the independent units used by same-image estimates and confidence intervals."""
+    unique = collapse_duplicate_image_rows(df, image_column=image_column)
+    uses_image_paths = image_column in df
+    return {
+        "n_rows": int(len(df)),
+        "n_images": int(len(unique)),
+        "n_unique_images": int(len(unique)),
+        "resampling_unit": f"unique {image_column}" if uses_image_paths else "row",
+    }
+
+
+def same_image_recovery(df, groups, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Aggregate probe and behavioral recovery over unique images with paired CIs."""
+    frame = collapse_duplicate_image_rows(df)
+    out = {
+        key: float(frame[key].mean())
+        for key in ("pos_probe", "neg_probe", "pos_val", "neg_val")
+    }
+    if frame.empty:
+        return out
+    rng = np.random.default_rng(seed)
+    bootstrap_indices = [rng.integers(0, len(frame), len(frame)) for _ in range(n_boot)]
     for group in groups:
+        probe, probe_ci = _bootstrap_recovery(
+            frame[f"patch_{group}_probe"].to_numpy(dtype=float),
+            frame["pos_probe"].to_numpy(dtype=float),
+            frame["neg_probe"].to_numpy(dtype=float),
+            bootstrap_indices,
+        )
+        valence, valence_ci = _bootstrap_recovery(
+            frame[f"patch_{group}_val"].to_numpy(dtype=float),
+            frame["pos_val"].to_numpy(dtype=float),
+            frame["neg_val"].to_numpy(dtype=float),
+            bootstrap_indices,
+        )
         out[group] = {
-            "probe": (
-                float((df[f"patch_{group}_probe"].mean() - out["neg_probe"]) / probe_delta)
-                if probe_delta else float("nan")
-            ),
-            "val": (
-                float((df[f"patch_{group}_val"].mean() - out["neg_val"]) / valence_delta)
-                if valence_delta else float("nan")
-            ),
+            "probe": probe,
+            "probe_ci95": probe_ci,
+            "val": valence,
+            "val_ci95": valence_ci,
         }
     return out
 
 
 def behavioral_same_image_recovery(df, groups, n_boot: int = 2000, seed: int = 0) -> dict:
-    """Aggregate behavioral recovery with paired bootstrap resampling over image rows."""
-    if df.empty:
+    """Aggregate behavioral recovery with paired bootstrap resampling over unique images."""
+    frame = collapse_duplicate_image_rows(df)
+    if frame.empty:
         return {"pos_val": float("nan"), "neg_val": float("nan")}
-    positive = df["pos_val"].to_numpy(dtype=float)
-    negative = df["neg_val"].to_numpy(dtype=float)
+    positive = frame["pos_val"].to_numpy(dtype=float)
+    negative = frame["neg_val"].to_numpy(dtype=float)
     out = {"pos_val": float(positive.mean()), "neg_val": float(negative.mean())}
-    denominator = out["pos_val"] - out["neg_val"]
     rng = np.random.default_rng(seed)
-    bootstrap_indices = rng.integers(0, len(df), (n_boot, len(df))) if n_boot else []
+    bootstrap_indices = [rng.integers(0, len(frame), len(frame)) for _ in range(n_boot)]
     for group in groups:
-        patched = df[f"patch_{group}_val"].to_numpy(dtype=float)
-        estimate = (
-            float((patched.mean() - out["neg_val"]) / denominator)
-            if denominator else float("nan")
-        )
-        bootstrap_values = []
-        for indices in bootstrap_indices:
-            sampled_denominator = positive[indices].mean() - negative[indices].mean()
-            if sampled_denominator:
-                bootstrap_values.append(
-                    (patched[indices].mean() - negative[indices].mean()) / sampled_denominator
-                )
-        ci = (
-            [float(value) for value in np.percentile(bootstrap_values, [2.5, 97.5])]
-            if bootstrap_values else [float("nan"), float("nan")]
+        estimate, ci = _bootstrap_recovery(
+            frame[f"patch_{group}_val"].to_numpy(dtype=float),
+            positive,
+            negative,
+            bootstrap_indices,
         )
         out[group] = {"val": estimate, "ci95": ci}
     return out
