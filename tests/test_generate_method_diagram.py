@@ -245,7 +245,7 @@ def test_token_row_labels_clear_their_token_blocks():
         renderer = fig.canvas.get_renderer()
 
         row_colors = {}
-        for label, token_y in (("image 0%", 0.256), ("text 62-82%", 0.210)):
+        for label, token_y in (("text 62-82%", 0.272), ("image 0%", 0.223)):
             text = next(item for item in axis.texts if item.get_text() == label)
             text_bounds = text.get_window_extent(renderer=renderer).transformed(axis.transData.inverted())
             token_blocks = [

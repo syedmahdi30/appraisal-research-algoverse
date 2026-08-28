@@ -135,15 +135,19 @@ def _draw_mechanistic_lane(ax):
         _round_box(ax, output_x, y, output_w, 0.060, face="white", edge=RULE, radius=0.012, lw=0.8)
         ax.text(output_x + output_w / 2, y + 0.030, label, fontsize=8.0, ha="center", va="center")
 
-    result_y, result_h = 0.197, 0.111
+    # The measured quantity leads; the image row is an arithmetic zero, not a finding.
+    # Image positions precede the context and the image is held fixed, so the patch copies a
+    # value onto itself. Labelling it in the panel keeps it from reading as a result.
+    result_y, result_h = 0.162, 0.148
     _arrow(ax, (method_x + method_w, result_y + result_h / 2), (0.650, result_y + result_h / 2), color="#7A7F85")
     _round_box(ax, 0.650, result_y, 0.310, result_h, face="white", edge=RULE, radius=0.012, lw=0.8)
-    ax.text(0.672, 0.271, "image 0%", fontsize=8.0, color=MUTED, va="center")
-    ax.text(0.672, 0.225, "text 62-82%", fontsize=8.0, color=POS, va="center")
+    ax.text(0.672, 0.285, "text 62-82%", fontsize=8.0, color=POS, va="center")
+    ax.text(0.672, 0.236, "image 0%", fontsize=8.0, color=MUTED, va="center")
+    ax.text(0.672, 0.187, "alignment check", fontsize=8.0, color=MUTED, style="italic", va="center")
     for index in range(4):
         token_x = 0.838 + index * 0.024
-        ax.add_patch(Rectangle((token_x, 0.256), 0.016, 0.026, facecolor="#EFF0F1", edgecolor=MUTED, linewidth=0.6))
-        ax.add_patch(Rectangle((token_x, 0.210), 0.016, 0.026, facecolor="#9DC2E2", edgecolor=POS, linewidth=0.6))
+        ax.add_patch(Rectangle((token_x, 0.272), 0.016, 0.026, facecolor="#9DC2E2", edgecolor=POS, linewidth=0.6))
+        ax.add_patch(Rectangle((token_x, 0.223), 0.016, 0.026, facecolor="#EFF0F1", edgecolor=MUTED, linewidth=0.6))
 
 
 def build_figure(_metrics: dict | None = None):
