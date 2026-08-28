@@ -1,0 +1,18 @@
+\begin{table}[h]
+  \caption{Cross-model replacement (behavioral valence, championship/funeral context pair, the same 51 photographs): percentage of the positive-versus-negative context difference recovered by each token group, with percentile bootstrap 95\% intervals over photographs. Image positions recover nothing in any model. The patched layer band differs by model, so the three columns bound a shared pattern rather than forming a matched comparison.}
+  \label{tab:mechmodels}
+  \centering
+  \small
+  \begin{tabular}{lrrr}
+    \toprule
+    & \gemma{} & \qwen{} & \llava{} \\
+    Patched group & (layers 13--17/34) & (13--33/36) & (11--29/32) \\
+    \midrule
+    Question tokens      & $55.5\%$ $[45.5, 65.1]$ & $12.1\%$ $[7.4, 17.6]$  & $32.7\%$ $[29.7, 36.0]$ \\
+    Turn structure       & $23.8\%$ $[10.6, 37.4]$ & $6.2\%$ $[2.1, 11.9]$   & $20.5\%$ $[18.0, 23.0]$ \\
+    All aligned text     & $\mathbf{81.6\%}$ $[74.6, 88.0]$ & $\mathbf{62.3\%}$ $[53.6, 70.9]$ & $\mathbf{66.0\%}$ $[62.3, 69.7]$ \\
+    \midrule
+    Image tokens         & $0.0\%$ $[0.0, 0.0]$ & $0.0\%$ $[0.0, 0.0]$ & $0.0\%$ $[-0.0, 0.1]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
