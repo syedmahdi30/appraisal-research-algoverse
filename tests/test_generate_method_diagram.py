@@ -1,169 +1,118 @@
+"""Geometry and legibility invariants for the method figure.
+
+These are deliberately design-agnostic. What the figure *claims* is guarded by
+tests/test_method_diagram_numbers.py, which checks every printed number against
+results/. What is guarded here is that the drawing is physically readable at the
+size it ships: nothing below 8pt, nothing overlapping, and no label straddling
+the edge of the box that is supposed to contain it.
+
+The straddle check exists because porting the design from a 2200px canvas to a
+5.5in figure silently overflowed six labels out of their boxes; at a glance the
+figure still looked plausible.
+"""
+import matplotlib
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
+import pytest
 from matplotlib.patches import Rectangle
 
 from scripts import generate_method_diagram as diagram
 
-
-SAMPLE_METRICS = {
-    "neg": -1.48,
-    "pos": 0.31,
-    "ratio": 4.8,
-    "contrast": 1.15,
-    "ci": (0.94, 1.34),
-    "n_img": 62,
-    "n_pairs": 6,
-    "rmin": 4.3,
-    "rmax": 5.5,
-}
+MIN_POINT_SIZE = 8.0
+TEXT_WIDTH_INCHES = 5.5
 
 
-def test_method_figure_separates_behavioral_and_mechanistic_flows_without_results():
-    fig = diagram.build_figure(SAMPLE_METRICS)
+@pytest.fixture
+def drawn():
+    fig = diagram.build_figure()
+    fig.canvas.draw()
     try:
-        labels = {
-            text.get_text()
-            for axis in fig.axes
-            for text in axis.texts
-            if text.get_visible() and text.get_text().strip()
-        }
-        joined = " ".join(" ".join(label.split()) for label in labels)
-
-        assert "Behavioral test" in labels
-        assert "Mechanistic test" in labels
-        assert "Neutral correction" in joined
-        assert "Text-trained probe" in joined
-        assert "Activation patching" in joined
-        assert "Activation steering" in joined
-        assert all(result not in joined for result in ("4.8x", "88-93%", "+0.31", "-1.48"))
+        yield fig, fig.axes[0], fig.canvas.get_renderer()
     finally:
         plt.close(fig)
 
 
-def test_method_boxes_show_current_model_coverage():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        texts = [
-            text
-            for axis in fig.axes
-            for text in axis.texts
-            if text.get_visible() and text.get_text().strip()
-        ]
-        labels = [" ".join(text.get_text().split()) for text in texts]
-
-        assert labels.count("Gemma") == 2
-        assert labels.count("Gemma · Qwen · LLaVA") == 1
-        assert "Gemma-3-4B" not in labels
-
-        methods = {
-            label: next(text for text in texts if text.get_text() == label)
-            for label in ("Text-trained probe", "Activation patching", "Activation steering")
-        }
-        model_labels = [text for text in texts if "Gemma" in text.get_text()]
-        for method in methods.values():
-            assert any(abs(method.get_position()[1] - model.get_position()[1]) <= 0.065 for model in model_labels)
-    finally:
-        plt.close(fig)
+def _labels(axis, renderer):
+    for text in axis.texts:
+        if text.get_visible() and text.get_text().strip():
+            yield text, text.get_window_extent(renderer=renderer).transformed(
+                axis.transData.inverted()
+            )
 
 
-def test_patching_visual_reports_token_level_recovery_in_the_right_direction():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        labels = {
-            " ".join(text.get_text().split())
-            for axis in fig.axes
-            for text in axis.texts
-            if text.get_visible() and text.get_text().strip()
-        }
-
-        assert "image 0%" in labels
-        assert "text 62-82%" in labels
-    finally:
-        plt.close(fig)
+def _containers(axis):
+    """Rectangles drawn as outlines are boxes meant to contain their contents."""
+    for patch in axis.patches:
+        if isinstance(patch, Rectangle) and patch.get_facecolor()[3] == 0:
+            box = patch.get_bbox()
+            if box.width > 0.05 and box.height > 0.05:
+                yield patch, box
 
 
-def test_behavioral_lane_names_the_three_readouts_without_inventing_a_score():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        joined = " ".join(
-            " ".join(text.get_text().split())
-            for axis in fig.axes
-            for text in axis.texts
-            if text.get_visible() and text.get_text().strip()
-        )
-
-        assert "3 readouts" in joined
-        assert "Asymmetry score" not in joined
-    finally:
-        plt.close(fig)
+def test_figure_is_text_width_and_single_axes(drawn):
+    fig, _, _ = drawn
+    width, height = fig.get_size_inches()
+    assert width == TEXT_WIDTH_INCHES
+    assert len(fig.axes) == 1
+    assert height <= 4.0, "a taller figure costs a page the build cannot spare"
 
 
-def test_input_scope_does_not_claim_every_context_is_a_one_word_pair():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        labels = {
-            text.get_text()
-            for axis in fig.axes
-            for text in axis.texts
-            if text.get_visible() and text.get_text().strip()
-        }
-
-        assert "controlled contexts" in labels
-        assert "one-word pair" not in labels
-    finally:
-        plt.close(fig)
+def test_no_type_below_the_print_legibility_floor(drawn):
+    _, axis, renderer = drawn
+    sizes = {text.get_fontsize() for text, _ in _labels(axis, renderer)}
+    assert min(sizes) >= MIN_POINT_SIZE, (
+        f"smallest type is {min(sizes)}pt; below {MIN_POINT_SIZE}pt is unreadable in print"
+    )
 
 
-def test_mechanistic_panel_uses_bold_only_for_its_heading():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        texts = {
-            text.get_text(): text
-            for axis in fig.axes
-            for text in axis.texts
-            if text.get_visible() and text.get_text().strip()
-        }
-        internal_labels = (
-            "Text-trained probe",
-            "Activation patching",
-            "Activation steering",
-            "cross-modal readout",
-            "image 0%",
-            "text 62-82%",
-            "causal output shift",
-        )
-
-        assert texts["Mechanistic test"].get_fontweight() == "bold"
-        assert all(texts[label].get_fontweight() == "normal" for label in internal_labels)
-    finally:
-        plt.close(fig)
+def test_labels_stay_within_the_canvas(drawn):
+    _, axis, renderer = drawn
+    outside = [
+        text.get_text()[:40]
+        for text, box in _labels(axis, renderer)
+        if box.x0 < -0.01 or box.x1 > 1.01 or box.y0 < -0.01 or box.y1 > 1.01
+    ]
+    assert outside == []
 
 
-def test_build_figure_enforces_compact_legible_paper_layout():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        width, height = fig.get_size_inches()
-        visible_text = [
-            text
-            for axis in fig.axes
-            for text in axis.texts
-            if text.get_visible() and text.get_text().strip()
-        ]
-
-        assert width == 5.5
-        assert height <= 2.6
-        assert len(fig.axes) == 1
-        assert min(text.get_fontsize() for text in visible_text) >= 8.0
-    finally:
-        plt.close(fig)
+def test_labels_do_not_overlap_each_other(drawn):
+    _, axis, renderer = drawn
+    labels = list(_labels(axis, renderer))
+    collisions = []
+    for index, (left, left_box) in enumerate(labels):
+        for right, right_box in labels[index + 1:]:
+            dx = min(left_box.x1, right_box.x1) - max(left_box.x0, right_box.x0)
+            dy = min(left_box.y1, right_box.y1) - max(left_box.y0, right_box.y0)
+            if dx > 0.002 and dy > 0.002:
+                collisions.append((left.get_text()[:28], right.get_text()[:28]))
+    assert collisions == []
 
 
-def test_write_outputs_exports_pdf_png_and_editable_svg(tmp_path):
-    fig = diagram.build_figure(SAMPLE_METRICS)
+def test_no_label_straddles_the_box_meant_to_hold_it(drawn):
+    """A label must be wholly inside a container box or wholly outside it."""
+    _, axis, renderer = drawn
+    straddles = []
+    for _, container in _containers(axis):
+        for text, box in _labels(axis, renderer):
+            overlaps = (
+                box.x1 > container.x0 and box.x0 < container.x1
+                and box.y1 > container.y0 and box.y0 < container.y1
+            )
+            contained = (
+                box.x0 >= container.x0 - 0.004 and box.x1 <= container.x1 + 0.004
+                and box.y0 >= container.y0 - 0.004 and box.y1 <= container.y1 + 0.004
+            )
+            if overlaps and not contained:
+                straddles.append(text.get_text()[:34])
+    assert straddles == [], f"labels crossing a box edge: {straddles}"
+
+
+def test_write_outputs_exports_pdf_png_and_svg(tmp_path):
+    fig = diagram.build_figure()
     try:
         paths = diagram.write_outputs(fig, tmp_path)
-
         assert {path.suffix for path in paths} == {".pdf", ".png", ".svg"}
-        assert all(path.stat().st_size > 1_000 for path in paths)
         assert (tmp_path / "method_diagram.pdf").read_bytes().startswith(b"%PDF")
         assert (tmp_path / "method_diagram.png").read_bytes().startswith(b"\x89PNG")
         assert "<svg" in (tmp_path / "method_diagram.svg").read_text()
@@ -171,97 +120,21 @@ def test_write_outputs_exports_pdf_png_and_editable_svg(tmp_path):
         plt.close(fig)
 
 
-def test_visible_labels_stay_inside_their_panel():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
-        escaped = []
-
-        for panel_index, axis in enumerate(fig.axes):
-            for text in axis.texts:
-                if not text.get_visible() or not text.get_text().strip():
-                    continue
-                bounds = text.get_window_extent(renderer=renderer).transformed(axis.transAxes.inverted())
-                if bounds.x0 < -0.01 or bounds.x1 > 1.01 or bounds.y0 < -0.01 or bounds.y1 > 1.01:
-                    escaped.append((panel_index, text.get_text()))
-
-        assert escaped == []
-    finally:
-        plt.close(fig)
-
-
-def test_visible_labels_do_not_overlap_each_other():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
-        collisions = []
-
-        for panel_index, axis in enumerate(fig.axes):
-            labels = [
-                (text, text.get_window_extent(renderer=renderer))
-                for text in axis.texts
-                if text.get_visible() and text.get_text().strip()
-            ]
-            for index, (left, left_box) in enumerate(labels):
-                for right, right_box in labels[index + 1:]:
-                    overlap_x = max(0, min(left_box.x1, right_box.x1) - max(left_box.x0, right_box.x0))
-                    overlap_y = max(0, min(left_box.y1, right_box.y1) - max(left_box.y0, right_box.y0))
-                    if overlap_x * overlap_y > 4:
-                        collisions.append((panel_index, left.get_text(), right.get_text()))
-
-        assert collisions == []
-    finally:
-        plt.close(fig)
-
-
-def test_shared_input_labels_stay_inside_the_stimulus_block():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        fig.canvas.draw()
-        axis = fig.axes[0]
-        renderer = fig.canvas.get_renderer()
-        escaped = []
-
-        for text in axis.texts:
-            x, _ = text.get_position()
-            if x >= 0.253 or not text.get_text().strip():
-                continue
-            bounds = text.get_window_extent(renderer=renderer).transformed(axis.transData.inverted())
-            if bounds.x1 > 0.253:
-                escaped.append(text.get_text())
-
-        assert escaped == []
-    finally:
-        plt.close(fig)
-
-
-def test_token_row_labels_clear_their_token_blocks():
-    fig = diagram.build_figure(SAMPLE_METRICS)
-    try:
-        fig.canvas.draw()
-        axis = fig.axes[0]
-        renderer = fig.canvas.get_renderer()
-
-        row_colors = {}
-        for label, token_y in (("text 62-82%", 0.272), ("image 0%", 0.223)):
-            text = next(item for item in axis.texts if item.get_text() == label)
-            text_bounds = text.get_window_extent(renderer=renderer).transformed(axis.transData.inverted())
-            token_blocks = [
-                patch
-                for patch in axis.patches
-                if isinstance(patch, Rectangle)
-                and abs(patch.get_y() - token_y) < 0.001
-                and patch.get_x() >= 0.8
-            ]
-
-            assert token_blocks
-            assert text_bounds.x1 + 0.008 <= min(block.get_x() for block in token_blocks)
-            row_colors[label] = token_blocks[0].get_facecolor()
-
-        image_color = row_colors["image 0%"]
-        text_color = row_colors["text 62-82%"]
-        assert max(text_color[:3]) - min(text_color[:3]) > max(image_color[:3]) - min(image_color[:3])
-    finally:
-        plt.close(fig)
+def test_labels_do_not_collide_with_filled_marks(drawn):
+    """Bars and chips are patches, so the text-vs-text overlap check cannot see them."""
+    _, axis, renderer = drawn
+    filled = [
+        patch.get_bbox()
+        for patch in axis.patches
+        if isinstance(patch, Rectangle) and patch.get_facecolor()[3] > 0
+    ]
+    collisions = []
+    for text, box in _labels(axis, renderer):
+        if text.get_bbox_patch() is not None:
+            continue  # chips intentionally sit on their own background
+        for mark in filled:
+            dx = min(box.x1, mark.x1) - max(box.x0, mark.x0)
+            dy = min(box.y1, mark.y1) - max(box.y0, mark.y0)
+            if dx > 0.002 and dy > 0.002:
+                collisions.append(text.get_text()[:28])
+    assert collisions == [], f"labels overrun a filled mark: {collisions}"

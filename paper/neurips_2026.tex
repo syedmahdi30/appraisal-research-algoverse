@@ -75,7 +75,7 @@ Vision-language systems increasingly read images of people alongside text that a
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/method_diagram.pdf}
-  \caption{Design. \textbf{A}~Behavioral arm: photograph and event held fixed, a single valence word flipped; four VLMs score complete-label emotion probabilities, corrected against that image's own neutral-context baseline. \textbf{B}~Mechanistic arm, which does not share that input: a positive-context donor supplies activations to a negative-context recipient over 51 photographs, with no neutral correction. Probe and steering direction are fit on \gemma{}'s states; patching also runs on \qwen{} and \llava{}, restoring $62$--$82\%$ of the context difference from aligned downstream text, excluding the context tokens. That span is a range across models, not a confidence interval, and layer bands differ. The image row is an alignment check whose zero is forced by causal order (Table~\ref{tab:mechmodels}).}
+  \caption{Design. \textbf{A}~Behavioral arm: photograph and event held fixed, one valence word flipped, each score corrected against that image's own neutral-context baseline. 150 person-annotations from 121 images; 62 positive images carry the won/lost pair. \textbf{B}~Mechanistic arm, which does not share that input: 51 photographs, the championship/funeral pair, no neutral correction. The probe and the steering direction are fit on \gemma{}'s states; patching also runs on \qwen{} and \llava{}, whose layer bands differ, so $62$--$82\%$ is a range across models rather than a confidence interval (Table~\ref{tab:mechmodels}). EMOTIC photographs are not reproduced; we release index files and context sentences only.}
   \label{fig:method}
 \end{figure}
 \fi

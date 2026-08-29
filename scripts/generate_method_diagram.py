@@ -2,8 +2,25 @@
 
     python scripts/generate_method_diagram.py
 
-The figure shows the controlled stimulus, the two experimental paths, and the
-headline token-localization result from activation patching.
+Ports the "Method Diagram" Claude Design canvas into matplotlib so the figure
+emits a vector PDF cropped to its own bounding box. Exporting the canvas
+directly went through macOS print-to-PDF, which paginates onto US Letter and
+silently clipped roughly 40% of the artwork, including every result.
+
+The canvas is authored 2200px wide with 22px body text. Placed at \\linewidth
+(5.5in) that renders near 4pt, so the type is re-tuned here rather than scaled.
+Nothing sits below 8pt. Measured on DejaVu Sans, 8pt regular runs 17.4 characters
+per inch and 8pt bold caps only 12.8, so headings run out of room well before body
+text does and every string below is written to its own column's budget:
+
+    stimulus text  1.47in -> 25 chars     result panel  1.86in -> 32 regular / 23 bold
+    scorer box     0.99in -> 17 chars     arm-B panel   1.14in -> 19 chars
+
+The canvas's three footer lines move into the LaTeX caption, where they cost no
+figure height.
+
+Numbers shown are guarded by tests/test_method_diagram_numbers.py, which
+recomputes each from results/ and fails when the drawing goes stale.
 """
 from __future__ import annotations
 
@@ -13,171 +30,169 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Ellipse, FancyArrowPatch, FancyBboxPatch, Rectangle
-
+from matplotlib.patches import Circle, FancyArrow, Polygon, Rectangle
 
 ROOT = Path(__file__).resolve().parents[1]
 
-POS, NEG = "#2F75B5", "#D45A3A"
-INK, MUTED, RULE = "#171717", "#606770", "#B8BDC3"
-PALE, BLUE_WASH, SAND_WASH = "#F4F5F6", "#F4F8FC", "#FBF7F0"
-BLUE_RULE, SAND_RULE = "#86ADD1", "#C8A77B"
+# Modernist design-system tokens, from the canvas stylesheet.
+INK, RED = "#201e1d", "#ec3013"
+MID, LIGHT = "#605d5d", "#9b9797"
+SURFACE, EDGE, RULE, PALE_RED = "#eae9e9", "#bab6b6", "#d7d3d3", "#f0b3a6"
+
+W_IN, H_IN = 5.5, 3.2
+ASPECT = H_IN / W_IN  # multiply an x-extent by this for a visually square box
 
 plt.rcParams.update({
-    "font.family": "DejaVu Sans",
+    "font.family": "DejaVu Sans",  # Archivo is not bundled; same modernist grotesque
     "font.size": 8.0,
-    "font.weight": "normal",
     "text.color": INK,
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
 })
 
 
-def _round_box(ax, x, y, width, height, *, face, edge, radius=0.018, lw=0.9):
-    patch = FancyBboxPatch(
-        (x, y),
-        width,
-        height,
-        boxstyle=f"round,pad=0.004,rounding_size={radius}",
-        facecolor=face,
-        edgecolor=edge,
-        linewidth=lw,
-    )
-    ax.add_patch(patch)
-    return patch
+def _box(ax, x, y, w, h, *, edge=INK, lw=1.3):
+    ax.add_patch(Rectangle((x, y), w, h, facecolor="none", edgecolor=edge, linewidth=lw))
 
 
-def _arrow(ax, start, end, *, color=INK, lw=0.9, connectionstyle="arc3"):
-    patch = FancyArrowPatch(
-        start,
-        end,
-        arrowstyle="-|>",
-        mutation_scale=8,
-        linewidth=lw,
-        color=color,
-        connectionstyle=connectionstyle,
-        shrinkA=2,
-        shrinkB=2,
-    )
-    ax.add_patch(patch)
-    return patch
+def _arrow(ax, x0, x1, y):
+    ax.add_patch(FancyArrow(x0, y, x1 - x0, 0, width=0.003, head_width=0.018,
+                            head_length=0.009, length_includes_head=True,
+                            facecolor=INK, edgecolor="none"))
+
+
+def _rule(ax, x0, x1, y, color=PALE_RED):
+    ax.plot([x0, x1], [y, y], color=color, lw=0.8, solid_capstyle="butt")
 
 
 def _draw_stimulus(ax):
-    _round_box(ax, 0.018, 0.17, 0.235, 0.66, face="#FCFCFC", edge=RULE, radius=0.025, lw=1.0)
-    ax.text(0.035, 0.785, "Matched input", fontsize=8.8, weight="bold", va="center")
+    _box(ax, 0.028, 0.600, 0.372, 0.370)
 
-    ax.add_patch(Rectangle((0.035, 0.43), 0.074, 0.22, facecolor=PALE, edgecolor=RULE, linewidth=0.8))
-    ax.add_patch(Circle((0.072, 0.565), 0.017, facecolor="#BFC4C9", edgecolor="none"))
-    ax.add_patch(Ellipse((0.072, 0.505), 0.050, 0.055, facecolor="#BFC4C9", edgecolor="none"))
+    icon_w = 0.055
+    icon_h = icon_w / ASPECT
+    ix, iy = 0.058, 0.848
+    ax.add_patch(Rectangle((ix, iy), icon_w, icon_h, facecolor=SURFACE, edgecolor=EDGE, lw=0.9))
+    cx = ix + icon_w / 2
+    ax.add_patch(Circle((cx, iy + icon_h * 0.68), icon_w * 0.20, facecolor=LIGHT, edgecolor="none"))
+    ax.add_patch(Polygon([(ix + icon_w * 0.14, iy + icon_h * 0.10),
+                          (ix + icon_w * 0.86, iy + icon_h * 0.10),
+                          (ix + icon_w * 0.74, iy + icon_h * 0.46),
+                          (ix + icon_w * 0.26, iy + icon_h * 0.46)],
+                         closed=True, facecolor=LIGHT, edgecolor="none"))
+    ax.text(cx, 0.832, "POSITIVE\nPHOTO", fontsize=8.0, weight="bold", color=LIGHT,
+            ha="center", va="top", linespacing=1.25)
 
-    contexts = [
-        (0.615, "won  (+)", "#EAF3FB", POS),
-        (0.510, "neutral", "#F0F1F2", MUTED),
-        (0.405, "lost  (-)", "#FCEFEA", NEG),
+    tx = 0.152
+    ax.text(tx, 0.922, "“…moments after", fontsize=8.5, va="center")
+    ax.text(tx, 0.862, "WON", fontsize=8.5, weight="bold", color=INK, va="center",
+            bbox=dict(boxstyle="square,pad=0.25", facecolor=SURFACE, edgecolor="none"))
+    ax.text(tx + 0.062, 0.862, "/", fontsize=8.5, weight="bold", color=LIGHT, va="center")
+    ax.text(tx + 0.084, 0.862, "LOST", fontsize=8.5, weight="bold", color="white", va="center",
+            bbox=dict(boxstyle="square,pad=0.25", facecolor=INK, edgecolor="none"))
+    ax.text(tx, 0.802, "the championship", fontsize=8.5, va="center")
+    ax.text(tx, 0.742, "game.”", fontsize=8.5, va="center")
+
+
+def _draw_scorer(ax):
+    x, w = 0.432, 0.180
+    _box(ax, x, 0.655, w, 0.250)
+    mid = x + w / 2
+    ax.text(mid, 0.872, "VLM", fontsize=9.0, weight="bold", ha="center", va="center")
+    ax.text(mid, 0.762, "4 VLMs\ncomplete-label\nlog-probs, 13\nemotion words",
+            fontsize=8.0, color=MID, ha="center", va="center", linespacing=1.35)
+
+
+def _draw_behavioral_result(ax):
+    x, w = 0.645, 0.350
+    _box(ax, x, 0.600, w, 0.370, edge=RED, lw=1.6)
+    left, right = x + 0.014, x + w - 0.014
+
+    ax.text(left, 0.955, "MEAN SHIFT VS NEUTRAL\nQWEN3-VL-8B",
+            fontsize=8.0, weight="bold", color=MID, va="top", linespacing=1.3)
+
+    bar_x, bar_w = left + 0.064, right - left - 0.064
+    for y, label, frac, color in ((0.855, "WON", 0.22, INK), (0.812, "LOST", 0.96, RED)):
+        ax.text(left, y, label, fontsize=8.0, weight="bold", color=color, va="center")
+        ax.add_patch(Rectangle((bar_x, y - 0.014), bar_w * frac, 0.028,
+                               facecolor=color, edgecolor="none"))
+
+    _rule(ax, left, right, 0.788)
+    ax.text(left, 0.762, "4–5× larger for LOST, all 6", fontsize=8.0, va="center")
+
+    _rule(ax, left, right, 0.736)
+    ax.text(left, 0.712, "joy → sadness", fontsize=9.0, weight="bold", va="center")
+    ax.text(left, 0.648, "Top label, same photo, one\nword changed. 57 of 62 flip.",
+            fontsize=8.0, color=MID, va="center", linespacing=1.3)
+
+
+def _draw_patch_operation(ax):
+    _box(ax, 0.028, 0.050, 0.272, 0.400)
+
+    for bx, label, color, filled in ((0.052, "Donor", INK, True), (0.176, "Recipient", RED, False)):
+        rect = dict(facecolor=INK, edgecolor="none") if filled else dict(facecolor="none", edgecolor=RED, linewidth=1.6)
+        ax.add_patch(Rectangle((bx, 0.352), 0.096, 0.052, **rect))
+        ax.text(bx + 0.048, 0.322, label, fontsize=8.5, weight="bold", color=color,
+                ha="center", va="center")
+    ax.text(0.100, 0.288, "positive\ncontext", fontsize=8.0, color=MID, ha="center", va="top",
+            linespacing=1.3)
+    ax.text(0.224, 0.288, "negative\ncontext", fontsize=8.0, color=MID, ha="center", va="top",
+            linespacing=1.3)
+
+    _arrow(ax, 0.046, 0.078, 0.148)
+    ax.text(0.090, 0.148, "activations copied,\none token group",
+            fontsize=8.0, color=MID, va="center", linespacing=1.3)
+
+
+def _draw_mechanistic_results(ax):
+    panels = [
+        (0.338, "PROBE", "ρ = +0.510", "text-trained probe\ntracks image\nvalence", None),
+        (0.557, "PATCHING", "62–82%", "of context effect\nrestored at text\npositions.",
+         "0% at image\npositions, an\nalignment check"),
+        (0.776, "STEERING", "+0.335", "slope, still moves\nthe answer under\nconflict", None),
     ]
-    for y, label, face, edge in contexts:
-        _round_box(ax, 0.122, y, 0.112, 0.075, face=face, edge=edge, radius=0.012, lw=0.8)
-        ax.text(0.178, y + 0.0375, label, fontsize=8.0, color=edge, weight="bold", ha="center", va="center")
-
-    ax.text(0.035, 0.315, "same image", fontsize=8.0, color=MUTED, va="center")
-    ax.text(0.035, 0.255, "controlled contexts", fontsize=8.0, color=MUTED, va="center")
-    ax.text(0.035, 0.195, "neutral baseline", fontsize=8.0, color=MUTED, va="center")
-
-
-def _draw_behavioral_lane(ax):
-    _round_box(ax, 0.310, 0.555, 0.675, 0.370, face=BLUE_WASH, edge=BLUE_RULE, radius=0.024, lw=1.0)
-    ax.text(0.335, 0.885, "A", fontsize=9.0, weight="bold", va="center")
-    ax.text(0.360, 0.885, "Behavioral test", fontsize=9.0, weight="bold", va="center")
-
-    nodes = [
-        (0.340, 0.660, 0.120, "4 VLMs"),
-        (0.495, 0.660, 0.135, "Emotion\nprobabilities"),
-        (0.665, 0.660, 0.140, "Neutral\ncorrection"),
-        (0.840, 0.660, 0.125, "3 readouts"),
-    ]
-    for x, y, width, label in nodes:
-        _round_box(ax, x, y, width, 0.145, face="white", edge=RULE, radius=0.015, lw=0.8)
-        ax.text(x + width / 2, y + 0.0725, label, fontsize=8.0, weight="bold", ha="center", va="center")
-
-    for start, end in [
-        ((0.460, 0.7325), (0.495, 0.7325)),
-        ((0.630, 0.7325), (0.665, 0.7325)),
-        ((0.805, 0.7325), (0.840, 0.7325)),
-    ]:
-        _arrow(ax, start, end, color=POS)
-
-
-def _draw_mechanistic_lane(ax):
-    _round_box(ax, 0.310, 0.050, 0.675, 0.430, face=SAND_WASH, edge=SAND_RULE, radius=0.024, lw=1.0)
-    ax.text(0.335, 0.445, "B", fontsize=9.0, weight="bold", va="center")
-    ax.text(0.360, 0.445, "Mechanistic test", fontsize=9.0, weight="bold", va="center")
-
-    method_x, method_w = 0.340, 0.285
-    method_rows = [
-        (0.320, 0.090, "Text-trained probe", "Gemma", POS),
-        (0.200, 0.105, "Activation patching", "Gemma · Qwen · LLaVA", "#7A7F85"),
-        (0.080, 0.090, "Activation steering", "Gemma", "#A46F35"),
-    ]
-    for y, height, label, model_label, accent in method_rows:
-        _round_box(ax, method_x, y, method_w, height, face="white", edge=RULE, radius=0.012, lw=0.8)
-        ax.add_patch(Circle((method_x + 0.019, y + height / 2), 0.0075, facecolor=accent, edgecolor="none"))
-        ax.text(method_x + 0.037, y + height - 0.0225, label, fontsize=8.0, va="center")
-        ax.text(method_x + 0.037, y + 0.0225, model_label, fontsize=8.0, color=MUTED, va="center")
-
-    output_x, output_w = 0.670, 0.290
-    simple_outputs = [
-        (0.327, "cross-modal readout", POS),
-        (0.087, "causal output shift", "#A46F35"),
-    ]
-    for y, label, accent in simple_outputs:
-        _arrow(ax, (method_x + method_w, y + 0.030), (output_x, y + 0.030), color=accent)
-        _round_box(ax, output_x, y, output_w, 0.060, face="white", edge=RULE, radius=0.012, lw=0.8)
-        ax.text(output_x + output_w / 2, y + 0.030, label, fontsize=8.0, ha="center", va="center")
-
-    # The measured quantity leads; the image row is an arithmetic zero, not a finding.
-    # Image positions precede the context and the image is held fixed, so the patch copies a
-    # value onto itself. Labelling it in the panel keeps it from reading as a result.
-    result_y, result_h = 0.162, 0.148
-    _arrow(ax, (method_x + method_w, result_y + result_h / 2), (0.650, result_y + result_h / 2), color="#7A7F85")
-    _round_box(ax, 0.650, result_y, 0.310, result_h, face="white", edge=RULE, radius=0.012, lw=0.8)
-    ax.text(0.672, 0.285, "text 62-82%", fontsize=8.0, color=POS, va="center")
-    ax.text(0.672, 0.236, "image 0%", fontsize=8.0, color=MUTED, va="center")
-    ax.text(0.672, 0.187, "alignment check", fontsize=8.0, color=MUTED, style="italic", va="center")
-    for index in range(4):
-        token_x = 0.838 + index * 0.024
-        ax.add_patch(Rectangle((token_x, 0.272), 0.016, 0.026, facecolor="#9DC2E2", edgecolor=POS, linewidth=0.6))
-        ax.add_patch(Rectangle((token_x, 0.223), 0.016, 0.026, facecolor="#EFF0F1", edgecolor=MUTED, linewidth=0.6))
+    for x, title, value, caption, footnote in panels:
+        w = 0.219
+        _box(ax, x, 0.050, w, 0.400, edge=RED, lw=1.6)
+        mid = x + w / 2
+        ax.text(mid, 0.412, title, fontsize=8.5, weight="bold", ha="center", va="center")
+        ax.text(mid, 0.340, value, fontsize=12.0, weight="bold", ha="center", va="center")
+        ax.text(mid, 0.245, caption, fontsize=8.0, color=MID, ha="center", va="center",
+                linespacing=1.35)
+        if footnote:
+            ax.text(mid, 0.120, footnote, fontsize=8.0, color=LIGHT, ha="center", va="center",
+                    linespacing=1.35)
 
 
 def build_figure(_metrics: dict | None = None):
-    """Build a compact method-only figure at the paper's text width."""
-    fig = plt.figure(figsize=(5.5, 2.5), dpi=400)
-    ax = fig.add_axes([0.01, 0.02, 0.98, 0.96])
+    """Build the two-arm method figure at the paper's text width."""
+    fig = plt.figure(figsize=(W_IN, H_IN), dpi=400)
+    ax = fig.add_axes([0.004, 0.008, 0.992, 0.984])
     ax.set_axis_off()
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
+    ax.text(0.002, 0.952, "A", fontsize=13.0, weight="bold", color=RED, va="center")
     _draw_stimulus(ax)
-    _draw_behavioral_lane(ax)
-    _draw_mechanistic_lane(ax)
+    _arrow(ax, 0.404, 0.428, 0.785)
+    _draw_scorer(ax)
+    _arrow(ax, 0.616, 0.641, 0.785)
+    _draw_behavioral_result(ax)
 
-    ax.add_patch(Circle((0.282, 0.500), 0.007, facecolor=INK, edgecolor="none"))
-    _arrow(ax, (0.253, 0.500), (0.280, 0.500))
-    _arrow(ax, (0.286, 0.505), (0.330, 0.735), color=POS, connectionstyle="arc3,rad=-0.08")
-    _arrow(ax, (0.286, 0.495), (0.330, 0.255), color="#A46F35", connectionstyle="arc3,rad=0.08")
+    _rule(ax, 0.002, 0.998, 0.520, color=RULE)
+
+    ax.text(0.002, 0.432, "B", fontsize=13.0, weight="bold", color=RED, va="center")
+    _draw_patch_operation(ax)
+    _arrow(ax, 0.304, 0.334, 0.250)
+    _draw_mechanistic_results(ax)
     return fig
 
 
 def write_outputs(fig, out: Path) -> tuple[Path, Path, Path]:
-    """Write the paper PDF, high-resolution preview, and editable SVG."""
+    """Write the paper PDF, a high-resolution preview, and an editable SVG."""
     out.mkdir(parents=True, exist_ok=True)
-    pdf = out / "method_diagram.pdf"
-    png = out / "method_diagram.png"
-    svg = out / "method_diagram.svg"
-    fig.savefig(pdf, bbox_inches="tight", pad_inches=0.02)
-    fig.savefig(png, dpi=400, bbox_inches="tight", pad_inches=0.02)
-    fig.savefig(svg, bbox_inches="tight", pad_inches=0.02)
+    pdf, png, svg = (out / f"method_diagram.{ext}" for ext in ("pdf", "png", "svg"))
+    for path in (pdf, png, svg):
+        fig.savefig(path, bbox_inches="tight", pad_inches=0.02)
     return pdf, png, svg
 
 
