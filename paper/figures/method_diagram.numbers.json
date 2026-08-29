@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Every number asserted inside paper/figures/method_diagram.pdf.",
+    "The figure is a hand-maintained design asset, so nothing regenerates it when",
+    "results change. tests/test_method_diagram_numbers.py recomputes each value",
+    "from results/ and fails if the figure has gone stale. If a test here fails,",
+    "the figure must be redrawn, not the expectation loosened."
+  ],
+  "probe_rho": {
+    "shown": 0.510,
+    "source": "results/stage_c/metrics_hf.json",
+    "path": "image_readout.pleasantness.vs_valence.spearman",
+    "tol": 0.0005
+  },
+  "steering_slope": {
+    "shown": 0.335,
+    "source": "results/stage_f/arbitration_hf_metrics.json",
+    "path": "arbitration.valence_slope",
+    "tol": 0.0005
+  },
+  "patching_text_all_pct": {
+    "shown_low": 62, "shown_high": 82,
+    "sources": [
+      "results/stage_f/patching_qwen_metrics.json",
+      "results/stage_f/patching_llava_sequence_metrics.json"
+    ],
+    "gemma_parquet": "results/stage_f/patching_hf_pair1.parquet",
+    "note": "Gemma arm is behavioral valence on the championship/funeral pair, matching the ports."
+  },
+  "patching_image_pct": { "shown": 0, "tol_pct": 0.5 },
+  "matched_pair_ratios": {
+    "shown_low": 4.3, "shown_high": 5.5,
+    "source": "results/stage_f/conflict_qwen3-vl-8b-instruct_minimal_analysis.json",
+    "path": "minimal_pair_asymmetry.per_pair"
+  },
+  "joy_to_sadness": {
+    "shown_flips": 57, "shown_total": 62,
+    "source": "results/stage_f/conflict_qwen3-vl-8b-instruct_minimal.parquet",
+    "context_id": "mp0"
+  },
+  "unique_photographs_patching": {
+    "shown": 51,
+    "source": "results/stage_f/patching_qwen_metrics.json",
+    "path": "n_unique_images"
+  }
+}
