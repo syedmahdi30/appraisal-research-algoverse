@@ -606,3 +606,67 @@ The Overleaf bundles predate this round and no longer match the source — **`in
 must be rebuilt before submission**. Also outstanding: the compute wall-clock `\todo` in
 `app:compute` (checklist item 8), the corrected override gap implementation (checklist item 5), the
 `emomm2026` venue confirmation, and the start-to-finish external read (checklist 11.5).
+
+---
+
+## Round 11 — 2026-09-02 — the corrected override gap now has an implementation
+
+Closes the one gap Round 5 left open. No paper text changed and no published number moved; this adds
+a code path behind a number that already existed.
+
+Round 5 found that the paper's primary categorical readout — "We rely on the corrected measure"
+(\S`sec:conflict`), carried by `tab:minimal`, all four models of `tab:models`, the main-text 57%/35%
+figures and the Discussion — had no implementation anywhere in `src/`. The only related code was
+`flip_override` in `src/experiments/shared/reporting.py`, which computes the **uncorrected** gap, and
+an `uncorrected_override_gap` dict key in `analyze_label_balance.py`. Round 5 declined to fix it on
+the grounds that the CIs might not match; that reasoning is now resolved below.
+
+### What was added
+
+`corrected_override_gap(df, n_boot=2000, seed=0)` in `src/experiments/shared/reporting.py`, beside
+`flip_override`. Two helpers (`_argmax_category_frame`, `_per_image_category_rate`) were factored out
+of `flip_override` and are shared by both; `flip_override`'s public return contract is unchanged and
+its values are bit-identical.
+
+The correction subtracts **each image's own neutral-context error rate**, paired by `image_path`
+(inner join, so an image missing either member is dropped from that arm) rather than differencing
+group means:
+
+    corrected_gap = mean_pos_images(P(neg argmax | neg ctx) − P(neg argmax | neutral))
+                  − mean_neg_images(P(pos argmax | pos ctx) − P(pos argmax | neutral))
+
+Clustered bootstrap over photographs, resampling the paired per-image differences.
+
+### It reproduces the published estimates exactly
+
+| Source parquet | Uncorrected | Corrected | Paper |
+|---|---|---|---|
+| `conflict_qwen.parquet` (varied) | $+39.40\%$ | $+21.71\%$ | $+21.7\%$ |
+| `conflict_qwen3-vl-8b-instruct_minimal.parquet` (matched) | $+40.77\%$ | $+23.08\%$ | $+23.1\%$ |
+
+The positive-image neutral-context negative-argmax rate is $19.35\%$, rounding to the $19.4\%$ the
+paper quotes at \S`sec:minimal`. Both artifacts retain 62 positive and 60 negative photographs.
+
+### The CI residual is real, expected, and deliberately not tuned away
+
+| | Observed | Published |
+|---|---|---|
+| Varied | $[+10.8, +32.2]$ | $[+10.9, +31.9]$ |
+| Matched | $[+12.1, +33.7]$ | $[+12.6, +33.1]$ |
+
+0.1–0.6pp, the same residual Round 5 measured. The cause is unchanged and still not recoverable from
+the paper's text: whether the neutral rates are resampled alongside the conflict rates. **The
+bootstrap was left alone rather than fitted to close the gap** — matching a published interval by
+adjusting the estimator until it agrees is exactly the move that would make this implementation
+worthless as verification. The point estimates agreeing to two decimals is the evidence that the
+definition in the paper is the definition that was used.
+
+### Tests
+
+`tests/test_experiment_reporting.py` gains three: a synthetic frame with hand-computed expectations
+that also covers images missing a neutral row, and an artifact-backed regression parameterized over
+both parquets, asserting the corrected estimates to two decimals and the 19.4% neutral rate. The
+artifact tests `pytest.skip` when the parquet is absent, since `results/` is gitignored — the pattern
+from `test_method_diagram_numbers.py`.
+
+**Suite: 159 passed / 0 failed** (was 156).
