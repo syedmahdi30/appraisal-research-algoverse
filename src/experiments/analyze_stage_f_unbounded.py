@@ -177,6 +177,10 @@ def run(parquets: dict[str, Path], n_boot: int = 2000, seed: int = 0) -> dict:
     out: dict = {"run": run_stamp(), "git": git_hash(), "n_boot": n_boot, "seed": seed,
                  "readout_note": ("margin = logsumexp(lp_pos) - logsumexp(lp_neg) = log P(pos)/P(neg); "
                                   "unbounded log-odds. Margin contrasts are NOT in valence units."),
+                 "scoring_note": ("Complete-label scoring: every model is read from a parquet whose "
+                                  "lp_* columns sum the full label token sequence. The legacy "
+                                  "first-content-token parquets (conflict_llava.parquet, "
+                                  "conflict_pilot.parquet) are superseded and must not be mixed in."),
                  "models": {}}
     for model, pq in parquets.items():
         if not pq.exists():
@@ -215,16 +219,26 @@ def run(parquets: dict[str, Path], n_boot: int = 2000, seed: int = 0) -> dict:
     return out
 
 
+# The defaults below are the COMPLETE-LABEL parquets behind the paper's four-model table, and they
+# are not interchangeable with the runs they replaced. `conflict_pilot.parquet` is the superseded
+# 40-image pilot; `conflict_llava.parquet` carries the legacy first-content-token scoring whose LLaVA
+# null this paper retracts. Both were the previous defaults here, so running this module bare
+# regenerated the pre-retraction analysis on top of the current one -- which is how a stale
+# `unbounded_crossed.json` came to shadow the published table. Change them only with that in mind.
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--gemma", type=Path, default=STAGE_F_DIR / "conflict_pilot.parquet")
+    ap.add_argument("--gemma", type=Path, default=STAGE_F_DIR / "conflict_gemma-3-4b-it.parquet")
     ap.add_argument("--qwen", type=Path, default=STAGE_F_DIR / "conflict_qwen.parquet")
-    ap.add_argument("--llava", type=Path, default=STAGE_F_DIR / "conflict_llava.parquet")
+    ap.add_argument("--llava", type=Path, default=STAGE_F_DIR / "conflict_llava_sequence.parquet")
+    ap.add_argument("--llavanext", type=Path,
+                    default=STAGE_F_DIR / "conflict_llava-v1-6-mistral-7b-hf_sequence.parquet")
     ap.add_argument("--minimal", type=Path, default=None, help="optional minimal-pair bank parquet")
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
-    pqs = {"Gemma-3-4B": a.gemma, "Qwen3-VL-8B": a.qwen, "LLaVA-1.5-7B": a.llava}
+    # Ordered as the paper's table columns.
+    pqs = {"Qwen3-VL-8B": a.qwen, "LLaVA-NeXT-7B": a.llavanext,
+           "Gemma-3-4B": a.gemma, "LLaVA-1.5-7B": a.llava}
     if a.minimal:
         pqs["Gemma-3-4B (minimal pairs)"] = a.minimal
     run(pqs, n_boot=a.n_boot, seed=a.seed)
