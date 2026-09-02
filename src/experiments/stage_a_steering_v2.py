@@ -131,6 +131,7 @@ def _plot(mean_delta, betas, layers):
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIGURES_DIR / "stage_a_steering_v2.png", dpi=130)
+    fig.savefig(FIGURES_DIR / "stage_a_steering_v2.pdf")  # vector twin for the paper
     plt.close(fig)
 
 

@@ -87,6 +87,7 @@ def plot(metrics: dict, rows: list[dict]) -> str:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     out = FIGURES_DIR / "stage_a_localization.png"
     fig.savefig(out, dpi=130)
+    fig.savefig(out.with_suffix(".pdf"))  # vector twin for the paper
     plt.close(fig)
     return str(out)
 

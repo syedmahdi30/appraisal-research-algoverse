@@ -276,6 +276,7 @@ def _plot(metrics, fig_path):
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig.savefig(fig_path, dpi=130)
+    fig.savefig(fig_path.with_suffix(".pdf"))  # vector twin for the paper
     plt.close(fig)
 
 
