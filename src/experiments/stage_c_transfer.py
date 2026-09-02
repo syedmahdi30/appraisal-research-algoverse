@@ -217,6 +217,7 @@ def _plot(metrics, X_img, probes, appraisals, valence):
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIGURES_DIR / "stage_c_readout.png", dpi=130)
+    fig.savefig(FIGURES_DIR / "stage_c_readout.pdf")  # vector twin for the paper
     plt.close(fig)
 
 

@@ -301,6 +301,7 @@ def _plot(cells, arb, fig_name: str = "stage_f_conflict.png"):
     fig.tight_layout()
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIGURES_DIR / fig_name, dpi=130)
+    fig.savefig((FIGURES_DIR / fig_name).with_suffix(".pdf"))  # vector twin for the paper
     plt.close(fig)
 
 
