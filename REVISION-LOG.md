@@ -531,3 +531,78 @@ lead-ins. The stale `paper/overleaf.stale-snapshot.tex.bak` is not swept in.
 
 **The bundles are current as of Round 8 and ready to upload.** The open question remains which
 Overleaf project receives them — replacing in place will likely drop Sneheel's 13 comment threads.
+
+---
+
+## Round 10 — 2026-09-01 — F1 and F7 closed; the audit has no open findings at either venue
+
+Both remaining findings were Interp4Discovery-side (`\ifshort`). Both are now applied, so all 14
+findings in `paper/audit.md` are either applied or deliberately declined with a logged reason.
+
+### F1 (CRITICAL) — the short abstract now carries the scope restriction
+
+`neurips_2026.tex` L66. The short abstract stated the four-to-five-times result with no restriction,
+while the pattern reverses on the excluded half (`tab:factorial`: on negative images a *positive*
+context moves valence $+0.762$ against a negative context's $-0.017$). The within-item contrast is
+only ever computed on the 62 positive images. Applied the audit's exact wording:
+
+> …moves \qwen{}'s judgment **on positive images** four to five times farther when the word is
+> negative, on all six tested pairs.
+
+Verified in the rendered short PDF, not only the source. +19 characters; the short build still
+measures 5pp main text, references p6.
+
+**Not changed, and deliberately:** L111, the long build's first contribution bullet, states the
+result without the scope too. It is a genuine instance but a much weaker one — the long abstract
+(L70), the intro paragraph directly above it (L105) and the conclusion (L344) all carry the scope,
+so the bullet is read in a scoped context. At zero page slack in the 8pp build, and with VLM4RWD
+already submitted, the edit was not worth the risk. Revisit if the long build is ever reopened.
+
+### F7 (MAJOR) — `sec:arbitration` is no longer multiply defined
+
+The duplicate was **deleted**, not renamed. L206–L208 were a cluster of three compatibility labels
+in the short branch, but only `sec:arbitration` actually collided, and the asymmetry is the reason:
+
+| label | short-branch def | twin | collides? |
+|---|---|---|---|
+| `sec:patching` | L206 | L234, long branch | no — mutually exclusive branches |
+| `sec:crosspatch` | L207 | L245, long branch | no — mutually exclusive branches |
+| `sec:arbitration` | L208 | **L634, unconditional appendix** | **yes, in the short build only** |
+
+L208 had been added by pattern-matching the other two. Its twin is in the appendix rather than the
+long main text, so both definitions compile in the short build. All three `\ref`s to it — L255 (long
+main text), L522 and L529 (unconditional appendix) — want the appendix subsection, and nothing in
+the short build wants a short main-text target, so the label had no referent to lose.
+
+Confirmed from the compile log rather than by inspection: the short build now emits **no**
+`multiply defined`, **no** undefined reference or citation, and **no** overfull box. The remaining
+warnings are 4 underfull hboxes, 3 underfull vboxes, a bibliography underfull, and a `lineno.sty`
+UTF-8 note — all pre-existing and all previously judged not worth chasing at zero page slack.
+The rendered reference resolves to §D.4, "Does the text-derived direction still move the answer
+under conflict?" — the intended target, now by design rather than by ordering accident.
+
+### Page counts and tests after this round
+
+`./scripts/build-paper.sh`: VLM4RWD 8pp (references p9) OK, Interp4Discovery 5pp (references p6) OK.
+
+**Tests are now 156 passed / 0 failed.** The two Round 4 failures are resolved: both clobbered
+patching metrics JSONs were regenerated on CPU from the intact parquets with the runners' existing
+`--reanalyze` flags —
+
+```
+python -m src.experiments.stage_f_qwen_patching   --reanalyze
+python -m src.experiments.stage_f_llava_patching  --reanalyze
+```
+
+— reproducing Round 4's recomputed column exactly (Qwen 12.11 / 6.16 / 62.26; LLaVA 32.75 / 20.47 /
+66.03), with `n_unique_images: 51` from 60 rows restored in both. Round 4 recorded this as "the
+runners' job"; it is not, because the parquets survived the sync and the reanalysis path is CPU-only.
+`results/` is gitignored, so this fix does not ride in a commit and must be re-run after any sync
+that regresses those files.
+
+### Still open, and none of it is an audit finding
+
+The Overleaf bundles predate this round and no longer match the source — **`interp4discovery.zip`
+must be rebuilt before submission**. Also outstanding: the compute wall-clock `\todo` in
+`app:compute` (checklist item 8), the corrected override gap implementation (checklist item 5), the
+`emomm2026` venue confirmation, and the start-to-finish external read (checklist 11.5).
