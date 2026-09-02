@@ -670,3 +670,82 @@ artifact tests `pytest.skip` when the parquet is absent, since `results/` is git
 from `test_method_diagram_numbers.py`.
 
 **Suite: 159 passed / 0 failed** (was 156).
+
+---
+
+## Round 12 — 2026-09-02 — short-build audit applied (F1, F2, F3), paid for with two cuts
+
+A second audit pass, scoped to the `\ifshort` (Interp4Discovery) build, is recorded in
+`paper/audit-short-build.md` — written alongside `paper/audit.md`, not over it, since that file's 14
+findings are closed and REVISION-LOG references them throughout. Nine findings; the three MAJOR ones
+are applied here. The short build had **zero page slack**, so every addition below is paid for.
+
+### F1 — the abstract and intro promised three tools and adjudicated two
+
+Both the short abstract (L66) and the short intro (L91) announced three tools — a frozen
+text-trained probe, activation patching, and a difference-of-means intervention — then gave verdicts
+on two. The third tool's verdict existed only in \S4: it moves behavioral valence with slope
+$+0.335$ under conflict *but* does not show that either cue's weight changed. That is a **qualified**
+verdict, which is the paper's own thesis arriving a third time, so burying it cost the paper its
+best-fitting example and left a reviewer free to assume the third tool was dropped for failing.
+
+Added to both, compactly: "A text-derived direction still moves the answer under conflict without
+showing that either cue's weight changed" (abstract) and "The intervention still moves the answer
+under conflict, but shows nothing about either cue's weight" (intro).
+
+### F2 — the varied-set mirror contrast is not the difference of the cells the paper bolds
+
+\S3 gives $-1.156$ and $+0.762$ and reports the mirror contrast as $+0.409$. Those cells differ by
+$0.394$. `tab:factorial` renders in **both** builds, bolds exactly those two cells, and its caption
+instructed the reader to compare them — an invitation to a subtraction that does not reproduce the
+printed number. This is the same two-estimator issue the earlier audit's F2 fixed for `tab:pairs`
+(whose caption already explains why its rows average to $+1.172$ against a $+1.148$ headline), one
+table over and unexplained.
+
+The caption now states it: computed per photograph then averaged, hence $+0.409$ rather than the
+$+0.394$ from differencing cell means, with a pointer to the `tab:pairs` note.
+
+**This is the one edit that touches the long build**, since `tab:factorial` is unconditional. VLM4RWD
+is past its deadline, so the repo now differs from that submitted PDF by this appendix caption. It is
+a clarification of an existing number, not a change to one, and it carries forward to camera-ready.
+
+### F3 — three mechanism numbers had no table in the short build
+
+\S5 quoted $62\%$, $66\%$ and $82\%$ from `tab:mechmodels`, which was gated `\ifshort\else` and never
+rendered in the short build. No `\ref` pointed at it, so LaTeX raised nothing and the numbers were
+simply unverifiable — in the paragraph carrying the cross-model mechanism claim, the one most exposed
+to the paper's own thesis. The short branch now gets its own lead-in and `\input`, and \S5 cites it
+as Table~6. The long branch is untouched; each build still inputs the table exactly once, and
+`tables/patching` remains main-text-only in the short build and appendix-only in the long one.
+
+### What paid for it
+
+The additions pushed the short build to 6pp — five lines over. Rather than dilute the fixes, two
+genuine redundancies were cut from the short main text:
+
+1. **\S2's both-groups caveat.** The same fact appeared three times in the short build: \S2, \S6
+   (Limitations), and `app:behavior`, the last with the exact $+0.496 \to +0.505$ figures. \S2's copy
+   was the weakest and is gone — **from the short build only**. Because \S2 is unconditional, cutting
+   it outright had silently altered the long build too; it is now wrapped `\ifshort\else` so VLM4RWD
+   renders exactly as before. Verified in both PDFs.
+2. **\S3's re-derivation of why Qwen3-VL-8B is the behavioral model.** \S2's Models paragraph already
+   says so. Short branch only.
+
+### Verification
+
+- `./scripts/build-paper.sh`: VLM4RWD **8pp** (refs p9) OK, Interp4Discovery **5pp** (refs p6) OK.
+- Short-build compile log: **zero** multiply-defined, undefined-reference and overfull warnings. The
+  remaining warnings are the same pre-existing underfull boxes and the `lineno.sty` UTF-8 note.
+- All five changes confirmed in the **rendered** short PDF, not just the source; the long PDF
+  confirmed to retain the \S2 sentence, to lack the short-branch abstract wording, and to input
+  `tab:mechmodels` exactly once.
+- Tests **159 passed / 0 failed**.
+- `./scripts/build-overleaf.sh`: both bundles rebuilt, both *identical to toggled build*;
+  `interp4discovery/main.tex` carries all three fixes with zero `ifshort` leaks.
+
+### Not applied
+
+F4–F9 (abstract sentence density beyond the layer-range trim already taken, a sentence-initial
+"And" in the abstract, a pair-1/pair-2 attribution, the compat-label stacks, the absent related-work
+section, and one paragraph title) are MINOR and unapplied. At zero slack none of them is worth
+displacing a MAJOR fix, and the "And" is the only one a reviewer is likely to notice.
