@@ -165,8 +165,8 @@
 
 \item {\bf Licenses for existing assets}
     \item[] Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected?
-    \item[] Answer: \answerNo{}
-    \item[] Justification: The datasets and models are credited to their original papers, and EMOTIC is used under its non-commercial research agreement. The manuscript does not yet list the explicit license or usage terms for every model and dataset, so this item cannot be answered Yes until that documentation is added.
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Appendix~\ref{app:impacts} lists the licence and terms of every asset. Each dataset and model is cited to its original paper or technical report (EMOTIC, crowd-enVENT, Gemma-3, Qwen3-VL, LLaVA-1.5, LLaVA-NeXT, SigLIP, CLIP, HuggingFace \texttt{transformers}, TransformerLens). EMOTIC is used under its non-commercial research and educational terms via the request form, and its images originate in MSCOCO and ADE20K. Qwen3-VL and LLaVA-NeXT are Apache 2.0; Gemma-3 is under the Gemma Terms of Use rather than an OSI-approved licence; LLaVA-1.5 is a Llama-2 derivative under the LLaMA 2 Community License. crowd-enVENT's distribution page states no explicit data licence, which we report as such rather than assuming the MIT licence of the authors' modelling code repository. Every licence was read from the model card or distribution page rather than inferred.
     \item[] Guidelines:
     \begin{itemize}
         \item The answer \answerNA{} means that the paper does not use existing assets.
