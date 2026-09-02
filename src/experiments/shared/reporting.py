@@ -292,6 +292,24 @@ def transfer_verdict(metrics, appraisals):
     return "fails to support transfer (read-out indistinguishable from random directions)"
 
 
+def _argmax_category_frame(df):
+    lp = [f"lp_{w}" for w in EMOTION_LABELS]
+    if not set(lp).issubset(df.columns):
+        return None
+    cat = {
+        w: ("pos" if w in _POSITIVE else "neg" if w in _NEGATIVE else "other")
+        for w in EMOTION_LABELS
+    }
+    d = df.copy()
+    d["_cat"] = [cat[EMOTION_LABELS[i]] for i in d[lp].to_numpy().argmax(axis=1)]
+    return d
+
+
+def _per_image_category_rate(df, group, condition, category):
+    g = df[(df["image_group"] == group) & (df["condition"] == condition)]
+    return g.groupby("image_path")["_cat"].apply(lambda s: float((s == category).mean()))
+
+
 def flip_override(df, n_boot: int = 2000, seed: int = 0) -> dict:
     """Cross-model-comparable OVERRIDE rate from the argmax emotion's valence category.
 
@@ -303,19 +321,12 @@ def flip_override(df, n_boot: int = 2000, seed: int = 0) -> dict:
     Aggregated per image (mean over the context bank) and bootstrapped over images (clustered CI).
     Negativity dominance = neg-context override rate > pos-context override rate.
     """
-    lp = [f"lp_{w}" for w in EMOTION_LABELS]
-    if not set(lp).issubset(df.columns):
+    d = _argmax_category_frame(df)
+    if d is None:
         return {}
-    cat = {w: ("pos" if w in _POSITIVE else "neg" if w in _NEGATIVE else "other") for w in EMOTION_LABELS}
-    d = df.copy()
-    d["_cat"] = [cat[EMOTION_LABELS[i]] for i in d[lp].to_numpy().argmax(axis=1)]
 
-    def per_image(group, cond, win):
-        g = d[(d["image_group"] == group) & (d["condition"] == cond)]
-        return g.groupby("image_path")["_cat"].apply(lambda s: float((s == win).mean())).to_numpy()
-
-    pn = per_image("positive", "negative", "neg")   # neg ctx overrides a positive image
-    np_ = per_image("negative", "positive", "pos")  # pos ctx overrides a negative image
+    pn = _per_image_category_rate(d, "positive", "negative", "neg").to_numpy()
+    np_ = _per_image_category_rate(d, "negative", "positive", "pos").to_numpy()
     if not len(pn) or not len(np_):
         return {}
     neg_ov, pos_ov = float(pn.mean()), float(np_.mean())
@@ -326,6 +337,50 @@ def flip_override(df, n_boot: int = 2000, seed: int = 0) -> dict:
     return {"neg_ctx_overrides_pos_img": neg_ov, "pos_ctx_overrides_neg_img": pos_ov,
             "dominance_gap": neg_ov - pos_ov, "dominance_gap_ci95": ci,
             "n_pos_images": int(len(pn)), "n_neg_images": int(len(np_))}
+
+
+def corrected_override_gap(df, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Neutral-baseline-corrected categorical override gap used as the paper's primary readout.
+
+    The correction removes each image's own tendency to draw the overriding valence category under
+    neutral context before comparing the two conflict directions. Pairing by image avoids treating
+    group-level neutral rates as interchangeable and isolates context-driven overrides from baseline
+    classification errors; this is the categorical measure on which the paper relies.
+    """
+    d = _argmax_category_frame(df)
+    if d is None:
+        return {}
+
+    pn = _per_image_category_rate(d, "positive", "negative", "neg")
+    pn0 = _per_image_category_rate(d, "positive", "neutral", "neg")
+    np_ = _per_image_category_rate(d, "negative", "positive", "pos")
+    np0 = _per_image_category_rate(d, "negative", "neutral", "pos")
+    pn, pn0 = pn.align(pn0, join="inner")
+    np_, np0 = np_.align(np0, join="inner")
+    if not len(pn) or not len(np_):
+        return {}
+
+    corrected_pn = (pn - pn0).to_numpy()
+    corrected_np = (np_ - np0).to_numpy()
+    neg_ov = float(corrected_pn.mean())
+    pos_ov = float(corrected_np.mean())
+    rng = np.random.default_rng(seed)
+    boot = np.array([
+        corrected_pn[rng.integers(0, len(corrected_pn), len(corrected_pn))].mean()
+        - corrected_np[rng.integers(0, len(corrected_np), len(corrected_np))].mean()
+        for _ in range(n_boot)
+    ])
+    ci = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
+    return {
+        "corrected_neg_ctx_overrides_pos_img": neg_ov,
+        "corrected_pos_ctx_overrides_neg_img": pos_ov,
+        "corrected_dominance_gap": neg_ov - pos_ov,
+        "corrected_dominance_gap_ci95": ci,
+        "neutral_neg_argmax_rate_pos_img": float(pn0.mean()),
+        "neutral_pos_argmax_rate_neg_img": float(np0.mean()),
+        "n_pos_images": int(len(corrected_pn)),
+        "n_neg_images": int(len(corrected_np)),
+    }
 
 
 def minimal_pair_asymmetry(df, n_boot: int = 2000, seed: int = 0) -> dict:

@@ -10,6 +10,7 @@ from src.data.labels import EMOTION_LABELS
 from src.experiments.shared.reporting import (
     arbitration,
     content_mean_frame,
+    corrected_override_gap,
     correlation,
     flip_override,
     image_discriminability,
@@ -19,9 +20,18 @@ from src.experiments.shared.reporting import (
     token_budget_trends,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _lp(winner):
     return {f"lp_{label}": 0.0 if label == winner else -10.0 for label in EMOTION_LABELS}
+
+
+def _parquet(rel):
+    path = ROOT / rel
+    if not path.exists():
+        pytest.skip(f"{rel} not present; results/ is git-ignored")
+    return pd.read_parquet(path)
 
 
 def test_correlation_filters_nonfinite_pairs_and_keeps_schema():
@@ -127,6 +137,60 @@ def test_flip_override_and_discriminability_schema():
     discrim = image_discriminability(frame)
     assert discrim["discriminability_gap"] == pytest.approx(1.6)
     assert discrim["auc"] == 1.0
+
+
+def test_corrected_override_gap_pairs_neutral_errors_by_image():
+    assert corrected_override_gap(pd.DataFrame({"image_path": ["no-logprobs"]})) == {}
+
+    rows = []
+    trials = (
+        ("pos-1", "positive", "negative", "sadness"),
+        ("pos-1", "positive", "negative", "sadness"),
+        ("pos-1", "positive", "neutral", "sadness"),
+        ("pos-1", "positive", "neutral", "joy"),
+        ("pos-2", "positive", "negative", "joy"),
+        ("pos-2", "positive", "neutral", "joy"),
+        ("pos-missing-neutral", "positive", "negative", "sadness"),
+        ("neg-1", "negative", "positive", "joy"),
+        ("neg-1", "negative", "neutral", "joy"),
+        ("neg-1", "negative", "neutral", "sadness"),
+        ("neg-2", "negative", "positive", "joy"),
+        ("neg-2", "negative", "neutral", "sadness"),
+        ("neg-missing-neutral", "negative", "positive", "sadness"),
+    )
+    for image, group, condition, winner in trials:
+        rows.append({"image_path": image, "image_group": group, "condition": condition,
+                     **_lp(winner)})
+
+    result = corrected_override_gap(pd.DataFrame(rows), n_boot=20, seed=7)
+
+    assert result["corrected_neg_ctx_overrides_pos_img"] == pytest.approx(0.25)
+    assert result["corrected_pos_ctx_overrides_neg_img"] == pytest.approx(0.75)
+    assert result["corrected_dominance_gap"] == pytest.approx(-0.5)
+    assert result["neutral_neg_argmax_rate_pos_img"] == pytest.approx(0.25)
+    assert result["neutral_pos_argmax_rate_neg_img"] == pytest.approx(0.25)
+    assert result["n_pos_images"] == 2
+    assert result["n_neg_images"] == 2
+
+
+@pytest.mark.parametrize(
+    ("source", "uncorrected_pct", "corrected_pct"),
+    [
+        ("results/stage_f/conflict_qwen.parquet", 39.40, 21.71),
+        ("results/stage_f/conflict_qwen3-vl-8b-instruct_minimal.parquet", 40.77, 23.08),
+    ],
+)
+def test_corrected_override_gap_matches_verified_artifacts(
+    source, uncorrected_pct, corrected_pct
+):
+    frame = _parquet(source)
+
+    uncorrected = flip_override(frame)
+    corrected = corrected_override_gap(frame)
+
+    assert round(uncorrected["dominance_gap"] * 100, 2) == uncorrected_pct
+    assert round(corrected["corrected_dominance_gap"] * 100, 2) == corrected_pct
+    assert round(corrected["neutral_neg_argmax_rate_pos_img"] * 100, 1) == 19.4
 
 
 def test_text_only_and_trend_outputs_keep_existing_keys():
