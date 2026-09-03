@@ -180,3 +180,17 @@ Subset applied on request: **F1, F2, F4**. Both builds verified at cap afterward
 - Prose compression again failed to shed lines: roughly 350 characters of §4.4 tightening recovered about 4 lines only because it removed whole sentences, not because of the character count. **Only deleting whole blocks reliably sheds lines.**
 - **Dropping `app:impacts` would save zero main-text pages** — it is in the appendix, which the venue excludes from the limit. Only the ~4-line pointer paragraph in §5 is in budget, and it should stay.
 - Compile log after the edits: no undefined references, no multiply-defined labels, no Overfull boxes. Several **Underfull** vbox/hbox warnings remain, which is loose inter-paragraph spacing from sitting exactly at the cap, not a defect.
+
+## Disposition, second pass — 2026-09-03 (cold read)
+
+| | Status | Notes |
+|---|---|---|
+| **F8** | **applied** | Abstract now reads "the within-item contrast is $+1.148$ $[+0.94,+1.34]$". |
+| **F7** | **no change needed** | Verified rather than edited: `vs.` appears only where bracketed intervals are paired (§4.3, four instances), and `versus` everywhere else — running prose (§4.1 `+0.336` versus `-0.035`, §4.2.1 `57\%` versus `35\%`, §4.3 "at layer 18 versus after 16 further layers") and hyphenated compounds (`positive-versus-negative`). That is already a defensible document-wide rule, which was F7's own cheapest fix. |
+| **F6** | **applied, then reverted** | "four to five times" → "more than four times" at five sites. The **cold read caught that the Figure 1 graphic itself reads "4–5× larger for LOST"** — it is a generated PDF (`scripts/generate_method_diagram.py`), so the prose change put the text in direct contradiction with the figure on the same page. That is worse than the original quibble, and regenerating the diagram risks changing its size at a zero-slack page budget. Reverted; prose and figure agree at "four to five" / "4–5×". **If this is ever revisited, the figure has to change with the prose.** |
+| F3, F5, F9 | still open | Unchanged from the first pass: all need main-text page space. |
+
+### Two things the cold read settled
+
+- **The submission footer is correct as-is.** It reads "Submitted to 40th Conference on Neural Information Processing Systems (NeurIPS 2026). Do not distribute." An accepted VLM4RWD paper (arXiv 2511.17036) instead shows "39th Conference … Workshop: VLM4RWD", which initially looked like a formatting miss on our side. It is not: `neurips_2026.sty` uses `\@trackname` (the workshop string) **only** under `\if@neuripsfinal`, so every non-final submission gets the generic "Submitted to …" line whatever track it targets. The comparison paper's footer is its camera-ready. **For camera-ready, switch to `\usepackage[final,dblblindworkshop]{neurips_2026}` and add `\workshoptitle{VLM4RWD}`.** Note `\if@workshop` is declared in the style file but never used, so the option has no other effect.
+- **Figure 1's caption sources its "62–82%" to Table 6, in the appendix**, and the main text cites the appendix figure `fig:conflict` as Figure 2. Both are instances of the F1 pattern and both are acceptable; recorded so they are not mistaken for new defects.
