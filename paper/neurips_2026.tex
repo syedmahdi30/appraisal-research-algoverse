@@ -277,9 +277,9 @@ The localization results of \S\ref{sec:mechanism} are detailed for \gemma{} alon
 
 Is the asymmetry a property of VLMs in general, or of particular designs? We run the same conflict experiment on four ways of connecting vision to language. \qwen{} uses a native vision transformer accepting varying resolutions. \gemma{} pools its SigLIP \citep{siglip} output to 256 image tokens. \llava{} passes unpooled patches from a frozen CLIP \citep{clip} tower through a linear projection. \llavanext{} uses that same linear-projector design at a far larger token budget (2{,}147 image tokens).
 
-Because each model uses the bounded valence scale differently, no single readout is neutral (Appendix~\ref{app:headroom}), so Table~\ref{tab:models} reports all three of \S\ref{sec:setup} under both interval types. The crossed interval, which treats the sentences as a sample rather than as fixed \citep{clark1973, westfall2014}, is the stricter test and the one that licenses claims about negative language in general.
+Because each model uses the bounded valence scale differently, no single readout is neutral (Appendix~\ref{app:headroom}), so we report all three of \S\ref{sec:setup} under both interval types: Table~\ref{tab:gaps} gives the categorical readout, Table~\ref{tab:models} the full set. The crossed interval, which treats the sentences as a sample rather than as fixed \citep{clark1973, westfall2014}, is the stricter test and the one that licenses claims about negative language in general.
 
-\begin{table}[t]
+\begin{table}[h]
   \caption{Corrected override gap by model, varied set, with crossed 95\% intervals (sentences resampled). Table~\ref{tab:models} adds the other two readouts.}
   \label{tab:gaps}
   \centering
