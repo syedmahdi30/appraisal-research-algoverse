@@ -63,7 +63,7 @@
 
 \ifshort
 \begin{abstract}
-Interpretability tools are used to explain what a vision-language model does with its inputs, but a tool that localizes an effect will localize whatever the measurement puts in front of it. We apply three standard tools to one cross-modal phenomenon and report where each does and does not license a conclusion. The phenomenon is a valence conflict: EMOTIC photographs paired with contradicting one-sentence contexts, where flipping a single valence word with the photograph and event held fixed moves \qwen{}'s judgment on positive images four to five times farther when the word is negative, on all six tested pairs. Two claims survive. A ridge probe trained only on text transfers to image-conditioned states ($\rho=+0.510$), and activation patching localizes states sufficient to restore each cue: downstream text positions restore $88$--$93\%$ of the context difference in \gemma{}, while the image's own valence is recovered from image positions early and from text positions late. A text-derived direction still moves the answer under conflict without showing that either cue's weight changed. Two failures qualify them. Localization is readout-dependent: where both our readouts are valid they give non-overlapping intervals in opposite directions about which token group dominates. And the cross-model conclusion was an artifact of a scoring choice --- evaluating only the first token of a multi-token emotion label manufactured a null in one model and reversed the categorical ordering in another, dissolving an apparent architectural boundary. Localization evidence supported the mechanism claim here and not the generalization claim, and the difference was invisible until the measurement changed.
+Interpretability tools are used to explain what a vision-language model does with its inputs, but a tool that localizes an effect will localize whatever the measurement puts in front of it. We apply three standard tools to one cross-modal phenomenon and report where each does and does not license a conclusion. The phenomenon is a valence conflict: EMOTIC photographs paired with contradicting one-sentence contexts, where flipping a single valence word with the photograph and event held fixed moves \qwen{}'s judgment on positive images four to five times farther when the word is negative, on all six tested pairs. Two claims survive. A ridge probe trained only on text transfers to image-conditioned states ($\rho=+0.510$). Activation patching localizes states sufficient to restore each cue: downstream text positions restore $88$--$93\%$ of the context difference in \gemma{}, while the image's own valence is recovered from image positions early and from text positions late. A text-derived direction still moves the answer under conflict without showing that either cue's weight changed. Two failures qualify them. Localization is readout-dependent: where both our readouts are valid they give non-overlapping intervals in opposite directions about which token group dominates. The cross-model conclusion was likewise an artifact of a scoring choice --- evaluating only the first token of a multi-token emotion label manufactured a null in one model and reversed the categorical ordering in another, dissolving an apparent architectural boundary. Localization evidence supported the mechanism claim here and not the generalization claim, and the difference was invisible until the measurement changed.
 \end{abstract}
 \else
 \begin{abstract}
@@ -161,6 +161,10 @@ Before studying conflict, we establish the internal readout (Appendix~\ref{app:f
 
 \ifshort
 \section{The phenomenon under study}
+% Compat labels: unconditional appendix text cross-references these section names, which in the
+% long build belong to separate subsections. A compat label may duplicate a LONG-BRANCH
+% definition (mutually exclusive, so never both) but NEVER an unconditional one -- that is what
+% made sec:arbitration multiply-defined here until ad482dd.
 \label{sec:conflict}
 \label{sec:integration}
 \label{sec:asymmetry}
@@ -203,6 +207,7 @@ Ratios on a bounded scale are descriptive; the difference and its interval are p
 \section{What the interventions localize}
 \label{sec:mechanism}
 
+% Compat labels -- see the note at sec:conflict for the rule these must satisfy.
 \label{sec:patching}
 \label{sec:crosspatch}
 
@@ -211,7 +216,7 @@ Projecting \gemma{}'s last-token state onto the frozen probe at every layer, the
 
 \input{tables/patching}
 
-Replacing all aligned downstream text states restores $88$--$93\%$ of the context difference (Table~\ref{tab:patching}). No single group is sufficient, and the two sentence pairs disagree about how the recovery divides: on pair 1 the question tokens and the tokens before the model's answer restore indistinguishable shares, while on pair 2 the question-token estimate is larger and the two individual estimates sum to more than the joint recovery. We therefore report only the shared claim and treat patching effects as non-additive. The lower rows are alignment checks: those positions precede the context and the image is held fixed, so under causal masking the patch copies a value onto itself and the zeros are arithmetic, not measured.
+Replacing all aligned downstream text states restores $88$--$93\%$ of the context difference (Table~\ref{tab:patching}). No single group is sufficient, and the two sentence pairs disagree about how the recovery divides: on pair 1 the question tokens and the tokens before the model's answer restore indistinguishable shares, while on pair 2 the question-token estimate is clearly larger. In both, the two estimates sum to more than the joint recovery. We therefore report only the shared claim and treat patching effects as non-additive. The lower rows are alignment checks: those positions precede the context and the image is held fixed, so under causal masking the patch copies a value onto itself and the zeros are arithmetic, not measured.
 
 \paragraph{Where the image's effect can be restored.}
 Holding the context fixed and neutral and swapping the image instead, the image-driven difference is recovered almost entirely from image positions early ($100.1\%$ $[99.6,100.5]$ at layers 0--12) and barely at all from text positions ($1.7\%$ $[-0.6,4.6]$). Late in the network the ordering reverses: image positions recover $31.1\%$ $[24.1,38.4]$ and text positions $63.4\%$ $[55.1,71.5]$. The visual difference therefore becomes \emph{additionally} readable from text positions with depth rather than leaving the image states \citep{basu2024, whatsintheimage2025}.
@@ -265,7 +270,7 @@ Emotion words are not all one token. In \qwen{} and \gemma{} every label in our 
 
 \input{tables/models}
 
-\paragraph{Nor does averaging fix it.}
+\paragraph{Averaging does not fix it either.}
 Length-normalizing the token scores is the standard alternative \citep{brown2020}, and here it fails worse. Our options are single words, so once the first token commits to an unusual word the remainder is nearly certain, and the mean rewards long labels almost mechanically: it correlates with label length at $r=0.93$ in \llava{} and puts $2{,}246$ of $2{,}250$ trials on one of the two three-token words. Summing leaves a much smaller bias, $r=-0.23$, which runs \emph{against} the reported effect. There is no neutral choice here, only a defensible one that must be stated.
 
 \paragraph{The readouts disagree, and no boundary replaces the one that fell.}

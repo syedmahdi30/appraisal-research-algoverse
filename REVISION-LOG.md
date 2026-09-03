@@ -749,3 +749,66 @@ F4–F9 (abstract sentence density beyond the layer-range trim already taken, a 
 "And" in the abstract, a pair-1/pair-2 attribution, the compat-label stacks, the absent related-work
 section, and one paragraph title) are MINOR and unapplied. At zero slack none of them is worth
 displacing a MAJOR fix, and the "And" is the only one a reviewer is likely to notice.
+
+---
+
+## Round 13 — 2026-09-02 — short-build audit MINORs: F4, F5, F6, F7, F9 applied; F8 withdrawn
+
+Closes `paper/audit-short-build.md` except F8. Short branch only this round — the long build's text
+is byte-unchanged, verified against `paper-build/long.pdf`, not merely assumed from the diff.
+
+- **F4** — the abstract's densest sentence is split after the probe clause. It ran ~60 words across
+  two different experiments; it is now two sentences. Combined with the layer-range trim already
+  taken in Round 12, the sentence carrying the evidence for both surviving claims is materially
+  easier to read cold. Net $-3$ characters.
+- **F5** — the abstract no longer opens a sentence with "And": *"The cross-model conclusion was
+  likewise an artifact of a scoring choice…"*. This was the only such instance in the short main
+  text and it sat in the most-read paragraph in the paper.
+- **F6** — the super-additivity observation is no longer attributed to pair 2 alone. It holds for
+  both: pair 1 gives $49.1 + 45.2 = 94.3 > 93.2$, pair 2 gives $54.8 + 38.2 = 93.0 > 87.9$. Since
+  non-additivity is the stated reason for refusing to assign causal shares, attributing it to one
+  pair understated the paper's own justification. Now: *"In both, the two estimates sum to more than
+  the joint recovery."*
+- **F7** — the two compatibility-label stacks (`sec:conflict`/`integration`/`asymmetry`/`minimal`,
+  and `sec:patching`/`crosspatch`) now carry source comments recording why they exist and the
+  invariant that keeps them safe: **a compat label may duplicate a long-branch definition, which is
+  mutually exclusive, but never an unconditional one.** That is precisely the rule `sec:arbitration`
+  violated until `ad482dd`. Comments only; nothing rendered changes.
+- **F9** — `\paragraph{Nor does averaging fix it.}` became `\paragraph{Averaging does not fix it
+  either.}`, declarative and parallel with the other titles in \S5.
+
+### F8 withdrawn as overstated, not deferred
+
+F8 argued that the short build, having no related-work section, leaves positioning to two
+disclaimers. **On re-reading the paragraph while implementing it, the premise was wrong.** Its
+*first* sentence already states the positive contribution — "We therefore present this as a study of
+when localization evidence does and does not license a conclusion, not as a claim about
+vision-language architecture" — and the paragraph closes by pointing at `app:related` for the full
+comparison. The disclaimers are the middle of a positive-disclaimer-pointer structure, not the whole
+of it.
+
+A clause naming the novelty was drafted and built ("what is new is the disagreement between tools on
+one controlled phenomenon"), then reverted: it restated the first sentence, and at $+77$ characters
+it was the single most expensive of the six fixes in a build with no slack. Recording it as withdrawn
+rather than outstanding, so a later round does not re-derive it.
+
+### Page budget
+
+The first pass at all six pushed the short build to 6pp — the same five-line spill as Round 12, the
+conclusion paragraph moving wholesale. Rather than cut real content to buy space for the weakest
+finding, F8 was dropped ($-77$) and F6 tightened ($+18 \to +1$). Net for the round is roughly
+$+10$ characters and the build returns to 5pp. **No content was sacrificed to fit these MINORs**,
+which was the correct trade: Round 12's cuts were justified by genuine triplication, and there was
+no comparable redundancy left to spend here.
+
+### Verification
+
+`./scripts/build-paper.sh`: VLM4RWD **8pp** (refs p9) OK, Interp4Discovery **5pp** (refs p6) OK.
+Short-build log: **zero** multiply-defined, undefined-reference and overfull warnings. F4/F5/F6/F9
+each confirmed in the rendered short PDF; F7 confirmed *absent* from it, being comments. Long PDF
+confirmed to carry neither the new abstract wording nor the \S5 title change. Tests **159 passed /
+0 failed**. Both Overleaf bundles rebuilt, both *identical to toggled build*, `interp4discovery`
+carrying all four rendered fixes with zero `ifshort` leaks.
+
+**`paper/audit-short-build.md` is now fully dispositioned: F1–F3 applied in Round 12, F4–F7 and F9
+applied here, F8 withdrawn with reason. Neither audit has an open finding at either venue.**
