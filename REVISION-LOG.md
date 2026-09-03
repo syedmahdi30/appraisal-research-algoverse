@@ -1047,3 +1047,55 @@ Both builds remain at cap and the compile log stays warning-free.
 skipped). Publishing it flips checklist items **5 and 13** from `\answerNo` to `\answerYes` — two of
 the three remaining. Note that `anonymous.4open.science` proxies a GitHub repository, so the snapshot
 must be pushed to one first, under an account not tied to the author.
+
+---
+
+## Round 18 — 2026-09-02 — the method schematic is in the short build
+
+The reviewer's accessibility point (a mixed audience needs to see the setup) is now addressed:
+`fig:method` renders in **both** builds. It was previously long-build only, and the CS-paper
+checklist had recorded its absence as 2.6 ❌ across two runs.
+
+### What it cost, and the measurement that decided the route
+
+The figure needs ~27 lines (21 at `\linewidth` plus a 6-line caption) and page 5 was at 52/52.
+Two routes were tested against the real build rather than estimated.
+
+**Prose compression alone does not work, and the reason is worth recording.** Three aggressive
+passes over \S2--\S7 removed **651 characters** and reduced the rendered main text from **205 lines
+to 204** — one line. Character savings are mostly reabsorbed by paragraph re-wrapping: a tightened
+sentence only removes a line when its paragraph sheds enough to drop a whole wrapped line. An
+earlier estimate of 8--10% recoverable was extrapolated from character counts and was **wrong**;
+freeing 30 lines this way would require 15--20% *content* removal, not tightening.
+
+**The compression was still worth keeping**, and it is what made the figure possible: with the figure
+pulled back out, it left page 5 at 47 lines instead of 52. That five-line margin closed the gap on
+the configuration below, which had come up three lines short without it.
+
+### Final configuration
+
+- `fig:method` unconditional, at `\linewidth`, floating to page 2.
+- `tables/patching` and `tables/models` move from the short build's main text to its appendix. **This
+  is exactly the arrangement the 8pp build already uses** — both tables are appendix floats there —
+  so the short build now matches it rather than inventing a structure.
+- The \S2 `(Figure~\ref{fig:method})` pointer becomes unconditional, having been long-build only.
+- \S5's "The lower rows are alignment checks" became "Its image, BOS and prefix-delimiter rows are
+  alignment checks", since the table is no longer adjacent to the sentence.
+- Prose compression retained across \S2, \S3, \S4, \S5, \S6 and \S7.
+
+Float placement was also tested (`[h]` to `[tbp]` on both tables) and made **no difference**; that
+change was reverted rather than left in as noise.
+
+### Verification
+
+Both builds at cap: VLM4RWD **8pp** (refs p9), Interp4Discovery **5pp** (refs p6). Short build now
+lays out 35 / 25+figure / 47 / 50 / 49 lines across pages 1--5. Every float is defined exactly once
+and referenced in **both** flattened builds (`tab:patching`, `tab:models`, `tab:mechmodels`,
+`tab:minimal`, `tab:crosspatch`, `fig:method`) — no duplicates, no dangling references, no new
+orphans. Short-build log free of multiply-defined, undefined-reference and overfull warnings. Zero em
+dashes remain in the rendered main text. Tests **159 passed / 0 failed**. Both Overleaf bundles
+rebuilt and *identical to toggled build*.
+
+Checklist **2.6 moves from ❌ to ✅** in the short build. 7.2 (label sizes 5.8--7.6pt against an 8pt
+guideline) still applies and is unchanged; the figure is at full `\linewidth`, which is the largest
+it can be, so this is as legible as it gets.
