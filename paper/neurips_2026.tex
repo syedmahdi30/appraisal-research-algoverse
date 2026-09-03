@@ -274,7 +274,7 @@ Emotion words are not all one token. In \qwen{} and \gemma{} every label in our 
 Length-normalizing the token scores is the standard alternative \citep{brown2020}, and here it fails worse. Our options are single words, so once the first token commits to an unusual word the remainder is nearly certain, and the mean rewards long labels almost mechanically: it correlates with label length at $r=0.93$ in \llava{} and puts $2{,}246$ of $2{,}250$ trials on one of the two three-token words. Summing leaves a much smaller bias, $r=-0.23$, which runs \emph{against} the reported effect. There is no neutral choice here, only a defensible one that must be stated.
 
 \paragraph{The readouts disagree, and no boundary replaces the one that fell.}
-On the varied set, \llava{} clears all three crossed tests, \gemma{} two, \llavanext{} one, and \qwen{} none; its support instead comes from the matched set of \S\ref{sec:conflict}. The three readouts answer related but different questions, so we report the disagreement instead of picking the favorable measure per model. Connector family and image-token count do not organize what remains: the two LLaVA models share a connector family yet diverge sharply on the categorical readout, and a \qwen{} resolution sweep is flat across image-token budgets (Table~\ref{tab:resolution}) while the four cross-model results are non-monotonic. Because tokenizer, backbone, vision tower and connector vary together, we report the variation as unexplained instead of fitting a story to it.
+On the varied set (Table~\ref{tab:models}), \llava{} clears all three crossed tests, \gemma{} two, \llavanext{} one, and \qwen{} none; its support instead comes from the matched set of \S\ref{sec:conflict}. The three readouts answer related but different questions, so we report the disagreement instead of picking the favorable measure per model. Connector family and image-token count do not organize what remains: the two LLaVA models share a connector family yet diverge sharply on the categorical readout, and a \qwen{} resolution sweep is flat across image-token budgets (Table~\ref{tab:resolution}) while the four cross-model results are non-monotonic. Because tokenizer, backbone, vision tower and connector vary together, we report the variation as unexplained instead of fitting a story to it.
 
 \paragraph{What this costs the mechanism claims.}
 The localization results of \S\ref{sec:mechanism} are detailed for \gemma{} alone, because the probe was fit on its states. Coarser behavioral-readout replacement runs on \qwen{} and \llava{} restore $62\%$ and $66\%$ of the context difference from all text positions jointly, against $82\%$ for \gemma{} on the same context pair and readout (Table~\ref{tab:mechmodels}); image positions restore none in any of the three. Position groups are non-additive in every model and we assign them no causal shares. We have not examined \llavanext{} internally.
@@ -383,6 +383,8 @@ On positive images, flipping a single valence word with the photograph and event
 \label{app:behavior}
 
 \ifshort
+Table~\ref{tab:minimal} places the matched-set result beside the varied set on every readout; Appendix~\ref{app:headroom} explains why the bounded scale needs the unbounded companion, and Appendix~\ref{app:pilot} records an earlier pilot whose conclusions did not survive the move to the full sentence set.
+
 \input{tables/minimal}
 \fi
 
@@ -441,7 +443,7 @@ Figure~\ref{fig:conflict} shows the varied-set behavior for the two models the m
 \end{figure}
 
 \ifshort
-Table~\ref{tab:mechmodels} places the \gemma{} same-image patching result of \S\ref{sec:mechanism} beside the \qwen{} and \llava{} ports, which share its readout and context pair but patch wider layer bands, so the three columns bound a pattern rather than forming a matched comparison.
+Table~\ref{tab:mechmodels} places the \gemma{} same-image patching result of \S\ref{sec:mechanism} beside the \qwen{} and \llava{} ports, which share its readout and context pair but patch wider layer bands, so the three columns bound a pattern rather than forming a matched comparison. Appendix~\ref{app:patching} gives the design and layer band used for each.
 
 \input{tables/mechmodels}
 \else

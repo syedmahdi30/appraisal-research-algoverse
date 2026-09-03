@@ -812,3 +812,62 @@ carrying all four rendered fixes with zero `ifshort` leaks.
 
 **`paper/audit-short-build.md` is now fully dispositioned: F1–F3 applied in Round 12, F4–F7 and F9
 applied here, F8 withdrawn with reason. Neither audit has an open finding at either venue.**
+
+---
+
+## Round 14 — 2026-09-02 — the short build's five orphaned targets, closed
+
+`docs/cs-paper-checklist-short-build-2026-09-02.md` re-ran the 2026-08-27 CS-paper checklist against
+the `\ifshort` build. Two items failed for a reason specific to the venue toggle, and this round
+closes both.
+
+### The failure mode is structural, and worth recording
+
+Five targets were defined and never referenced **in the short build**: `tab:models`, `tab:minimal`,
+`app:headroom`, `app:pilot`, `app:patching`. Every one of them *is* referenced in the long build.
+The cause is not a missing label but a missing sentence: each pointing sentence sits inside an
+`\ifshort\else` branch, so the short build inherits the float or appendix section while dropping the
+prose that cites it. **A float can therefore go orphaned in one venue and not the other from a single
+source file, and neither build warns**, because a label with no `\ref` is silent in LaTeX.
+
+Measured before: long build 0 real orphans, short build 5. The long build's 8 orphans were all
+`sec:` labels, which is the harmless class.
+
+`tab:models` was the worst of the five — the four-model comparison, sitting in the short build's
+**main text** with no textual pointer at all.
+
+### What was added, and where it was paid for
+
+At zero page slack, only references that must be in the main text were put there:
+
+| target | new reference | cost |
+|---|---|---|
+| `tab:models` | \S5, "On the varied set (Table~\ref{tab:models})…" | **main text**, $+24$ chars |
+| `tab:minimal` | new `app:behavior` lead-in in the short branch | appendix, free |
+| `app:pilot` | same lead-in | appendix, free |
+| `app:headroom` | same lead-in | appendix, free |
+| `app:patching` | appended to the Round 12 `tab:mechmodels` lead-in | appendix, free |
+
+`app:headroom` was first drafted as a \S5 parenthetical and **moved to the appendix after the build
+went to 6pp**. Two attempts overflowed — $+53$ and then $+24{+}30$ characters — before the split
+above landed at 5pp with no content cut. Recording the number because it is the operative constraint
+on this build: **roughly 25 characters of \S5 is the entire remaining budget.**
+
+### Verification
+
+- Orphan audit re-run on both flattened builds: **short 42 labels, long 44; zero duplicate
+  definitions, zero dangling references, and zero real orphans in either.** Both retain only `sec:`
+  label orphans (short 5, long 8), which includes the two documented compat stacks.
+- `./scripts/build-paper.sh`: VLM4RWD **8pp** (refs p9) OK, Interp4Discovery **5pp** (refs p6) OK.
+- Short-build log: zero multiply-defined, undefined-reference and overfull warnings.
+- All five references confirmed in the **rendered** short PDF (`tab:models` resolves to Table 2,
+  `tab:minimal` to Table 3). The long PDF confirmed to carry **neither** short-branch lead-in.
+- Tests **159 passed / 0 failed**. Both Overleaf bundles rebuilt, both *identical to toggled build*.
+
+### Checklist items still failing, and why
+
+`2.4` (no itemised contributions list in the short build), `2.6` (no figure in the main text at all),
+`5.1` (two datasets), `10.1`–`10.3` (≈53 citations unverified) and `11.5` (no external start-to-finish
+read) are unchanged. `8.1` remains ⚠️ — zero overfull boxes but five underfull sites, all in the
+appendix, none in the five main pages. None of these is mechanically fixable and none blocks
+submission.
