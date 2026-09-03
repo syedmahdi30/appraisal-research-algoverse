@@ -1099,3 +1099,50 @@ rebuilt and *identical to toggled build*.
 Checklist **2.6 moves from ❌ to ✅** in the short build. 7.2 (label sizes 5.8--7.6pt against an 8pt
 guideline) still applies and is unchanged; the figure is at full `\linewidth`, which is the largest
 it can be, so this is as legible as it gets.
+
+---
+
+## Round 19 — 2026-09-02 — fitting the figure's caption to the short build
+
+Round 18 moved `fig:method` into the short build, but the figure and caption were written for the
+8pp build. Checking every claim they make against the short build's own text found two that did not
+fit. Traceable and fine: `51 photographs` (6 occurrences in the short appendix),
+`championship/funeral` (5), and $\rho=+0.510$, $+0.335$, 150, 121 and 62 in the body.
+
+### 1. The caption used vocabulary the short build never defines
+
+The caption opened "**A** Behavioral arm … **B** Mechanistic arm". Neither term appears anywhere
+else in the short build. It works in the 8pp version, where the figure precedes a combined
+*Results and analysis* section, but the short build's sections are *The phenomenon under study* and
+*What the interventions localize*. Renamed to "**A** The behavioral test (\S\ref{sec:conflict})" and
+"**B** The interventions (\S\ref{sec:mechanism})", which anchors both panels to sections the reader
+actually meets. The refs resolve to \S4/\S5 in the short build and \S4.2 in the long one.
+
+### 2. The figure asserted a statistic the short build never mentions
+
+Panel A prints "57 of 62 flip" for the *joy*$\to$*sadness* result. That number appeared **nowhere**
+in the short build — not in the body, not in the appendix. It is correct and guarded by
+`tests/test_method_diagram_numbers.py`, but a reader could not find it discussed.
+
+**Root cause, and it explains why this was invisible until now:** the long build grounds it in its
+own body text ("on $57$ of those images the label moves specifically…"). The short build drops that
+sentence, so it inherited the figure without the prose that supports it — the same failure mode as
+Round 14's orphaned floats, where the pointing sentence lived in an `\ifshort\else` branch.
+
+Grounded it in the caption: "…62 positive images carry the won/lost pair, and on it the top label
+flips from *joy* to *sadness* on 57 of the 62."
+
+### The caption is unconditional, and the first fix broke VLM4RWD
+
+Lengthening it pushed the long build to **9pp**. The long build is also at cap, and it already
+grounds the statistic in its body, so it does not need the gloss. The added clause is therefore
+wrapped `\ifshort`; the rename, being length-neutral and an improvement in both, applies to both.
+Confirmed in the flattened bundles: the clause is present once in `interp4discovery` and absent from
+`vlm4rwd`, whose three remaining "57" occurrences are the unrelated override-rate figures.
+
+### Verification
+
+Both builds at cap: VLM4RWD **8pp** (refs p9), Interp4Discovery **5pp** (refs p6). Short-build log
+free of multiply-defined, undefined-reference and overfull warnings. `test_method_diagram_numbers.py`
+still passes (6 tests) — the figure itself is unchanged, only its caption. Tests **159 passed / 0
+failed**. Both bundles rebuilt and *identical to toggled build*, zero `ifshort` leaks.
