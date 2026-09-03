@@ -92,7 +92,7 @@ Onto that phenomenon we apply a frozen text-trained linear probe, activation pat
 
 Two failures qualify them, and they are as much the contribution as the successes. \textbf{First, localization is readout-dependent.} In the one layer band where both of our readouts are valid, they give non-overlapping intervals in opposite directions about which token group dominates, from the same model, the same run, and the same intervention. Nothing distinguishes them except where the readout is taken. \textbf{Second, the cross-model conclusion was an artifact of a scoring choice.} Evaluating only the first token of a multi-token emotion label manufactured a null in one model and reversed the categorical ordering in another. Correcting it dissolved an apparent architectural boundary that earlier analyses of this same data had reported (\S\ref{sec:models}).
 
-We therefore present this as a study of when localization evidence does and does not license a conclusion, not as a claim about vision-language architecture. We do not claim to discover that text can override vision \citep{deng2025blindfaith, contextvqa2026}, nor the first mechanistic study of multimodal conflict \citep{seeingoverrides2026}. Appendix~\ref{app:related} positions the work against prior conflict, emotion, and mechanistic-interpretability literature. The behavioral pattern is consistent with negativity dominance in humans \citep{rozin2001, baumeister2001}; we treat it as an analogue, not the same construct.
+We therefore present this as a study of when localization evidence does and does not license a conclusion, a precondition for turning model internals into knowledge, rather than as a claim about vision-language architecture. We do not claim to discover that text can override vision \citep{deng2025blindfaith, contextvqa2026}, nor the first mechanistic study of multimodal conflict \citep{seeingoverrides2026}. Appendix~\ref{app:related} positions the work against prior conflict, emotion, and mechanistic-interpretability literature. The behavioral pattern is consistent with negativity dominance in humans \citep{rozin2001, baumeister2001}; we treat it as an analogue, not the same construct.
 
 \else
 \section{Introduction}
@@ -227,7 +227,7 @@ In the mid band, layers 13--17, both of our readouts are valid and they disagree
 \paragraph{The intervention still works under conflict.}
 Adding the text-derived pleasantness direction at layer 18 moves behavioral valence with slope $+0.335$ across 150 conflict trials. This shows the intervention remains effective while an image contradicts the sentence; it does not show that the competition between the cues changed, since a general output-valence direction could move the score without altering either cue's weight.
 
-Together these interventions locate states \emph{sufficient} to restore each cue's effect. They do not establish necessity, and they do not explain why negative context moves behavior farther; a symmetric model would produce the same pattern of information flow.
+Together these interventions locate states \emph{sufficient} to restore each cue's effect. They do not establish necessity or identify a unique circuit, and they do not explain why negative context moves behavior farther; a symmetric model would produce the same pattern of information flow.
 \else
 \subsection{Mechanism: which internal states restore each cue?}
 \label{sec:mechanism}
@@ -315,7 +315,7 @@ The neutral correction still matters, especially for \qwen{} and \gemma{}. \qwen
 \section{Conclusion}
 \label{sec:conclusion}
 
-Three standard interpretability tools, applied to one controlled cross-modal conflict, produced two conclusions that held and one that did not. The probe transferred across modalities and patching localized states sufficient to restore each cue's effect; those results stand. The cross-model generalization did not, because scoring only the first token of a split emotion word manufactured a null in one model and reversed another, and no amount of care in the patching would have exposed it: the error lived in the readout, upstream of every intervention. The mid-band disagreement makes the same point inside a single model. Localization evidence is only as good as the readout it is taken through, and the readout is what needed checking first.
+Three standard interpretability tools, applied to one controlled cross-modal conflict, produced two conclusions that held and one that did not. The probe transferred across modalities and patching localized states sufficient to restore each cue's effect; those results stand. The cross-model generalization did not, because scoring only the first token of a split emotion word manufactured a null in one model and reversed another, and no amount of care in the patching would have exposed it: the error lived in the readout, upstream of every intervention. The mid-band disagreement makes the same point inside a single model. Localization evidence is only as good as the readout it is taken through: before model internals can yield discoveries, the readout is what has to be checked first.
 \else
 \section{Discussion}
 \label{sec:discussion}

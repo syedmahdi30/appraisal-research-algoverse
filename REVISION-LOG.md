@@ -990,3 +990,60 @@ and 1–8 long). All 36 en dashes intact. Both builds at cap: VLM4RWD 8pp (refs 
 Tests **159 passed / 0 failed**. Both Overleaf bundles rebuilt and *identical to toggled build*.
 
 The replacements are net shorter than the dashes they replace, so no page pressure was created.
+
+---
+
+## Round 17 — 2026-09-02 — reviewer suggestions triaged against a full page 5
+
+External (Perplexity) camera-ready suggestions, assessed against the hard 5pp cap. **Page 5 carries
+52 numbered lines, the maximum any full text page reaches in this build** (p2 reaches 50; the
+table-bearing p3/p4 hold 40 and 36). There is no line available, so each suggestion was judged on
+whether it could be absorbed by re-wording rather than added.
+
+### Applied — three near-neutral rewrites, all absorbed by line wrapping
+
+1. **Discovery framing, introduction.** "…when localization evidence does and does not license a
+   conclusion, **a precondition for turning model internals into knowledge**, rather than as a claim
+   about vision-language architecture." Connects the paper to the workshop's question directly.
+2. **Discovery framing, conclusion.** The closing sentence now reads "…only as good as the readout it
+   is taken through: **before model internals can yield discoveries, the readout is what has to be
+   checked first.**"
+3. **Localization takeaway sharpened.** \S5 now reads "They do not establish necessity **or identify
+   a unique circuit**", adopting the reviewer's explicit contrast between what patching supports
+   (where information is readable and sufficient for restoration) and what it does not (a unique
+   causal circuit).
+
+Both builds remain at cap and the compile log stays warning-free.
+
+### Already implemented before the review
+
+- **"Elevate the key failure cases into a dedicated section."** The short build already has \S6
+  *Where the measurement misleads* as a full main-text section, and \S5 carries the paragraph
+  *The localization is readout-dependent*. Both failures are also named in the abstract and the
+  introduction. The suggestion appears to describe the 8pp build, where this material is a
+  subsection of a combined results section.
+- **"Add a short takeaway paragraph on sufficiency versus necessity."** \S5 has ended with exactly
+  that paragraph since before this review; only the unique-circuit clause was missing, and it is now
+  added.
+
+### Declined, with reasons
+
+- **Main-text schematic of the experimental setup.** `figures/method_diagram.pdf` exists but needs
+  15–20 lines. At 52/52 on page 5 it would cost a page, and the only way to pay is deleting a
+  section. The checklist already records this as 2.6 ❌ and it is not closable at 5pp.
+- **A bulleted "practical lessons" list.** Two reasons. It needs 4–5 lines that do not exist, and
+  the lessons it would list (test alternative scoring rules, compare readouts, check tokenizer
+  artifacts) are **already the content of \S6**, delivered as narrative. Converting narrative to
+  bullets adds no information. It would also reintroduce the "list of bold mini-headings" pattern
+  (§16 of the humanizer checklist) that Round 16 was cleaning up.
+- **Restructuring the two failures into one subsection.** They currently sit in the sections whose
+  evidence supports them, and both are surfaced in the abstract and introduction. Merging them is a
+  structural change with real regression risk hours before a deadline, for presentational gain.
+
+### The one suggestion that is fully feasible and not mine to complete
+
+**Anonymous code repository.** The snapshot is built, audited and clean at
+`~/Desktop/anon-code-snapshot` (98 files, zero identity strings, no git history, 144 passed / 2
+skipped). Publishing it flips checklist items **5 and 13** from `\answerNo` to `\answerYes` — two of
+the three remaining. Note that `anonymous.4open.science` proxies a GitHub repository, so the snapshot
+must be pushed to one first, under an account not tied to the author.
