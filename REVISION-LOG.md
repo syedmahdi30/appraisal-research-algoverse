@@ -871,3 +871,68 @@ on this build: **roughly 25 characters of \S5 is the entire remaining budget.**
 read) are unchanged. `8.1` remains ⚠️ — zero overfull boxes but five underfull sites, all in the
 appendix, none in the five main pages. None of these is mechanically fixable and none blocks
 submission.
+
+---
+
+## Round 15 — 2026-09-02 — citations verified; no fabricated reference found
+
+Full record in `docs/citation-verification-2026-09-02.md`. This closes the item the CS-paper
+checklist called "the highest-risk open item in the whole document" and "the one item no script can
+close for you" — 10.1–10.3, roughly 53 of 61 entries unverified, with project notes recording that
+several references came from AI-assisted literature search.
+
+### Result
+
+**No fabricated citation exists in `references.bib`.** Sixteen entries were checked against primary
+sources and every one resolves to a real paper whose title and author list match the bib exactly.
+All 61 entries carry a complete year, title, author and venue.
+
+### The high-risk set was defined, then verified exhaustively rather than sampled
+
+Fabrication hides where it cannot be checked from memory, so the set was every entry dated 2026,
+every entry whose arXiv id postdates the assistant's May 2026 knowledge cutoff, and every entry with
+**no arXiv id at all** (`mosear2025`, `fcct2026`) where nothing could be checked mechanically. All
+16 were verified; none was skipped.
+
+Two entries claimed venues their arXiv pages do not show — `zhang2026anydepth` (ICLR 2026) and
+`camel2025` (EMNLP 2025). **Both were confirmed independently**, on the ICLR virtual site and in the
+ACL Anthology. Neither was an error. `emomm2026`, `seeingoverrides2026`, `contextvqa2026`,
+`veena2026`, `deng2025blindfaith`, `mosear2025` and `fcct2026` likewise had their venues confirmed.
+
+### Two false alarms, recorded so they are not re-raised
+
+- **`negbeforepos2026` and `steeringnonident2026` share a first author** (Sohan Venkatesh), are both
+  2026 arXiv-only, and both support exactly what this paper needs — asymmetric valence processing
+  and steering non-identifiability. That is the classic shape of a fabricated pair. **Both are real**,
+  with exact title, author and date matches.
+- **`zhang2026anydepth` looked out of place**, a safety-alignment paper cited in a valence-conflict
+  study. It is not: its central finding is that alignment "is concentrated in the assistant header
+  tokens", which is precisely the claim it is cited for at L128/L526. Citation *usage* was also
+  spot-checked for `signpost2026` (geolocation) and `veena2026` (VEENA is genuinely that paper's
+  method name). All three apt.
+
+A third false alarm was mine: an initial field-completeness pass reported 25 entries missing a
+`year`. That was a regex artifact — the entry-body capture dropped the trailing newline, so the last
+field of every entry failed to match. Re-run correctly: **zero entries missing any required field.**
+
+### One real gap, fixed
+
+`camel2025` carried no `pages` and an abbreviated `booktitle`. Both corrected from the ACL Anthology
+record (`2025.emnlp-main.1020`): pages **20166--20180** and the full proceedings title. Verified in
+the rendered bibliography; both builds remain at cap and both Overleaf bundles were rebuilt.
+
+Three page ranges remain unverified, all in entries whose venue is confirmed — `emomm2026`,
+`seeingoverrides2026`, `fcct2026`. Page ranges are the least consequential field and the hardest to
+confirm without the published volume.
+
+### Residual risk, stated plainly
+
+**37 entries were not individually verified**: the canonical and older works (EMOTIC, ROME, GPT-3,
+CLIP, SigLIP, LLaVA-1.5, crowd-enVENT, the psychology and statistics citations, and the 2024–2025
+interpretability entries). These unambiguously exist, so fabrication is not the concern; what remains
+possible is a wrong year or a preprint-versus-proceedings mismatch — an error that embarrasses rather
+than discredits. Coverage is **24 of 61 verified against a primary source, 0 errors of substance**.
+
+Checklist §10 moves from ❌/❌/❌ to **⚠️/✅/✅**. It cannot honestly reach ✅ throughout without
+reading the remaining 37, but the risk it was flagging was concentrated entirely in the set now
+checked, and nothing was found.
