@@ -236,3 +236,29 @@ was an over-generalization from F1, where the cost was a *float*, not prose. Mea
 A single +285 edit in §5 overflowed while +314 split across §5 and §1 did not. **The budget is a
 page-break budget, not a character budget, and it is sensitive to where the text lands.** Never
 predict fit from character counts; run `./scripts/build-paper.sh long`.
+
+## Disposition, fourth pass — 2026-09-03 (duplicated broader-impacts statement)
+
+Author observation, confirmed: the main text carried a standalone
+`\paragraph{Broader impacts and responsible use}` whose **first two sentences were verbatim identical**
+to the opening of `app:impacts`. Same text twice in one PDF.
+
+**Not removed outright, because two things depended on it.** `app:impacts` is referenced exactly once
+per build — the short build points at it from a clause inside its Limitations, the long build pointed
+at it only from this paragraph. Deleting the paragraph would have left the appendix section with no
+`\ref` in the long build, which is the orphaned-target defect `dab534b` already fixed once. It was also
+the only responsible-use statement visible to a reviewer who reads just the eight pages, on a paper
+that runs emotion inference over photographs of real people.
+
+**Resolved by doing what the short build already does.** The standalone paragraph is gone; the stance
+and the pointer now ride at the end of the long build's Limitations paragraph:
+
+> Emotion inference from photographs is contested and we use it only as a diagnostic instrument, never
+> as evidence that such judgments are valid; Appendix~\ref{app:impacts} gives the three risks that
+> follow from these results, our data-release terms, and the responsible-use discussion.
+
+Net $-225$ characters, both builds still at cap, `app:impacts` referenced once per build, no orphaned
+label, no verbatim duplication. The responsible-use discussion itself is untouched in the appendix.
+
+**Note for anyone reinstating F3:** this pass freed roughly the space F3 needs, and F3 was declined on
+editorial grounds (one primary claim) rather than for want of room.
