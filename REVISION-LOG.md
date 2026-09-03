@@ -936,3 +936,57 @@ than discredits. Coverage is **24 of 61 verified against a primary source, 0 err
 Checklist §10 moves from ❌/❌/❌ to **⚠️/✅/✅**. It cannot honestly reach ✅ throughout without
 reading the remaining 37, but the risk it was flagging was concentrated entirely in the set now
 checked, and nothing was found.
+
+---
+
+## Round 16 — 2026-09-02 — em dashes removed from prose; en dashes deliberately kept
+
+Author request after reading the Conclusion. A humanizer scan (Wikipedia "Signs of AI writing")
+had already been run over the short build and returned **clean on every content pattern**: zero
+inflated-importance phrasing, sales language, vague sources, shallow `-ing` analysis, "not X but Y",
+filler, qualifier pileup, deeper-truth phrasing, formulaic sayings, fake-candid openings, unraised
+objections, rejected fake alternatives, dramatic-fragment runs, repeated sentence openings, curly
+quotes, emoji, or title-case headings. The em dashes were the one pattern the scan flagged and I had
+argued to keep. The author disagreed, and that is the author's call.
+
+### What changed: 8 prose sites, 10 dash characters
+
+Each replacement was chosen individually rather than substituted globally, because the right
+punctuation differs by clause:
+
+| site | build | replacement |
+|---|---|---|
+| L66 abstract | short | colon, the clause explains the scoring choice |
+| L93 intro | short | comma |
+| L175 (paired) | short | parentheses; the clause already contains a citation |
+| L225 mechanism | short | colon |
+| L230 mechanism | short | semicolon, the clause is independent |
+| L269 models | short | colon, the clause supplies the examples |
+| L318 conclusion | short | colon |
+| L660 appendix (paired) | **both** | parentheses |
+
+Seven are short-branch only. **L660 is unconditional and therefore also changes the long build**,
+which is past its VLM4RWD deadline; this is the second such shared edit, after Round 12's
+`tab:factorial` caption.
+
+### What was deliberately NOT changed
+
+- **All 36 en dashes (`--`) are untouched.** They are numeric ranges (`$88$--$93\%$`, `layers
+  13--17`, `$0.983$--$0.986$`). These are required LaTeX typography, not a style tell; replacing them
+  would corrupt the numbers the paper reports.
+- **`L353`** is a source comment, never rendered.
+- **`L462`** reads "those cells are marked ---" and describes the literal character used in
+  `tab:crosspatch`. Replacing it would make the caption describe a mark the table does not contain.
+- **`L479`** is three table cells where `---` means *not applicable* under standard table notation.
+
+A blind find-and-replace would have broken all four of these categories. That is why the sites were
+enumerated and classified (prose / comment / table-literal) before anything was edited.
+
+### Verification
+
+**Zero em dashes remain in the rendered main text of either build** (`pdftotext` over pages 1–5 short
+and 1–8 long). All 36 en dashes intact. Both builds at cap: VLM4RWD 8pp (refs p9), Interp4Discovery
+5pp (refs p6). Short-build log free of multiply-defined, undefined-reference and overfull warnings.
+Tests **159 passed / 0 failed**. Both Overleaf bundles rebuilt and *identical to toggled build*.
+
+The replacements are net shorter than the dashes they replace, so no page pressure was created.
