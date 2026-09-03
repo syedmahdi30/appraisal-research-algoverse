@@ -1146,3 +1146,65 @@ Both builds at cap: VLM4RWD **8pp** (refs p9), Interp4Discovery **5pp** (refs p6
 free of multiply-defined, undefined-reference and overfull warnings. `test_method_diagram_numbers.py`
 still passes (6 tests) — the figure itself is unchanged, only its caption. Tests **159 passed / 0
 failed**. Both bundles rebuilt and *identical to toggled build*, zero `ifshort` leaks.
+
+---
+
+## Round 20 — 2026-09-02 — final external review: five tweaks applied, two declined, cross-references audited
+
+External reviewer read the built PDF and returned a submit-ready verdict with minor edits.
+
+### Applied
+
+1. **Venue framing named once.** The intro's positioning sentence now reads "…a precondition for
+   turning model internals into knowledge **and therefore central to interpretability for
+   discovery**, rather than a claim about vision-language architecture."
+2. **\S2 models paragraph split** into two sentences.
+3. **\S5 alignment-check sentence** rebound to its table: "**The image, BOS and prefix-delimiter rows
+   of Table~\ref{tab:patching}** are alignment checks…". The reviewer's version dropped the binding
+   to "The image…"; since Round 18 moved the table to the appendix, the reference has to be explicit.
+   Their suggested serial comma ("BOS, and") was **not** adopted — house style omits it
+   ("tokenizer, backbone, vision tower and connector").
+4. **\S6 contrastive "but"**: "leaves every trial and stimulus unchanged **but** overturns the comparison".
+5. **\S6 punchline tightened**: "An apparent **connector-family boundary** rested entirely on the
+   discarded token."
+
+Net $+88$ characters; both builds stay at cap.
+
+### Declined
+
+- **"Use an em dash to make the precondition clause parenthetical."** This directly contradicts the
+  author's own instruction in Round 16, where every prose em dash was removed from both builds. The
+  rendered main text is still verified at **zero** em dashes and stays that way. Flagged rather than
+  silently reverted.
+- **"Localization evidence is only as good as the readout it uses."** The current wording, "the
+  readout it is **taken through**", is more precise: the readout is the channel the measurement
+  passes through, not something the evidence uses. Kept.
+
+### Already in place before the review
+
+The reviewer's abstract suggestion quoted a "current" and a "suggested" version differing only in
+*was*/*is*; the two failure sentences were already split, and the sentence-initial "And" removed, in
+Round 13 (F4/F5).
+
+### Cross-reference audit, prompted by the review
+
+Every in-text float reference in the short build was traced to its target. **All eight correct:**
+$88$--$93\%$ $\to$ Table 4 (same-image patching), varied set $\to$ Table 5 (four models $\times$ three
+readouts), group dominance $\to$ Table 7 (cross-image patching), resolution sweep $\to$ Table 8,
+$82\%$ $\to$ Table 6 (cross-model replacement), the figure caption $\to$ Table 6, and both
+`(Figure~1)` pointers. Appendices **A--K are complete and correctly lettered**; an apparent missing
+"F" was a `pdftotext` extraction artifact, confirmed by rendering page 18, where
+"F Where in depth the context signal appears" prints normally.
+
+### Anonymity
+
+The reviewer noted the path `src/experiments/patching_intervals.py` in Appendix J. **Kept.** It
+carries no username, organisation or host, so it cannot deanonymise, and it names the exact entry
+point a reader of the anonymous snapshot would run. Removing it would cost reproducibility for no
+anonymity gain.
+
+### Verification
+
+Both builds at cap: VLM4RWD **8pp** (refs p9), Interp4Discovery **5pp** (refs p6). Short-build log
+free of multiply-defined, undefined-reference and overfull warnings. Zero em dashes in the rendered
+main text. Tests **159 passed / 0 failed**. Both bundles rebuilt and *identical to toggled build*.
