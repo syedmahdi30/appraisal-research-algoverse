@@ -76,16 +76,16 @@ a preprint-versus-proceedings mismatch, or a wrong page range — the kind of er
 rather than discredits. A further 8 (the asset citations) were primary-source verified when added in
 an earlier round.
 
-**Coverage: 24 of 61 entries verified against a primary source; 0 errors of substance found.**
+**Coverage: 27 of 61 entries verified against a primary source; 0 errors of substance found.**
+(24 on 2026-09-02, plus the three page ranges closed on 2026-09-03 — see the addendum.)
 
-## Two completeness gaps worth fixing, neither an error
+## Two completeness gaps worth fixing, neither an error — both now closed
 
-1. **`camel2025` has no `pages`.** The ACL Anthology gives **20166–20180**. Adding them costs
-   nothing and makes the entry complete.
-2. **Three page ranges remain unverified**, all in entries whose venue is confirmed:
-   `emomm2026` (20351–20371), `seeingoverrides2026` (14109–14130), `fcct2026` (31645–31653).
-   Proceedings page ranges are the least consequential field and the hardest to confirm without the
-   published volume.
+1. **`camel2025` had no `pages`.** The ACL Anthology gives **20166–20180**. **Applied** in
+   `2af7572`; the entry now carries them.
+2. **Three page ranges were unverified**, all in entries whose venue is confirmed:
+   `emomm2026`, `seeingoverrides2026`, `fcct2026`. **All three confirmed on 2026-09-03** against the
+   published volumes — see the addendum below. No bib change was needed.
 
 One trivial variance, not worth changing: `agarwal2026`'s bib title reads "Vision-Language" where
 arXiv reads "Vision Language".
@@ -102,3 +102,32 @@ The item cannot honestly reach ✅ across the board without reading the remainin
 the checklist was actually flagging — a fabricated or misattributed reference surfaced by
 AI-assisted search — was concentrated entirely in the set that has now been checked, and none was
 found.**
+
+---
+
+## Addendum, 2026-09-03 — the three page ranges are confirmed
+
+The 2026-09-02 run left three proceedings page ranges unverified because the published volumes were
+the only authority and had not been checked. All three were fetched from the publisher of record
+today. **Every range in the bib is exactly right; nothing was changed.**
+
+| Key | Venue of record | Bib pages | Publisher pages | |
+|---|---|---|---|---|
+| `emomm2026` | Findings of the ACL: ACL 2026 (`2026.findings-acl.1018`) | 20351–20371 | 20351–20371 | ✅ |
+| `seeingoverrides2026` | ACL 2026 Vol. 1 Long Papers (`2026.acl-long.642`) | 14109–14130 | 14109–14130 | ✅ |
+| `fcct2026` | AAAI-40, Vol. 40 Issue 37 (DOI `10.1609/aaai.v40i37.40431`) | 31645–31653 | 31645–31653 | ✅ |
+
+Titles and author lists were re-confirmed on the same pages and also match the bib exactly.
+
+Sources:
+
+- <https://aclanthology.org/2026.findings-acl.1018/>
+- <https://aclanthology.org/2026.acl-long.642/>
+- <https://ojs.aaai.org/index.php/AAAI/article/view/40431>
+
+One optional nicety, not an error: `fcct2026` could carry `number = {37}` alongside `volume = {40}`,
+since AAAI paginates continuously across a volume's issues. The entry resolves correctly without it.
+
+**What remains for camera-ready:** the ~37 canonical citations still not individually read. That set
+was never the fabrication risk — see "Residual risk, stated honestly" above — but reading it is the
+only thing that would move checklist §10.1 from ⚠️ to ✅.
