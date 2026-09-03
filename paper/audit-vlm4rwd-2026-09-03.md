@@ -194,3 +194,45 @@ Subset applied on request: **F1, F2, F4**. Both builds verified at cap afterward
 
 - **The submission footer is correct as-is.** It reads "Submitted to 40th Conference on Neural Information Processing Systems (NeurIPS 2026). Do not distribute." An accepted VLM4RWD paper (arXiv 2511.17036) instead shows "39th Conference … Workshop: VLM4RWD", which initially looked like a formatting miss on our side. It is not: `neurips_2026.sty` uses `\@trackname` (the workshop string) **only** under `\if@neuripsfinal`, so every non-final submission gets the generic "Submitted to …" line whatever track it targets. The comparison paper's footer is its camera-ready. **For camera-ready, switch to `\usepackage[final,dblblindworkshop]{neurips_2026}` and add `\workshoptitle{VLM4RWD}`.** Note `\if@workshop` is declared in the style file but never used, so the option has no other effect.
 - **Figure 1's caption sources its "62–82%" to Table 6, in the appendix**, and the main text cites the appendix figure `fig:conflict` as Figure 2. Both are instances of the F1 pattern and both are acceptable; recorded so they are not mistaken for new defects.
+
+## Disposition, third pass — 2026-09-03 (F5 and F9)
+
+**F5 applied, merged with F9. F3 measured, drafted, and declined. F9 needs nothing further.**
+
+§5's deployed-systems paragraph already carried two of the four protocol elements ("both conflict
+directions … against a neutral baseline on the same images"), so only the two missing ones had to be
+added. The recommendation now names the full protocol:
+
+> it appears only when both conflict directions are measured against a per-image neutral baseline, on
+> matched pairs that change only the contested word, with intervals resampling sentences as well as
+> photographs.
+
+**F5 and F9 were never two findings.** F9's substance — that stimulus-sampling uncertainty and not
+just image-sampling uncertainty decides whether a cross-modal conflict result generalizes — is the
+fourth clause above, and it is the element neither comparison paper reports at all. Naming it
+additionally as a "stance" would only add the keyword, so standalone F9 is closed as redundant rather
+than deferred.
+
+**F3 was declined, not blocked.** It fits (measured below) and was drafted as: "In our tests it is
+also large: a negative sentence flips the top label on 57% of conflict trials against 35% in the
+mirror direction, though the graded contrast carries the claim (§4.2)." Declined because the varied
+set's crossed interval for that gap includes zero, so the sentence has to qualify its own number in
+the introduction, and the abstract already carries $+1.148$ as the single licensed headline. The
+author chose to keep exactly one primary claim. **The rate is still stated in §5's Implications**, so
+it is not absent from the paper — only from the introduction. Reinstate the sentence above verbatim if
+that judgment changes.
+
+### Correcting an earlier claim in this audit
+
+The first pass asserted that F3, F5 and F9 each required funding by a cut. **That was wrong**, and it
+was an over-generalization from F1, where the cost was a *float*, not prose. Measured on real builds:
+
+| Edit | Where | Chars | Result |
+|---|---|---|---|
+| F5+F9, with an explanatory sentence | §5 | +285 | **9p — over** |
+| F5+F9, minimal | §5 | +105 | 8p — fits |
+| F5+F9 minimal **and** F3 together | §5 + §1 | +314 | 8p — fits |
+
+A single +285 edit in §5 overflowed while +314 split across §5 and §1 did not. **The budget is a
+page-break budget, not a character budget, and it is sensitive to where the text lands.** Never
+predict fit from character counts; run `./scripts/build-paper.sh long`.
