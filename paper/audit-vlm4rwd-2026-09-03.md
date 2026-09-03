@@ -262,3 +262,46 @@ label, no verbatim duplication. The responsible-use discussion itself is untouch
 
 **Note for anyone reinstating F3:** this pass freed roughly the space F3 needs, and F3 was declined on
 editorial grounds (one primary claim) rather than for want of room.
+
+## Disposition, fifth pass — 2026-09-03 (F3 reinstated)
+
+**F3 applied.** The introduction's motivating paragraph named three deployment settings — moderation
+queues, assistive agents, intake tools — and gave no magnitude anywhere before page 7. It now reads:
+
+> If negative phrasing moves those judgments further than positive phrasing does, the error is
+> directional, and it falls hardest on people whom the accompanying text already describes badly. In our
+> tests it is also large: after subtracting each image's neutral-sentence baseline, a negative sentence
+> flips the top label on $57\%$ of conflict trials against $35\%$ in the mirror direction, though the
+> graded contrast carries the claim (\S\ref{sec:conflict}).
+
+**One change from the sentence recorded in the third pass.** That draft quoted $57\%$ with no indication
+that it is the baseline-corrected rate; the uncorrected figure is $76\%$. An unqualified rate in the
+paper's most-read paragraph is precisely the claim-scope slip this audit's verification pass exists to
+catch, so the sentence now names the correction. Cost $+267$ characters rather than $+209$; both builds
+remain at cap.
+
+Cross-checked against §4.2.1, which reads "Correcting categorical overrides against each image's
+neutral-context error rate gives $57\%$ versus $35\%$ (gap $+21.7\%$, $[+10.9,+31.9]$); the uncorrected
+values are $76\%$, $37\%$, and $+39.4\%$." The introduction and §5's Implications now agree with it and
+with each other.
+
+The editorial tension noted when F3 was first declined still stands and was accepted deliberately: the
+sentence qualifies its own number in the introduction, and the abstract continues to carry $+1.148$ as
+the single licensed headline. That is the honest arrangement given the varied set's crossed interval for
+this gap includes zero.
+
+### Every finding is now closed
+
+| | Outcome |
+|---|---|
+| F1 | applied, scaled to a compact `tab:gaps`; main text 1 float → 2 |
+| F2 | applied |
+| F3 | applied (fifth pass, with the correction qualifier) |
+| F4 | applied |
+| F5 | applied, subsuming F9 |
+| F6 | applied then reverted — contradicted the Figure 1 graphic |
+| F7 | no change needed; existing convention verified consistent |
+| F8 | applied |
+| F9 | subsumed by F5 |
+
+Plus the author-spotted duplicated broader-impacts statement, resolved in the fourth pass.
