@@ -126,3 +126,69 @@ def sample_contexts(seed: int) -> dict[str, str]:
         "negative": str(rng.choice(NEGATIVE_CONTEXTS)),
         "neutral": str(rng.choice(NEUTRAL_CONTEXTS)),
     }
+
+
+# --------------------------------------------------------------------------- reviewer controls
+# The matched pairs above all share ONE sentence frame ("This photo was taken ..."), which the paper
+# discloses as a limitation: an asymmetry that only appears in that frame would be a property of the
+# construction rather than of valence. Splitting each pair into its invariant EVENT clause lets the
+# same six valence swaps be re-framed without touching the swap itself. `CONTEXT_FRAMES[0]` is the
+# original frame, so `frame_sentence(0, i, polarity)` reproduces `MINIMAL_PAIRS[i]` exactly — the
+# test suite asserts this, which is what keeps the re-framed runs comparable to the published one.
+#
+# Frames 1-3 are not arbitrary paraphrases. Section 5 claims a deployed pipeline receives "a caption,
+# a report, or a user's message"; these instantiate exactly those three carriers, so the control
+# doubles as a test of that claim rather than only of grammatical robustness.
+MINIMAL_PAIR_EVENTS: tuple[tuple[str, str], ...] = (
+    ("moments after they won the championship game",
+     "moments after they lost the championship game"),
+    ("on the best day of their life",
+     "on the worst day of their life"),
+    ("moments after they got the job they wanted",
+     "moments after they lost the job they wanted"),
+    ("moments after they heard wonderful news",
+     "moments after they heard devastating news"),
+    ("at a celebration for a close friend",
+     "at a memorial for a close friend"),
+    ("during a joyful moment",
+     "during a heartbreaking moment"),
+)
+
+CONTEXT_FRAMES: tuple[tuple[str, str], ...] = (
+    ("original", "This photo was taken {event}."),
+    ("caption", "Caption: {event}."),
+    ("report", "The accompanying report says the photo was taken {event}."),
+    ("message", "The sender's message reads: this was taken {event}."),
+)
+
+# The withdrawn prompt sweep varied the QUESTION as well as the context. Kept as a separate axis so
+# each run moves one thing: the frame axis holds the question fixed and vice versa.
+QUESTION_VARIANTS: tuple[tuple[str, str], ...] = (
+    ("original", "What single emotion is this person feeling?"),
+    ("best_word", "Which single word best describes how this person feels?"),
+    ("state", "What emotion is this person experiencing?"),
+    ("one_word", "In one word, what is this person feeling?"),
+)
+
+
+def frame_sentence(frame_index: int, pair_index: int, polarity: str) -> str:
+    """Render matched pair `pair_index` in context frame `frame_index` for `polarity`."""
+    if polarity not in ("positive", "negative"):
+        raise ValueError(f"polarity must be 'positive' or 'negative', got {polarity!r}")
+    event = MINIMAL_PAIR_EVENTS[pair_index][0 if polarity == "positive" else 1]
+    return CONTEXT_FRAMES[frame_index][1].format(event=event)
+
+
+def build_frame_conditions(frame_index: int) -> list[tuple[str, str, str | None]]:
+    """`build_conditions('minimal')` re-rendered in one context frame, neutral contexts included.
+
+    Neutral contexts keep their published wording in every frame: they are the per-image baseline the
+    effects are measured against, so re-framing them would move the baseline and the effect together
+    and make the frames non-comparable.
+    """
+    conds: list[tuple[str, str, str | None]] = [("none", "none", None)]
+    for i in range(len(MINIMAL_PAIRS)):
+        conds.append(("positive", f"mp{i}", frame_sentence(frame_index, i, "positive")))
+        conds.append(("negative", f"mp{i}", frame_sentence(frame_index, i, "negative")))
+    conds += [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
+    return conds
