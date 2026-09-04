@@ -58,6 +58,22 @@ from .stage_f_qwen import DEFAULT_MODEL, load_qwen, select_extreme_images
 CROP_MARGIN = 0.10   # fraction of box size added on each side, so the crop is not flush to the person
 
 
+def resolve_image_paths(df, images_root: str | None):
+    """Rebuild `image_path` under `images_root` from the parquet's own `folder` and `filename`.
+
+    The processed parquet stores absolute Colab paths
+    (`/content/.../data/raw/emotic/emotic/<folder>/<filename>`), so a session that mounts EMOTIC
+    anywhere else resolves nothing. Every row also carries `folder` and `filename`, and every
+    `image_path` equals `<root>/<folder>/<filename>`, so the join is exact rather than prefix surgery.
+    """
+    if not images_root:
+        return df
+    root = str(images_root).rstrip("/")
+    out = df.copy()
+    out["image_path"] = root + "/" + out["folder"].astype(str) + "/" + out["filename"].astype(str)
+    return out
+
+
 # --------------------------------------------------------------------------- prompt construction
 def build_inputs(processor, image, context_sentence, question: str = QUESTION):
     """Qwen chat inputs for one image, one context, one question.
@@ -245,10 +261,11 @@ def _fmt(value, spec: str) -> str:
 
 # --------------------------------------------------------------------------- modes
 def run_sweep(config_path: str, model_name: str, axis: str, limit: int | None,
-              allow_missing: bool = False) -> dict:
+              allow_missing: bool = False, images_root: str | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
-    sel = select_extreme_images(limit or int(cfg.get("n_images", 150)))
+    sel = resolve_image_paths(select_extreme_images(limit or int(cfg.get("n_images", 150))),
+                              images_root)
     model, processor = load_qwen(model_name)
     tok_ids = first_content_token_ids(processor)
     multi = {w: r for w, r in verify_label_tokenization(processor.tokenizer).items()
@@ -265,15 +282,24 @@ def run_sweep(config_path: str, model_name: str, axis: str, limit: int | None,
 
 
 def run_person(config_path: str, model_name: str, mode: str, limit: int | None,
-               allow_missing: bool = False) -> dict:
+               allow_missing: bool = False, images_root: str | None = None) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
-    sel = select_extreme_images(limit or int(cfg.get("n_images", 150)))
+    sel = resolve_image_paths(select_extreme_images(limit or int(cfg.get("n_images", 150))),
+                              images_root)
     model, processor = load_qwen(model_name)
     tok_ids = first_content_token_ids(processor)
-    variants = [(mode, build_conditions("minimal"), QUESTION)]
-    df, n_missing, n_ungrounded = _score_rows(model, processor, tok_ids, sel, variants, mode,
-                                              f"stage-f controls person={mode}")
+    # Score an ungrounded arm on the SAME images in the same invocation. Comparing a grounded run
+    # against the published 121-image numbers would confound grounding with image set, which matters
+    # because mscoco/ade20k images ship separately from EMOTIC and a session may hold only a subset.
+    # With both arms on one image set the contrast is internally valid whatever subset is mounted.
+    minimal = build_conditions("minimal")
+    df_base, n_missing, _ = _score_rows(model, processor, tok_ids, sel, [("none", minimal, QUESTION)],
+                                        "none", "stage-f controls person=none (paired baseline)")
+    df_grounded, _, n_ungrounded = _score_rows(model, processor, tok_ids, sel,
+                                               [(mode, minimal, QUESTION)], mode,
+                                               f"stage-f controls person={mode}")
+    df = pd.concat([df_base, df_grounded], ignore_index=True)
     check_coverage(int(df["image_path"].nunique()) if len(df) else 0, len(sel), n_missing,
                    allow_missing)
     stem = f"controls_person_{mode}_qwen"
@@ -284,7 +310,8 @@ def run_person(config_path: str, model_name: str, mode: str, limit: int | None,
 
 
 def run_generate(config_path: str, model_name: str, limit: int | None,
-                 max_new_tokens: int = 8, allow_missing: bool = False) -> dict:
+                 max_new_tokens: int = 8, allow_missing: bool = False,
+                 images_root: str | None = None) -> dict:
     """Greedy free-form generation on the matched bank, mapped onto the 13 labels.
 
     Deterministic (`do_sample=False`) so the comparison to the forced-choice readout is not a sampling
@@ -294,7 +321,8 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
     """
     cfg = load_config(config_path)
     ensure_dirs()
-    sel = select_extreme_images(limit or int(cfg.get("n_images", 150)))
+    sel = resolve_image_paths(select_extreme_images(limit or int(cfg.get("n_images", 150))),
+                              images_root)
     model, processor = load_qwen(model_name)
     conditions = build_conditions("minimal")
 
@@ -382,6 +410,9 @@ def main() -> None:
     ap.add_argument("--axis", choices=["frame", "question"], help="wording robustness sweep")
     ap.add_argument("--generate", action="store_true", help="free-form generation control")
     ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
+    ap.add_argument("--images-root", default=None,
+                    help="rebuild image paths under this root from the parquet's folder/filename "
+                         "(e.g. /content/emotic) when the baked-in absolute paths do not resolve")
     ap.add_argument("--allow-missing", action="store_true",
                     help="score a partial image set anyway (NOT comparable to published numbers)")
     ap.add_argument("--reanalyze", metavar="STEM",
@@ -391,11 +422,14 @@ def main() -> None:
     if args.reanalyze:
         reanalyze(args.reanalyze)
     elif args.person:
-        run_person(args.config, args.model, args.person, args.limit, args.allow_missing)
+        run_person(args.config, args.model, args.person, args.limit, args.allow_missing,
+                   args.images_root)
     elif args.axis:
-        run_sweep(args.config, args.model, args.axis, args.limit, args.allow_missing)
+        run_sweep(args.config, args.model, args.axis, args.limit, args.allow_missing,
+                  args.images_root)
     elif args.generate:
-        run_generate(args.config, args.model, args.limit, allow_missing=args.allow_missing)
+        run_generate(args.config, args.model, args.limit, allow_missing=args.allow_missing,
+                     images_root=args.images_root)
     else:
         ap.error("pick one of --person, --axis, --generate, --reanalyze")
 

@@ -161,3 +161,27 @@ def test_allow_missing_downgrades_the_abort_to_a_warning(capsys):
     from src.experiments.stage_f_controls import check_coverage
     check_coverage(n_scored=4, n_selected=150, n_missing=146, allow_missing=True)
     assert "ABORT" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------- image root override
+@pytest.mark.skipif(not Path("data/processed/emotic_test.parquet").exists(),
+                    reason="processed EMOTIC parquet not staged")
+def test_images_root_rebuilds_paths_from_folder_and_filename():
+    """The parquet's absolute Colab paths must be re-rootable, exactly, for any mount point."""
+    from src.experiments.stage_f_controls import resolve_image_paths
+    df = pd.read_parquet("data/processed/emotic_test.parquet").head(20)
+    rerooted = resolve_image_paths(df, "/somewhere/emotic")
+    for original, rebuilt, folder, filename in zip(df.image_path, rerooted.image_path,
+                                                   df.folder, df.filename):
+        assert rebuilt == f"/somewhere/emotic/{folder}/{filename}"
+        assert original.endswith(f"{folder}/{filename}")   # the join the reroot relies on
+    assert resolve_image_paths(df, "/somewhere/emotic/").image_path.iloc[0] == \
+        rerooted.image_path.iloc[0]                        # trailing slash tolerated
+
+
+@pytest.mark.skipif(not Path("data/processed/emotic_test.parquet").exists(),
+                    reason="processed EMOTIC parquet not staged")
+def test_no_images_root_leaves_paths_alone():
+    from src.experiments.stage_f_controls import resolve_image_paths
+    df = pd.read_parquet("data/processed/emotic_test.parquet").head(5)
+    assert list(resolve_image_paths(df, None).image_path) == list(df.image_path)
