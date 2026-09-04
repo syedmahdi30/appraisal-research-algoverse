@@ -213,14 +213,14 @@ def paired_variant_delta(df: pd.DataFrame, base: str, other: str,
     variants, so the shared stimulus variance cancels the way it does in the underlying design. The
     returned interval is on `other - base`; an interval covering zero means the control reproduced.
     """
-    from .analyze_stage_f_unbounded import _effect_matrix
+    from .analyze_stage_f_unbounded import effect_matrix
 
     scored = add_readouts(df)
     grids = {}
     for name in (base, other):
         sub = scored[scored["variant"] == name]
-        drop = _effect_matrix(sub, "positive", "negative", "valence")
-        rise = _effect_matrix(sub, "negative", "positive", "valence")
+        drop = effect_matrix(sub, "positive", "negative", "valence")
+        rise = effect_matrix(sub, "negative", "positive", "valence")
         if drop is None or rise is None:
             return {}
         grids[name] = (drop, rise)
