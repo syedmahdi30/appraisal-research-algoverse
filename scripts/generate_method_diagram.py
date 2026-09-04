@@ -7,14 +7,26 @@ emits a vector PDF cropped to its own bounding box. Exporting the canvas
 directly went through macOS print-to-PDF, which paginates onto US Letter and
 silently clipped roughly 40% of the artwork, including every result.
 
-The canvas is authored 2200px wide with 22px body text. Placed at \\linewidth
-(5.5in) that renders near 4pt, so the type is re-tuned here rather than scaled.
-Nothing sits below 8pt. Measured on DejaVu Sans, 8pt regular runs 17.4 characters
-per inch and 8pt bold caps only 12.8, so headings run out of room well before body
-text does and every string below is written to its own column's budget:
+Panel A shows BOTH conflict directions, because the paper's headline is the
+mirror contrast, not the within-positive-image ratio. A figure showing only a
+positive photograph would illustrate the comparison an external reviewer flagged
+as non-symmetric: there the negative sentence conflicts while the positive one
+agrees. Rows are negative-text-on-positive-photo and positive-text-on-negative-
+photo, each against that photograph's own neutral baseline, bars drawn to scale.
 
-    stimulus text  1.47in -> 25 chars     result panel  1.86in -> 32 regular / 23 bold
-    scorer box     0.99in -> 17 chars     arm-B panel   1.14in -> 19 chars
+Placed at \\linewidth (5.5in) nothing sits below 8pt, which
+tests/test_generate_method_diagram.py enforces along with label overlap and
+canvas bounds. Measured on DejaVu Sans, 8pt regular runs 17.4 characters per inch
+and 8pt bold caps only 12.8, so headings run out of room well before body text
+does and every string is written to its own column's budget:
+
+    stimulus text  1.66in -> 28 chars     result panel  2.11in -> 36 regular / 27 bold
+    scorer box     0.77in -> 13 chars     arm-B panel   1.20in -> 19 chars
+
+Values are full-precision constants rounded at render time. Storing a pre-rounded
+constant is a trap: the crossed upper bound is 0.82534, and round(0.825, 2) is
+0.82 in binary floating point, so a truncated constant printed an interval the
+paper does not report.
 
 The canvas's three footer lines move into the LaTeX caption, where they cost no
 figure height.
@@ -65,64 +77,99 @@ def _rule(ax, x0, x1, y, color=PALE_RED):
     ax.plot([x0, x1], [y, y], color=color, lw=0.8, solid_capstyle="butt")
 
 
+# Panel A shows BOTH conflict directions, because the paper's headline is the mirror contrast
+# (|drop| - |rise|), not the within-positive-image ratio. A figure showing only a positive photo
+# would illustrate the comparison an external reviewer flagged as non-symmetric: there the negative
+# sentence conflicts while the positive one agrees.
+# Full precision, straight from the estimators. Storing a pre-rounded constant is a trap: the
+# crossed upper bound is 0.82534, and round(0.825, 2) is 0.82 in binary floating point, so a
+# truncated constant printed an interval the paper does not report. Round at render time only.
+DROP, RISE = -1.4781706356769568, 0.9817493939096368   # matched set, Qwen3-VL-8B, vs neutral
+MIRROR = 0.49642124176732005
+MIRROR_CI = (0.11387484159848477, 0.8253392213196612)
+FLIP_HI, FLIP_LO = 0.9354838709677419, 0.5277777777777778   # override rate per direction
+
+ROW_HI, ROW_LO = 0.885, 0.690        # y centres of the two conflict directions
+BOX_H = 0.170
+
+
+def _photo_icon(ax, x, y_centre, label, tint):
+    """A placeholder person on a photo card. EMOTIC images are not redistributable."""
+    w = 0.055
+    h = w / ASPECT
+    x0, y0 = x, y_centre - h / 2
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor=SURFACE, edgecolor=EDGE, lw=0.9))
+    cx = x0 + w / 2
+    ax.add_patch(Circle((cx, y0 + h * 0.68), w * 0.20, facecolor=tint, edgecolor="none"))
+    ax.add_patch(Polygon([(x0 + w * 0.14, y0 + h * 0.10), (x0 + w * 0.86, y0 + h * 0.10),
+                          (x0 + w * 0.74, y0 + h * 0.46), (x0 + w * 0.26, y0 + h * 0.46)],
+                         closed=True, facecolor=tint, edgecolor="none"))
+    ax.text(cx, y0 - 0.016, label, fontsize=8.0, weight="bold", color=tint,
+            ha="center", va="top")
+
+
+def _sentence(ax, y_centre, word, word_face):
+    """The matched pair: identical frame and event, one valence word swapped."""
+    x, w = 0.126, 0.302
+    _box(ax, x, y_centre - BOX_H / 2, w, BOX_H, edge=EDGE, lw=1.0)
+    left = x + 0.016
+    ax.text(left, y_centre + 0.052, "\u201c\u2026moments after they", fontsize=8.5, va="center")
+    ax.text(left, y_centre, word, fontsize=9.0, weight="bold", color=word_face["fg"], va="center",
+            bbox=dict(boxstyle="square,pad=0.30", facecolor=word_face["bg"], edgecolor="none"))
+    ax.text(left, y_centre - 0.052, "the championship game.\u201d", fontsize=8.5, va="center")
+
+
 def _draw_stimulus(ax):
-    _box(ax, 0.028, 0.600, 0.372, 0.370)
-
-    icon_w = 0.055
-    icon_h = icon_w / ASPECT
-    ix, iy = 0.058, 0.848
-    ax.add_patch(Rectangle((ix, iy), icon_w, icon_h, facecolor=SURFACE, edgecolor=EDGE, lw=0.9))
-    cx = ix + icon_w / 2
-    ax.add_patch(Circle((cx, iy + icon_h * 0.68), icon_w * 0.20, facecolor=LIGHT, edgecolor="none"))
-    ax.add_patch(Polygon([(ix + icon_w * 0.14, iy + icon_h * 0.10),
-                          (ix + icon_w * 0.86, iy + icon_h * 0.10),
-                          (ix + icon_w * 0.74, iy + icon_h * 0.46),
-                          (ix + icon_w * 0.26, iy + icon_h * 0.46)],
-                         closed=True, facecolor=LIGHT, edgecolor="none"))
-    ax.text(cx, 0.832, "POSITIVE\nPHOTO", fontsize=8.0, weight="bold", color=LIGHT,
-            ha="center", va="top", linespacing=1.25)
-
-    tx = 0.152
-    ax.text(tx, 0.922, "“…moments after", fontsize=8.5, va="center")
-    ax.text(tx, 0.862, "WON", fontsize=8.5, weight="bold", color=INK, va="center",
-            bbox=dict(boxstyle="square,pad=0.25", facecolor=SURFACE, edgecolor="none"))
-    ax.text(tx + 0.062, 0.862, "/", fontsize=8.5, weight="bold", color=LIGHT, va="center")
-    ax.text(tx + 0.084, 0.862, "LOST", fontsize=8.5, weight="bold", color="white", va="center",
-            bbox=dict(boxstyle="square,pad=0.25", facecolor=INK, edgecolor="none"))
-    ax.text(tx, 0.802, "the championship", fontsize=8.5, va="center")
-    ax.text(tx, 0.742, "game.”", fontsize=8.5, va="center")
+    ax.text(0.0790, 0.936, "PHOTO", fontsize=8.0, weight="bold", color=LIGHT, ha="center",
+            va="bottom")
+    _photo_icon(ax, 0.030, ROW_HI, "POSITIVE", LIGHT)
+    _photo_icon(ax, 0.030, ROW_LO, "NEGATIVE", LIGHT)
+    _sentence(ax, ROW_HI, "LOST", {"fg": "white", "bg": RED})
+    _sentence(ax, ROW_LO, "WON", {"fg": "white", "bg": INK})
 
 
 def _draw_scorer(ax):
-    x, w = 0.432, 0.180
-    _box(ax, x, 0.655, w, 0.250)
+    """One scorer, both directions: the only thing that differs between rows is the stimulus."""
+    x, w = 0.450, 0.140
+    top, bottom = ROW_HI + BOX_H / 2, ROW_LO - BOX_H / 2
+    _box(ax, x, bottom, w, top - bottom)
     mid = x + w / 2
-    ax.text(mid, 0.872, "VLM", fontsize=9.0, weight="bold", ha="center", va="center")
-    ax.text(mid, 0.762, "4 VLMs\ncomplete-label\nlog-probs, 13\nemotion words",
-            fontsize=8.0, color=MID, ha="center", va="center", linespacing=1.35)
+    ax.text(mid, ROW_HI + 0.040, "VLM", fontsize=9.5, weight="bold", ha="center", va="center")
+    ax.text(mid, (top + bottom) / 2 - 0.005, "4 VLMs\nlog-probs\n13 emotion\nwords",
+            fontsize=8.0, color=MID, ha="center", va="center", linespacing=1.30)
 
 
 def _draw_behavioral_result(ax):
-    x, w = 0.645, 0.350
-    _box(ax, x, 0.600, w, 0.370, edge=RED, lw=1.6)
-    left, right = x + 0.014, x + w - 0.014
+    """Each row's shift against that photo's own neutral-context baseline, drawn to scale."""
+    x, w = 0.613, 0.383
+    scale = (w - 0.152) / abs(DROP)          # |drop| fills the bar track
+    for y, value, colour, flip, note in (
+            (ROW_HI, DROP, RED, FLIP_HI, "joy \u2192 sadness"),
+            (ROW_LO, RISE, INK, FLIP_LO, "sadness \u2192 joy")):
+        _box(ax, x, y - BOX_H / 2, w, BOX_H, edge=colour, lw=1.4)
+        left = x + 0.016
+        shown = f"{value:+.2f}".replace("-", "\u2212")
+        ax.text(left, y + 0.052, shown, fontsize=11.0, weight="bold", color=colour,
+                va="center")
+        bar_x = left + 0.120                 # clear of the value, which runs ~0.10 wide
+        ax.add_patch(Rectangle((bar_x, y + 0.038), abs(value) * scale, 0.026,
+                               facecolor=colour, edgecolor="none"))
+        ax.text(left, y - 0.004, note, fontsize=8.5, weight="bold", va="center")
+        ax.text(left, y - 0.056, f"top label flips on {flip:.0%} of trials",
+                fontsize=8.0, color=MID, va="center")
 
-    ax.text(left, 0.955, "MEAN SHIFT VS NEUTRAL\nQWEN3-VL-8B",
-            fontsize=8.0, weight="bold", color=MID, va="top", linespacing=1.3)
 
-    bar_x, bar_w = left + 0.064, right - left - 0.064
-    for y, label, frac, color in ((0.855, "WON", 0.22, INK), (0.812, "LOST", 0.96, RED)):
-        ax.text(left, y, label, fontsize=8.0, weight="bold", color=color, va="center")
-        ax.add_patch(Rectangle((bar_x, y - 0.014), bar_w * frac, 0.028,
-                               facecolor=color, edgecolor="none"))
-
-    _rule(ax, left, right, 0.788)
-    ax.text(left, 0.762, "4–5× larger for LOST, all 6", fontsize=8.0, va="center")
-
-    _rule(ax, left, right, 0.736)
-    ax.text(left, 0.712, "joy → sadness", fontsize=9.0, weight="bold", va="center")
-    ax.text(left, 0.648, "Top label, same photo, one\nword changed. 57 of 62 flip.",
-            fontsize=8.0, color=MID, va="center", linespacing=1.3)
+def _draw_headline(ax):
+    """The symmetric comparison the two rows exist to support."""
+    y = 0.556
+    ax.text(0.030, y, "MIRROR CONTRAST", fontsize=8.0, weight="bold", color=MID, va="center")
+    ax.text(0.262, y, f"+{MIRROR:.3f}", fontsize=10.5, weight="bold", color=RED, va="center")
+    # Round before formatting: f"{0.825:.2f}" yields 0.82 on the float representation, which would
+    # print an interval the paper does not report. The paper says [+0.11, +0.83].
+    lo, hi = (round(v, 2) for v in MIRROR_CI)
+    ax.text(0.382, y, f"[+{lo:.2f}, +{hi:.2f}]", fontsize=8.0, color=MID, va="center")
+    ax.text(0.996, y, "within positive photos: 4\u20135\u00d7, all 6 pairs",
+            fontsize=8.0, color=MID, ha="right", va="center")
 
 
 def _draw_patch_operation(ax):
@@ -171,16 +218,18 @@ def build_figure(_metrics: dict | None = None):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
-    ax.text(0.002, 0.952, "A", fontsize=13.0, weight="bold", color=RED, va="center")
+    ax.text(0.002, 0.975, "A", fontsize=13.0, weight="bold", color=RED, va="center")
     _draw_stimulus(ax)
-    _arrow(ax, 0.404, 0.428, 0.785)
+    for row in (ROW_HI, ROW_LO):
+        _arrow(ax, 0.430, 0.447, row)
+        _arrow(ax, 0.592, 0.610, row)
     _draw_scorer(ax)
-    _arrow(ax, 0.616, 0.641, 0.785)
     _draw_behavioral_result(ax)
+    _draw_headline(ax)
 
-    _rule(ax, 0.002, 0.998, 0.520, color=RULE)
+    _rule(ax, 0.002, 0.998, 0.512, color=RULE)
 
-    ax.text(0.002, 0.432, "B", fontsize=13.0, weight="bold", color=RED, va="center")
+    ax.text(0.002, 0.470, "B", fontsize=13.0, weight="bold", color=RED, va="center")
     _draw_patch_operation(ax)
     _arrow(ax, 0.304, 0.334, 0.250)
     _draw_mechanistic_results(ax)

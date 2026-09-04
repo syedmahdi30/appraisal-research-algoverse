@@ -113,3 +113,103 @@ def test_joy_to_sadness_flip_count():
     assert flips == spec["shown_flips"], (
         f"figure shows joy->sadness on {spec['shown_flips']}, data gives {flips}"
     )
+
+
+# --------------------------------------------------------------------------- panel A, both directions
+def _matched_scored(rel):
+    """The matched parquet with the readouts the published estimators expect."""
+    from src.experiments.analyze_stage_f_unbounded import add_readouts
+    return add_readouts(_parquet(rel))
+
+
+def test_mirror_contrast_and_interval_match_source():
+    """Panel A's headline. Guards the estimator too, not only the value.
+
+    `asymmetry_vs_floor` gives +0.478 on this data because it differences cell means, while the
+    paper and the figure report the per-photograph average, +0.496. A figure drawn from the wrong
+    estimator would agree with nothing in the paper.
+    """
+    from src.experiments.analyze_stage_f_unbounded import mirror_contrast
+    spec = MANIFEST["mirror_contrast"]
+    result = mirror_contrast(_matched_scored(spec["source"]), "valence")
+
+    assert abs(result["asymmetry_index"] - spec["shown"]) < spec["tol"], (
+        f"figure shows {spec['shown']}, source gives {result['asymmetry_index']:.4f}"
+    )
+    low, high = result["ci95_crossed"]
+    assert abs(round(low, 2) - spec["shown_ci"][0]) < spec["tol_ci"]
+    assert abs(round(high, 2) - spec["shown_ci"][1]) < spec["tol_ci"]
+    assert low > 0, "figure prints an interval excluding zero"
+
+
+def test_direction_effects_match_source():
+    """The two bars are drawn to scale, so both magnitudes have to be right."""
+    from src.experiments.analyze_stage_f_unbounded import mirror_contrast
+    spec = MANIFEST["direction_effects"]
+    result = mirror_contrast(_matched_scored(spec["source"]), "valence")
+
+    assert abs(result["drop"] - spec["shown_drop"]) < spec["tol"], (
+        f"figure shows {spec['shown_drop']}, source gives {result['drop']:.4f}"
+    )
+    assert abs(result["rise"] - spec["shown_rise"]) < spec["tol"], (
+        f"figure shows {spec['shown_rise']}, source gives {result['rise']:.4f}"
+    )
+    assert abs(result["drop"]) > abs(result["rise"]), (
+        "the figure draws the negative-text bar longer than the positive-text bar"
+    )
+
+
+def test_override_rates_match_source():
+    from src.experiments.analyze_stage_f_unbounded import override_gap
+    spec = MANIFEST["override_rates"]
+    result = override_gap(_matched_scored(spec["source"]))
+
+    assert abs(result["neg_ctx_overrides_pos_img"] - spec["shown_neg_on_pos"]) < spec["tol"]
+    assert abs(result["pos_ctx_overrides_neg_img"] - spec["shown_pos_on_neg"]) < spec["tol"]
+
+
+# --------------------------------------------------------------------------- figure vs manifest
+def _figure_text():
+    """Text actually rendered inside the figure PDF."""
+    import shutil
+    import subprocess
+    if shutil.which("pdftotext") is None:
+        pytest.skip("poppler's pdftotext not available")
+    pdf = ROOT / "paper/figures/method_diagram.pdf"
+    if not pdf.exists():
+        pytest.skip("figure not built")
+    return subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True).stdout
+
+
+def test_figure_prints_the_values_the_manifest_claims():
+    """Close the loop: the manifest asserts what the figure shows, so check the figure shows it.
+
+    Without this the guard is one-sided. It caught nothing when the crossed upper bound rendered as
+    +0.82 while the paper and the manifest both said +0.83 -- the constant in the generator had been
+    stored pre-rounded, and round(0.825, 2) is 0.82 in binary floating point.
+    """
+    text = _figure_text()
+    mirror = MANIFEST["mirror_contrast"]
+    low, high = mirror["shown_ci"]
+    expected = [
+        f"+{mirror['shown']:.3f}",
+        f"[+{low:.2f}, +{high:.2f}]",
+        f"{MANIFEST['direction_effects']['shown_drop']:+.2f}".replace("-", "−"),
+        f"{MANIFEST['direction_effects']['shown_rise']:+.2f}",
+        f"{MANIFEST['override_rates']['shown_neg_on_pos']:.0%}",
+        f"{MANIFEST['override_rates']['shown_pos_on_neg']:.0%}",
+        f"+{MANIFEST['probe_rho']['shown']:.3f}",
+        f"+{MANIFEST['steering_slope']['shown']:.3f}",
+        f"{MANIFEST['patching_text_all_pct']['shown_low']}–"
+        f"{MANIFEST['patching_text_all_pct']['shown_high']}%",
+    ]
+    missing = [value for value in expected if value not in text]
+    assert not missing, f"figure PDF does not print {missing}"
+
+
+def test_figure_shows_both_conflict_directions():
+    """Panel A exists to show the symmetric comparison, not only the positive-photo arm."""
+    text = _figure_text()
+    for token in ("POSITIVE", "NEGATIVE", "MIRROR CONTRAST", "joy → sadness",
+                  "sadness → joy"):
+        assert token in text, f"figure no longer shows {token!r}"
