@@ -23,7 +23,15 @@ d = pd.read_parquet("data/processed/emotic_test.parquet")
 print(d.image_path.map(os.path.exists).mean())   # want 1.0
 ```
 
-If that prints 0.0 the images are not mounted and every run will report `n_skipped == 150`.
+If that prints anything below 1.0 the images are not fully mounted. **The runner now aborts** when
+more than 5% of the selected images cannot be opened, so a partial run fails loudly instead of
+printing a plausible variant table — that is exactly what went wrong on the first attempt, which
+scored 4 of 150 images (240 rows instead of 9,000, 32 seconds instead of 40 minutes) and printed an
+ordinary-looking table with `mirror` as `n/a`. `--allow-missing` overrides the gate, but the result is
+not comparable to the published numbers and must not be reported as if it were.
+
+A `mirror` column of `n/a` is itself a symptom: the mirror contrast needs both conflict directions,
+so it goes missing when one image group has no usable images.
 
 ## The runs, in priority order
 

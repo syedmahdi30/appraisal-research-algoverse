@@ -136,3 +136,28 @@ def test_variants_are_scored_independently():
     b = metrics["per_variant"]["b"]["mirror_contrast"]["asymmetry_index"]
     assert a == pytest.approx(b)
     assert a == pytest.approx(0.496, abs=5e-4)
+
+
+# --------------------------------------------------------------------------- coverage gate
+def test_coverage_gate_aborts_when_images_are_missing():
+    """The first frame sweep scored 4 of 150 images and printed an ordinary-looking table."""
+    from src.experiments.stage_f_controls import check_coverage
+    with pytest.raises(RuntimeError, match="ABORT"):
+        check_coverage(n_scored=4, n_selected=150, n_missing=146, allow_missing=False)
+
+
+def test_coverage_gate_allows_a_complete_run():
+    from src.experiments.stage_f_controls import check_coverage
+    check_coverage(n_scored=150, n_selected=150, n_missing=0, allow_missing=False)
+
+
+def test_coverage_gate_tolerates_a_few_unreadable_images():
+    from src.experiments.stage_f_controls import MAX_MISSING_FRACTION, check_coverage
+    check_coverage(n_scored=147, n_selected=150,
+                   n_missing=int(MAX_MISSING_FRACTION * 150), allow_missing=False)
+
+
+def test_allow_missing_downgrades_the_abort_to_a_warning(capsys):
+    from src.experiments.stage_f_controls import check_coverage
+    check_coverage(n_scored=4, n_selected=150, n_missing=146, allow_missing=True)
+    assert "ABORT" in capsys.readouterr().out

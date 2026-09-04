@@ -156,6 +156,34 @@ def _score_rows(model, processor, tok_ids, sel, variants, grounding: str, desc: 
     return pd.DataFrame(rows), n_missing, n_ungrounded
 
 
+MAX_MISSING_FRACTION = 0.05
+
+
+def check_coverage(n_scored: int, n_selected: int, n_missing: int, allow_missing: bool) -> None:
+    """Refuse to report a control computed on a fraction of the intended images.
+
+    A run whose images are not mounted still produces a plausible-looking variant table: the
+    per-variant statistics are computed on whatever loaded, the interval widens, and nothing in the
+    output says why. That happened on the first frame sweep -- 4 of 150 images loaded, 240 rows
+    instead of 9,000, and the printed table looked ordinary. Coverage is therefore a hard gate rather
+    than a logged number, because the failure is silent by construction.
+    """
+    if n_selected and n_missing > MAX_MISSING_FRACTION * n_selected:
+        message = (
+            f"ABORT: {n_missing} of {n_selected} selected images could not be opened "
+            f"({n_missing / n_selected:.0%}); only {n_scored} were scored. The EMOTIC images are "
+            f"probably not mounted at the paths in data/processed/emotic_test.parquet. Verify with\n"
+            f"    import pandas as pd, os\n"
+            f"    d = pd.read_parquet('data/processed/emotic_test.parquet')\n"
+            f"    print(d.image_path.map(os.path.exists).mean())   # want 1.0\n"
+            f"Pass --allow-missing to score the partial set anyway (NOT comparable to the "
+            f"published numbers)."
+        )
+        if not allow_missing:
+            raise RuntimeError(message)
+        print(f"\n!! {message}\n")
+
+
 def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict) -> dict:
     """Per-variant matched-pair contrast and override gap, printed side by side."""
     per_variant = {}
@@ -179,7 +207,11 @@ def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict) -> dict:
                "per_variant": per_variant, **extra}
     save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
 
-    print(f"\nStage F controls [{stem}] — {model_name}, {len(df)} rows")
+    n_img = int(df["image_path"].nunique()) if len(df) else 0
+    skipped = extra.get("n_skipped") or 0
+    skip_note = f", {skipped} SKIPPED" if skipped else ""
+    print(f"\nStage F controls [{stem}] — {model_name}, "
+          f"{len(df)} rows over {n_img} images{skip_note}")
     print(f"  {'variant':10s} {'within-item':>11s} {'95% CI':>18s} "
           f"{'mirror':>8s} {'crossed CI':>18s} {'clears 0':>9s}")
     for variant, m in per_variant.items():
@@ -212,7 +244,8 @@ def _fmt(value, spec: str) -> str:
 
 
 # --------------------------------------------------------------------------- modes
-def run_sweep(config_path: str, model_name: str, axis: str, limit: int | None) -> dict:
+def run_sweep(config_path: str, model_name: str, axis: str, limit: int | None,
+              allow_missing: bool = False) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     sel = select_extreme_images(limit or int(cfg.get("n_images", 150)))
@@ -223,13 +256,16 @@ def run_sweep(config_path: str, model_name: str, axis: str, limit: int | None) -
     variants = _variants(axis)
     df, n_missing, _ = _score_rows(model, processor, tok_ids, sel, variants, "none",
                                    f"stage-f controls {axis}")
+    check_coverage(int(df["image_path"].nunique()) if len(df) else 0, len(sel), n_missing,
+                   allow_missing)
     stem = f"controls_{axis}_qwen"
     df.to_parquet(STAGE_F_DIR / f"{stem}.parquet")
     return _analyze(df, model_name, stem,
                     {"axis": axis, "n_skipped": n_missing, "tokenization_multi_token": multi})
 
 
-def run_person(config_path: str, model_name: str, mode: str, limit: int | None) -> dict:
+def run_person(config_path: str, model_name: str, mode: str, limit: int | None,
+               allow_missing: bool = False) -> dict:
     cfg = load_config(config_path)
     ensure_dirs()
     sel = select_extreme_images(limit or int(cfg.get("n_images", 150)))
@@ -238,6 +274,8 @@ def run_person(config_path: str, model_name: str, mode: str, limit: int | None) 
     variants = [(mode, build_conditions("minimal"), QUESTION)]
     df, n_missing, n_ungrounded = _score_rows(model, processor, tok_ids, sel, variants, mode,
                                               f"stage-f controls person={mode}")
+    check_coverage(int(df["image_path"].nunique()) if len(df) else 0, len(sel), n_missing,
+                   allow_missing)
     stem = f"controls_person_{mode}_qwen"
     df.to_parquet(STAGE_F_DIR / f"{stem}.parquet")
     return _analyze(df, model_name, stem,
@@ -246,7 +284,7 @@ def run_person(config_path: str, model_name: str, mode: str, limit: int | None) 
 
 
 def run_generate(config_path: str, model_name: str, limit: int | None,
-                 max_new_tokens: int = 8) -> dict:
+                 max_new_tokens: int = 8, allow_missing: bool = False) -> dict:
     """Greedy free-form generation on the matched bank, mapped onto the 13 labels.
 
     Deterministic (`do_sample=False`) so the comparison to the forced-choice readout is not a sampling
@@ -261,11 +299,12 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
     conditions = build_conditions("minimal")
 
     positive = {"joy", "pride", "relief", "trust"}
-    rows = []
+    rows, n_missing = [], 0
     for _, row in tqdm(list(sel.iterrows()), desc="stage-f controls generate"):
         try:
             image = Image.open(row["image_path"]).convert("RGB")
         except (FileNotFoundError, OSError):
+            n_missing += 1
             continue
         for condition, context_id, sentence in conditions:
             inputs = build_inputs(processor, image, sentence)
@@ -283,6 +322,8 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
                                                 else "other" if hit == "other" else "negative")})
 
     df = pd.DataFrame(rows)
+    check_coverage(int(df["image_path"].nunique()) if len(df) else 0, len(sel), n_missing,
+                   allow_missing)
     stem = "controls_generate_qwen"
     df.to_parquet(STAGE_F_DIR / f"{stem}.parquet")
     return _analyze_generate(df, model_name, stem)
@@ -341,6 +382,8 @@ def main() -> None:
     ap.add_argument("--axis", choices=["frame", "question"], help="wording robustness sweep")
     ap.add_argument("--generate", action="store_true", help="free-form generation control")
     ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
+    ap.add_argument("--allow-missing", action="store_true",
+                    help="score a partial image set anyway (NOT comparable to published numbers)")
     ap.add_argument("--reanalyze", metavar="STEM",
                     help="recompute from results/stage_f/<STEM>.parquet on CPU")
     args = ap.parse_args()
@@ -348,11 +391,11 @@ def main() -> None:
     if args.reanalyze:
         reanalyze(args.reanalyze)
     elif args.person:
-        run_person(args.config, args.model, args.person, args.limit)
+        run_person(args.config, args.model, args.person, args.limit, args.allow_missing)
     elif args.axis:
-        run_sweep(args.config, args.model, args.axis, args.limit)
+        run_sweep(args.config, args.model, args.axis, args.limit, args.allow_missing)
     elif args.generate:
-        run_generate(args.config, args.model, args.limit)
+        run_generate(args.config, args.model, args.limit, allow_missing=args.allow_missing)
     else:
         ap.error("pick one of --person, --axis, --generate, --reanalyze")
 
