@@ -14,6 +14,44 @@ withdrawn from the paper. Nothing in these runs may reintroduce it.
 pip install -r requirements-qwen.txt        # transformers>=4.57 for Qwen3-VL
 ```
 
+### Extracting EMOTIC on Colab — do not read the zip from Drive
+
+`OSError: [Errno 107] Transport endpoint is not connected` while extracting
+`/content/drive/MyDrive/emotic.zip` is the Google Drive FUSE mount dropping mid-read. Large archives
+read straight from Drive fail this way routinely. It also explains two things that look unrelated: a
+`FileExistsError` on `data/processed` (`colab_bootstrap.py --drive` symlinks it into Drive, and the
+symlink dangles once the mount dies), and any `--images-root` that resolved earlier suddenly resolving
+nothing.
+
+**Copy the archive to local disk first, extract locally, and keep the images off Drive:**
+
+```python
+from google.colab import drive
+drive.mount("/content/drive", force_remount=True)
+
+!mkdir -p /content/emotic_raw
+!cp /content/drive/MyDrive/emotic.zip /content/emotic.zip          # local copy, not a FUSE read
+!cp /content/drive/MyDrive/Annotations/Annotations.mat /content/Annotations.mat
+!unzip -q -o /content/emotic.zip -d /content/emotic_raw
+!ls /content/emotic_raw
+```
+
+If `cp` itself fails with Errno 107, remount and retry — the copy is resumable in a way the streaming
+read is not. Then let the locator find the extracted root:
+
+```bash
+python scripts/locate_emotic.py --search-root /content/emotic_raw
+```
+
+Pass whatever it prints as `--images-root`. The controls only read images, so they do not need the
+archive re-extracted into `data/raw/`, and keeping it out of Drive avoids the FUSE failure entirely.
+
+**A note on library versions.** `requirements.txt` installs `transformers` 5.x, while Qwen3-VL here is
+pinned `>=4.57,<5`, so `pip install "transformers>=4.57,<5"` downgrades it and `transformer-lens` will
+report a conflict. That conflict is harmless for these controls: `stage_f_controls` uses raw
+HuggingFace only and never imports `transformer_lens`. Control metrics now record the versions they
+ran under, because the published Qwen runs did not.
+
 ### Staging the images — this is where the first two attempts failed
 
 `data/processed/emotic_test.parquet` stores **absolute** `/content/...` paths from the original run, so

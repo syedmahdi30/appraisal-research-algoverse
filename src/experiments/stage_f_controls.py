@@ -200,6 +200,23 @@ def check_coverage(n_scored: int, n_selected: int, n_missing: int, allow_missing
         print(f"\n!! {message}\n")
 
 
+def _versions() -> dict:
+    """Record the library versions a control ran under.
+
+    The published Qwen runs did not record them, so a control that disagrees cannot be separated from
+    a version difference by inspection. The paired/`original` baselines are the real defence; this
+    makes the question answerable rather than guessed.
+    """
+    out = {}
+    for name in ("torch", "transformers", "numpy", "pandas", "PIL"):
+        try:
+            module = __import__(name)
+            out[name] = getattr(module, "__version__", "unknown")
+        except Exception:
+            out[name] = "absent"
+    return out
+
+
 def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict) -> dict:
     """Per-variant matched-pair contrast and override gap, printed side by side."""
     per_variant = {}
@@ -220,7 +237,7 @@ def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict) -> dict:
         }
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
                "read_out": "behavioral_valence", "n_rows": int(len(df)),
-               "per_variant": per_variant, **extra}
+               "per_variant": per_variant, "versions": _versions(), **extra}
     save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
 
     n_img = int(df["image_path"].nunique()) if len(df) else 0
@@ -376,7 +393,7 @@ def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str) -> dict:
             "unparsed_rate": float((sub["generated_label"] == "other").mean()),
         }
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "n_rows": int(len(df)), "per_group": summary}
+               "n_rows": int(len(df)), "per_group": summary, "versions": _versions()}
     save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
     print(f"\nStage F controls [generation] — {model_name}, {len(df)} generations")
     for group, m in summary.items():
