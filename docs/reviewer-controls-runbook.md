@@ -17,19 +17,19 @@ pip install -r requirements-qwen.txt        # transformers>=4.57 for Qwen3-VL
 ### Staging the images — this is where the first two attempts failed
 
 `data/processed/emotic_test.parquet` stores **absolute** `/content/...` paths from the original run, so
-a session that mounts EMOTIC anywhere else resolves nothing. Both first attempts scored **4 of 150**
-images. Diagnose before running anything:
+a session that mounts EMOTIC anywhere else resolves nothing. Attempts one and two scored **4 of 150**;
+attempt three passed a guessed `--images-root /content/emotic` that did not exist and scored **0**.
 
-```python
-import pandas as pd, os, glob
-d = pd.read_parquet("data/processed/emotic_test.parquet")
-print("present:", d.image_path.map(os.path.exists).mean())          # want 1.0
-print(d.assign(ok=d.image_path.map(os.path.exists)).groupby("folder").ok.agg(["mean", "size"]))
+**Do not guess the root. Find it:**
 
-# Where are the images actually? Search for one known filename.
-name = d.filename.iloc[0]
-print("found at:", glob.glob(f"/content/**/{name}", recursive=True)[:3])
+```bash
+python scripts/locate_emotic.py                       # searches /content
+python scripts/locate_emotic.py --search-root ~/data  # anywhere else
 ```
+
+It reports whether the baked-in paths resolve, which corpora the selection needs, every candidate root
+it finds with per-corpus coverage, and the exact `--images-root` to pass. It never moves or writes
+files. If it finds no candidate root, the archive is not on the machine and no flag will help.
 
 **The 150 selected images need all four sub-corpora:** `emodb_small` 100, `framesdb` 26, `mscoco` 23,
 `ade20k` 1. `emodb_small` and `framesdb` ship inside the EMOTIC archive; **`mscoco` and `ade20k`
