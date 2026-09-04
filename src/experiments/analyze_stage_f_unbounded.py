@@ -66,7 +66,7 @@ def add_readouts(df: pd.DataFrame) -> pd.DataFrame:
     return d
 
 
-def _effect_matrix(d: pd.DataFrame, group: str, cond: str, value: str):
+def effect_matrix(d: pd.DataFrame, group: str, cond: str, value: str):
     """(images x context sentences) matrix of effects vs each image's own neutral baseline.
 
     Rows are image blocks in `group`, columns are the `context_id`s of condition `cond`, cells are
@@ -81,6 +81,9 @@ def _effect_matrix(d: pd.DataFrame, group: str, cond: str, value: str):
     m = cells.pivot_table(index="_img", columns="context_id", values=value, aggfunc="mean")
     m = m.loc[m.index.intersection(neutral.index)]
     return m.sub(neutral.loc[m.index], axis=0)
+
+
+_effect_matrix = effect_matrix   # retained: this module's internal call sites use the short name
 
 
 def _crossed_bootstrap(drop_m, rise_m, n_boot: int, seed: int, statistic):
