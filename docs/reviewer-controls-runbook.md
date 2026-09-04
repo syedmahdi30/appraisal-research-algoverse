@@ -14,24 +14,55 @@ withdrawn from the paper. Nothing in these runs may reintroduce it.
 pip install -r requirements-qwen.txt        # transformers>=4.57 for Qwen3-VL
 ```
 
-EMOTIC must be staged at the paths inside `data/processed/emotic_test.parquet` (they are absolute
-`/content/...` Colab paths). Confirm with:
+### Staging the images — this is where the first two attempts failed
+
+`data/processed/emotic_test.parquet` stores **absolute** `/content/...` paths from the original run, so
+a session that mounts EMOTIC anywhere else resolves nothing. Both first attempts scored **4 of 150**
+images. Diagnose before running anything:
 
 ```python
-import pandas as pd, os
+import pandas as pd, os, glob
 d = pd.read_parquet("data/processed/emotic_test.parquet")
-print(d.image_path.map(os.path.exists).mean())   # want 1.0
+print("present:", d.image_path.map(os.path.exists).mean())          # want 1.0
+print(d.assign(ok=d.image_path.map(os.path.exists)).groupby("folder").ok.agg(["mean", "size"]))
+
+# Where are the images actually? Search for one known filename.
+name = d.filename.iloc[0]
+print("found at:", glob.glob(f"/content/**/{name}", recursive=True)[:3])
 ```
 
-If that prints anything below 1.0 the images are not fully mounted. **The runner now aborts** when
-more than 5% of the selected images cannot be opened, so a partial run fails loudly instead of
-printing a plausible variant table — that is exactly what went wrong on the first attempt, which
-scored 4 of 150 images (240 rows instead of 9,000, 32 seconds instead of 40 minutes) and printed an
-ordinary-looking table with `mirror` as `n/a`. `--allow-missing` overrides the gate, but the result is
-not comparable to the published numbers and must not be reported as if it were.
+**The 150 selected images need all four sub-corpora:** `emodb_small` 100, `framesdb` 26, `mscoco` 23,
+`ade20k` 1. `emodb_small` and `framesdb` ship inside the EMOTIC archive; **`mscoco` and `ade20k`
+images do not** — EMOTIC distributes only their annotations, and the images come from MSCOCO and
+ADE20K themselves. A correct EMOTIC-only extraction therefore reaches 126/150 (84%), not 100%.
 
-A `mirror` column of `n/a` is itself a symptom: the mirror contrast needs both conflict directions,
-so it goes missing when one image group has no usable images.
+Once the search above tells you the real root, point the runner at it — paths are rebuilt exactly from
+the parquet's own `folder` and `filename` columns, not by prefix guessing:
+
+```bash
+python -m src.experiments.stage_f_controls --person box --images-root /content/emotic
+```
+
+The root is whatever directory contains `framesdb/`, `mscoco/`, `emodb_small/` and `ade20k/`.
+
+### If you cannot get mscoco/ade20k in time
+
+The runner aborts above 5% missing, because a control silently scored on a fraction of the images is
+worse than a crash. For **`--person box` / `--person crop` that gate is conservative rather than
+necessary**: those modes now score a *paired ungrounded arm on the same images in the same run*, so the
+grounded-vs-ungrounded contrast is internally valid on whatever subset is mounted. Losing images costs
+precision and the comparison to the published 121-image numbers, not validity. So:
+
+```bash
+python -m src.experiments.stage_f_controls --person box --images-root <root> --allow-missing
+```
+
+is defensible **if and only if** you report it as a paired contrast on n images rather than as a
+replication of the published number. The `--axis` sweeps carry their own `original` baseline, so the
+same argument applies to them.
+
+A `mirror` column of `n/a` is a symptom, not a result: the mirror contrast needs both conflict
+directions, so it disappears when one image group has no usable images.
 
 ## The runs, in priority order
 
@@ -40,9 +71,9 @@ publishable on its own.
 
 | # | Command | Passes | Rough A100 time |
 |---|---|---|---|
-| 1 | `python -m src.experiments.stage_f_controls --person box` | 2,250 | ~10 min |
+| 1 | `python -m src.experiments.stage_f_controls --person box` | 4,500 (2 arms) | ~20 min |
 | 2 | `python -m src.experiments.stage_f_controls --axis frame` | 9,000 | ~40 min |
-| 3 | `python -m src.experiments.stage_f_controls --person crop` | 2,250 | ~10 min |
+| 3 | `python -m src.experiments.stage_f_controls --person crop` | 4,500 (2 arms) | ~20 min |
 | 4 | `python -m src.experiments.stage_f_controls --axis question` | 9,000 | ~40 min |
 | 5 | `python -m src.experiments.stage_f_controls --generate` | 2,250 generations | ~20 min |
 
@@ -81,8 +112,9 @@ should land on those published numbers.** If it does not, something in the run d
 published one and the other variants cannot be interpreted — stop and report that rather than the
 variant table.
 
-For `--person box` / `--person crop` there is no `original` row, so the published line is the
-comparison. `n_ungrounded` in the metrics counts rows whose bbox was unusable and which were
+For `--person box` / `--person crop` the table has **two rows**: `none` (paired ungrounded baseline,
+same images) and the grounded mode. **Compare those two to each other** — that is the control. The
+published line is a secondary check that only applies if the full image set was mounted. `n_ungrounded` in the metrics counts rows whose bbox was unusable and which were
 therefore scored *ungrounded*; if that is not ~0 the control is diluted.
 
 **What counts as the control passing:** the mirror contrast stays positive with a crossed interval
