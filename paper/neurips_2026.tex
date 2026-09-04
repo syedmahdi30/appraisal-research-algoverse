@@ -73,8 +73,8 @@ Vision-language systems increasingly read images of people alongside text that a
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{figures/method_diagram.pdf}
-  \caption{Design. \textbf{A}~The behavioral test (\S\ref{sec:conflict}): both conflict directions on matched pairs that hold frame and event fixed and flip one valence word. Each shift is against that photograph's own neutral-context response and the bars are to scale; \qwen{}, 150 person-annotations from 121 images. The mirror contrast compares the two directions, and its interval resamples sentences as well as photographs. Icons are placeholders; EMOTIC photographs are not reproduced. \textbf{B}~The interventions (\S\ref{sec:mechanism}), which do not share that input: 51 photographs, the championship/funeral pair, no neutral correction. The probe and the steering direction are fit on \gemma{}'s states; patching also runs on \qwen{} and \llava{}, whose layer bands differ, so $62$--$82\%$ is a range across models rather than a confidence interval (Table~\ref{tab:mechmodels}).}
+  \includegraphics[width=\linewidth]{figures/method_diagram_v2.pdf}
+  \caption{Design. \textbf{A}~The behavioral test (\S\ref{sec:conflict}): both conflict directions on matched pairs that hold frame and event fixed and flip one valence word, each shift measured against that photograph's own neutral-context response and drawn on a shared scale. \qwen{}, 150 person-annotations from 121 images; the mirror contrast compares the two directions and its interval resamples sentences as well as photographs. The wording is abbreviated and the scenes are schematic: EMOTIC photographs are not reproduced. \textbf{B}~The interventions (\S\ref{sec:mechanism}), which do not share that input: 51 photographs, the championship/funeral pair, no neutral correction. The probe and the steering direction are distinct and fit on \gemma{}'s states; patching also runs on \qwen{} and \llava{}. Patching measures sufficiency for recovery, not the cause of the asymmetry (\S\ref{sec:mechanism}).}
   \label{fig:method}
 \end{figure}
 
