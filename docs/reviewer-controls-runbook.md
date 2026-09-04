@@ -155,6 +155,18 @@ same images) and the grounded mode. **Compare those two to each other** — that
 published line is a secondary check that only applies if the full image set was mounted. `n_ungrounded` in the metrics counts rows whose bbox was unusable and which were
 therefore scored *ungrounded*; if that is not ~0 the control is diluted.
 
+### The paired change, not two intervals
+
+For `--person` the run prints a **paired change in mirror contrast** underneath the variant table,
+bootstrapped on the same photographs in both arms. Read that, not the two rows' separate intervals:
+overlapping intervals do not mean the variants agree, and the question the control asks is whether
+grounding *changed* the asymmetry. An interval covering zero means the control reproduced. Older
+parquets get it by re-analysing on CPU:
+
+```bash
+python -m src.experiments.stage_f_controls --reanalyze controls_person_box_qwen
+```
+
 **What counts as the control passing:** the mirror contrast stays positive with a crossed interval
 excluding zero, and the within-item contrast stays in the neighbourhood of the published value. A
 mirror contrast whose crossed interval now includes zero means the control did not reproduce, which

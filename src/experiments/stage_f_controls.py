@@ -200,6 +200,68 @@ def check_coverage(n_scored: int, n_selected: int, n_missing: int, allow_missing
         print(f"\n!! {message}\n")
 
 
+def paired_variant_delta(df: pd.DataFrame, base: str, other: str,
+                         n_boot: int = 2000, seed: int = 0) -> dict:
+    """Paired bootstrap of the change in mirror contrast between two variants.
+
+    Two variants scored on the same photographs are NOT independent, so comparing their separate
+    confidence intervals answers the wrong question: overlapping intervals do not mean the variants
+    agree, and disjoint ones would overstate the difference. The control asks whether grounding
+    CHANGED the asymmetry, which is a paired quantity.
+
+    Each bootstrap replicate draws one set of photograph and sentence indices and applies it to both
+    variants, so the shared stimulus variance cancels the way it does in the underlying design. The
+    returned interval is on `other - base`; an interval covering zero means the control reproduced.
+    """
+    from .analyze_stage_f_unbounded import _effect_matrix
+
+    scored = add_readouts(df)
+    grids = {}
+    for name in (base, other):
+        sub = scored[scored["variant"] == name]
+        drop = _effect_matrix(sub, "positive", "negative", "valence")
+        rise = _effect_matrix(sub, "negative", "positive", "valence")
+        if drop is None or rise is None:
+            return {}
+        grids[name] = (drop, rise)
+
+    # Pair on the photographs and sentences the two variants share, so one index set drives both.
+    import numpy as np
+    shared = {}
+    for axis, position in (("drop", 0), ("rise", 1)):
+        a, b = grids[base][position], grids[other][position]
+        rows = a.index.intersection(b.index)
+        cols = a.columns.intersection(b.columns)
+        shared[axis] = (a.loc[rows, cols].to_numpy(float), b.loc[rows, cols].to_numpy(float))
+
+    def mirror(drop_cells, rise_cells):
+        return abs(np.nanmean(drop_cells)) - abs(np.nanmean(rise_cells))
+
+    base_value = mirror(shared["drop"][0], shared["rise"][0])
+    other_value = mirror(shared["drop"][1], shared["rise"][1])
+
+    rng = np.random.default_rng(seed)
+    deltas = np.empty(n_boot)
+    for k in range(n_boot):
+        di = rng.integers(0, shared["drop"][0].shape[0], shared["drop"][0].shape[0])
+        dj = rng.integers(0, shared["drop"][0].shape[1], shared["drop"][0].shape[1])
+        ri = rng.integers(0, shared["rise"][0].shape[0], shared["rise"][0].shape[0])
+        rj = rng.integers(0, shared["rise"][0].shape[1], shared["rise"][0].shape[1])
+        dsel, rsel = np.ix_(di, dj), np.ix_(ri, rj)
+        deltas[k] = (mirror(shared["drop"][1][dsel], shared["rise"][1][rsel])
+                     - mirror(shared["drop"][0][dsel], shared["rise"][0][rsel]))
+
+    low, high = (float(v) for v in np.percentile(deltas, [2.5, 97.5]))
+    return {
+        "base": base, "other": other,
+        "base_mirror": float(base_value), "other_mirror": float(other_value),
+        "delta": float(other_value - base_value),
+        "delta_ci95_paired": [low, high],
+        "reproduces": bool(low <= 0.0 <= high),
+        "n_photographs": [int(shared["drop"][0].shape[0]), int(shared["rise"][0].shape[0])],
+    }
+
+
 def _versions() -> dict:
     """Record the library versions a control ran under.
 
@@ -258,6 +320,23 @@ def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict) -> dict:
         clears = str(mir.get("crossed_clears_zero"))
         print(f"  {variant:10s} {within_text:>11s} {wci_text:>18s} "
               f"{mirror_text:>8s} {cci_text:>18s} {clears:>9s}")
+    # A paired run carries its own baseline, so report the change rather than two intervals the
+    # reader would otherwise eyeball for overlap.
+    variants = list(per_variant)
+    if len(variants) == 2 and "none" in variants:
+        other = next(v for v in variants if v != "none")
+        paired = paired_variant_delta(df, "none", other)
+        if paired:
+            metrics["paired_delta"] = paired
+            save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
+            low, high = paired["delta_ci95_paired"]
+            verdict = ("reproduces: the interval covers zero" if paired["reproduces"]
+                       else "CHANGED: the interval excludes zero")
+            print(f"\n  paired change in mirror contrast, {other} vs none: "
+                  f"{paired['delta']:+.3f} [{low:+.3f}, {high:+.3f}]  -> {verdict}")
+            print("  (paired on the same photographs; comparing the two rows' separate intervals "
+                  "for overlap would answer a different question)")
+
     print(f"  data -> {STAGE_F_DIR / (stem + '.parquet')}")
     print("  Published matched reference: within-item +1.148 [+0.943,+1.344]; "
           "mirror +0.496, crossed [+0.11,+0.83].")

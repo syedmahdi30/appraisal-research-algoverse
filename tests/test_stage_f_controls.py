@@ -185,3 +185,47 @@ def test_no_images_root_leaves_paths_alone():
     from src.experiments.stage_f_controls import resolve_image_paths
     df = pd.read_parquet("data/processed/emotic_test.parquet").head(5)
     assert list(resolve_image_paths(df, None).image_path) == list(df.image_path)
+
+
+# --------------------------------------------------------------------------- paired variant delta
+@pytest.mark.skipif(not MATCHED_PQ.exists(), reason="published matched parquet not staged")
+def test_identical_variants_give_a_degenerate_paired_interval():
+    """The pairing is the point: the same data twice must differ by exactly zero.
+
+    An unpaired bootstrap would return a nonzero-width interval here, which is precisely the error
+    that reading two separate intervals for overlap invites.
+    """
+    from src.experiments.stage_f_controls import paired_variant_delta
+    df = pd.read_parquet(MATCHED_PQ)
+    doubled = pd.concat([df.assign(variant="none"), df.assign(variant="box")], ignore_index=True)
+    result = paired_variant_delta(doubled, "none", "box")
+
+    assert result["delta"] == pytest.approx(0.0, abs=1e-12)
+    assert result["delta_ci95_paired"] == [pytest.approx(0.0), pytest.approx(0.0)]
+    assert result["reproduces"] is True
+    assert result["base_mirror"] == pytest.approx(result["other_mirror"])
+
+
+@pytest.mark.skipif(not MATCHED_PQ.exists(), reason="published matched parquet not staged")
+def test_paired_delta_detects_a_shifted_variant():
+    """A variant with a genuinely smaller drop must show a negative, zero-excluding change."""
+    from src.experiments.stage_f_controls import paired_variant_delta
+    df = pd.read_parquet(MATCHED_PQ)
+    weakened = df.copy()
+    conflict = (weakened.image_group == "positive") & (weakened.condition == "negative")
+    weakened.loc[conflict, "valence"] = weakened.loc[conflict, "valence"] * 0.5
+    doubled = pd.concat([df.assign(variant="none"), weakened.assign(variant="box")],
+                        ignore_index=True)
+    result = paired_variant_delta(doubled, "none", "box")
+
+    assert result["delta"] < 0
+    assert result["delta_ci95_paired"][1] < 0, "a halved drop must exclude zero"
+    assert result["reproduces"] is False
+
+
+@pytest.mark.skipif(not MATCHED_PQ.exists(), reason="published matched parquet not staged")
+def test_paired_delta_absent_without_a_none_baseline():
+    from src.experiments.stage_f_controls import _analyze
+    df = pd.read_parquet(MATCHED_PQ)
+    doubled = pd.concat([df.assign(variant="a"), df.assign(variant="b")], ignore_index=True)
+    assert "paired_delta" not in _analyze(doubled, "test", "controls_pytest", {})
