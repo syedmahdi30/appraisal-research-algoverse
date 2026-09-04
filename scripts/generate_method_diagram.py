@@ -122,6 +122,7 @@ def _sentence(ax, y_centre, word, word_face):
 def _draw_stimulus(ax):
     ax.text(0.0790, 0.936, "PHOTO", fontsize=8.0, weight="bold", color=LIGHT, ha="center",
             va="bottom")
+    ax.text(0.8045, 0.974, "neutral", fontsize=8.0, color=MID, ha="center", va="bottom")
     _photo_icon(ax, 0.030, ROW_HI, "POSITIVE", LIGHT)
     _photo_icon(ax, 0.030, ROW_LO, "NEGATIVE", LIGHT)
     _sentence(ax, ROW_HI, "LOST", {"fg": "white", "bg": RED})
@@ -140,22 +141,35 @@ def _draw_scorer(ax):
 
 
 def _draw_behavioral_result(ax):
-    """Each row's shift against that photo's own neutral-context baseline, drawn to scale."""
+    """Each row's signed shift against that photograph's own neutral baseline, on a shared axis.
+
+    A magnitude bar would discard the sign, which is the whole point: the two directions move the
+    judgment opposite ways and by different amounts. Both rows share one scale and one neutral tick,
+    so their lengths are directly comparable by eye.
+    """
     x, w = 0.613, 0.383
-    scale = (w - 0.152) / abs(DROP)          # |drop| fills the bar track
-    for y, value, colour, flip, note in (
-            (ROW_HI, DROP, RED, FLIP_HI, "joy \u2192 sadness"),
-            (ROW_LO, RISE, INK, FLIP_LO, "sadness \u2192 joy")):
+    track_left, track_right = x + 0.030, x + w - 0.030
+    neutral = (track_left + track_right) / 2
+    unit = (neutral - track_left) / abs(DROP)      # |drop| reaches the end of the track
+
+    for y, value, colour, flip, note, direction in (
+            (ROW_HI, DROP, RED, FLIP_HI, "joy \u2192 sadness", "toward negative"),
+            (ROW_LO, RISE, INK, FLIP_LO, "sadness \u2192 joy", "toward positive")):
         _box(ax, x, y - BOX_H / 2, w, BOX_H, edge=colour, lw=1.4)
+        axis_y = y + 0.052
+        ax.plot([track_left, track_right], [axis_y, axis_y], color=EDGE, lw=0.8,
+                solid_capstyle="butt", zorder=1)
+        ax.plot([neutral, neutral], [axis_y - 0.016, axis_y + 0.016], color=MID, lw=0.9, zorder=2)
+        ax.add_patch(FancyArrow(neutral, axis_y, value * unit, 0, width=0.004,
+                                head_width=0.020, head_length=0.010,
+                                length_includes_head=True, facecolor=colour, edgecolor="none",
+                                zorder=3))
+
         left = x + 0.016
         shown = f"{value:+.2f}".replace("-", "\u2212")
-        ax.text(left, y + 0.052, shown, fontsize=11.0, weight="bold", color=colour,
-                va="center")
-        bar_x = left + 0.120                 # clear of the value, which runs ~0.10 wide
-        ax.add_patch(Rectangle((bar_x, y + 0.038), abs(value) * scale, 0.026,
-                               facecolor=colour, edgecolor="none"))
-        ax.text(left, y - 0.004, note, fontsize=8.5, weight="bold", va="center")
-        ax.text(left, y - 0.056, f"top label flips on {flip:.0%} of trials",
+        ax.text(left, y - 0.006, shown, fontsize=11.0, weight="bold", color=colour, va="center")
+        ax.text(left + 0.105, y - 0.006, direction, fontsize=8.0, color=colour, va="center")
+        ax.text(left, y - 0.060, f"top label: {note}, {flip:.0%}",
                 fontsize=8.0, color=MID, va="center")
 
 
