@@ -115,6 +115,13 @@ publishable on its own.
 | 4 | `python -m src.experiments.stage_f_controls --axis question` | 9,000 | ~40 min |
 | 5 | `python -m src.experiments.stage_f_controls --generate` | 2,250 generations | ~20 min |
 
+**Run 5 was void on the first pass and has not been re-run.** The generation budget defaulted to 8
+new tokens, which Qwen3-VL spends entirely on its preamble ("Based on the visual evidence in the
+photograph"), so 99.6% of generations reached no emotion word and scored `other`. The flip rates it
+printed, 0.7% against 0.0%, measured the truncation. The default is now 32 and `--max-new-tokens`
+is settable; `UNPARSED_CEILING` prints a warning above 20% unparsed so this cannot pass quietly
+again. The result is not in the paper and should not be cited until the run is repeated.
+
 **Do not pass `--limit`.** It changes which images are selected (`select_extreme_rows` takes `n//2`
 from each valence end), so a smaller run is a *different* image set, not a subset of this one, and
 would not be comparable to the published numbers.

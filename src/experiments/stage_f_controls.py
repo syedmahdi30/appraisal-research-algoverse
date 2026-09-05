@@ -279,7 +279,24 @@ def _versions() -> dict:
     return out
 
 
-def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict) -> dict:
+def _keep_run_provenance(metrics: dict, prior: dict | None) -> dict:
+    """Let a CPU re-analysis keep the GPU run's provenance instead of stamping its own.
+
+    `--reanalyze` recomputes from a saved parquet, so the numbers still belong to the environment
+    that produced that parquet. Overwriting `run`/`git`/`versions` with the re-analysing machine's
+    values does not merely lose the original, it asserts something false about where the numbers
+    came from -- which is exactly what the per-run version capture was added to prevent. Keep the
+    original and record the re-analysis alongside it.
+    """
+    if not prior:
+        return metrics
+    carried = {key: prior[key] for key in ("run", "git", "versions") if key in prior}
+    reanalysis = {"run": metrics["run"], "git": metrics["git"], "versions": metrics["versions"]}
+    return {**metrics, **carried, "reanalyzed": reanalysis}
+
+
+def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict,
+             prior: dict | None = None) -> dict:
     """Per-variant matched-pair contrast and override gap, printed side by side."""
     per_variant = {}
     for variant in df["variant"].unique():
@@ -300,6 +317,7 @@ def _analyze(df: pd.DataFrame, model_name: str, stem: str, extra: dict) -> dict:
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
                "read_out": "behavioral_valence", "n_rows": int(len(df)),
                "per_variant": per_variant, "versions": _versions(), **extra}
+    metrics = _keep_run_provenance(metrics, prior)
     save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
 
     n_img = int(df["image_path"].nunique()) if len(df) else 0
@@ -406,7 +424,7 @@ def run_person(config_path: str, model_name: str, mode: str, limit: int | None,
 
 
 def run_generate(config_path: str, model_name: str, limit: int | None,
-                 max_new_tokens: int = 8, allow_missing: bool = False,
+                 max_new_tokens: int = 32, allow_missing: bool = False,
                  images_root: str | None = None) -> dict:
     """Greedy free-form generation on the matched bank, mapped onto the 13 labels.
 
@@ -414,6 +432,12 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
     artifact. An answer counts as a label if any label appears as a word in the decoded text; answers
     matching none are recorded as `other` rather than dropped, because a model that stops naming
     emotions under negative context is itself a result.
+
+    `max_new_tokens` has to clear the model's preamble, not just the answer. An instruct model opens
+    with something like "Based on the visual evidence in the photograph", so a budget of 8 truncates
+    every generation before the emotion word and labels ~100% of them `other` -- which reads as a
+    null result rather than the empty measurement it is. UNPARSED_CEILING below turns that into a
+    visible warning; keep the budget well above the preamble.
     """
     cfg = load_config(config_path)
     ensure_dirs()
@@ -453,7 +477,13 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
     return _analyze_generate(df, model_name, stem)
 
 
-def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str) -> dict:
+# Above this share of `other`, the generation readout is measuring truncation or refusal rather than
+# the model's answer, and the flip rates below it are not interpretable. See run_generate's docstring.
+UNPARSED_CEILING = 0.20
+
+
+def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str,
+                      prior: dict | None = None) -> dict:
     """Override rate computed on generated answers, per image group."""
     summary = {}
     for group in ("positive", "negative"):
@@ -473,6 +503,7 @@ def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str) -> dict:
         }
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
                "n_rows": int(len(df)), "per_group": summary, "versions": _versions()}
+    metrics = _keep_run_provenance(metrics, prior)
     save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
     print(f"\nStage F controls [generation] — {model_name}, {len(df)} generations")
     for group, m in summary.items():
@@ -480,6 +511,11 @@ def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str) -> dict:
               f"{_fmt(m['conflicting_context_flips'], '.1%')} vs neutral "
               f"{_fmt(m['neutral_context_flips'], '.1%')} "
               f"(unparsed {_fmt(m['unparsed_rate'], '.1%')}, n={m['n']})")
+    worst = max((m["unparsed_rate"] for m in summary.values()), default=0.0)
+    if worst > UNPARSED_CEILING:
+        print(f"\n!! {worst:.1%} of generations matched no label (ceiling {UNPARSED_CEILING:.0%}). "
+              f"The flip rates above are NOT interpretable -- the run measured truncated or "
+              f"non-committal text, not the model's answer. Raise --max-new-tokens and re-run.\n")
     print(f"  data -> {STAGE_F_DIR / (stem + '.parquet')}")
     return metrics
 
@@ -492,10 +528,11 @@ def reanalyze(stem: str) -> dict:
         raise FileNotFoundError(f"{path} missing — run the GPU pass first.")
     df = pd.read_parquet(path)
     mpath = STAGE_F_DIR / f"{stem}_metrics.json"
-    model_name = load_config(mpath).get("model", "unknown") if mpath.exists() else "unknown"
+    prior = load_config(mpath) if mpath.exists() else {}
+    model_name = prior.get("model", "unknown")
     if "generated_label" in df.columns:
-        return _analyze_generate(df, model_name, stem)
-    return _analyze(df, model_name, stem, {})
+        return _analyze_generate(df, model_name, stem, prior=prior)
+    return _analyze(df, model_name, stem, {}, prior=prior)
 
 
 def main() -> None:
@@ -511,6 +548,9 @@ def main() -> None:
                          "(e.g. /content/emotic) when the baked-in absolute paths do not resolve")
     ap.add_argument("--allow-missing", action="store_true",
                     help="score a partial image set anyway (NOT comparable to published numbers)")
+    ap.add_argument("--max-new-tokens", type=int, default=32,
+                    help="generation budget for --generate; must clear the model's preamble "
+                         "as well as the answer (see UNPARSED_CEILING)")
     ap.add_argument("--reanalyze", metavar="STEM",
                     help="recompute from results/stage_f/<STEM>.parquet on CPU")
     args = ap.parse_args()
@@ -524,8 +564,8 @@ def main() -> None:
         run_sweep(args.config, args.model, args.axis, args.limit, args.allow_missing,
                   args.images_root)
     elif args.generate:
-        run_generate(args.config, args.model, args.limit, allow_missing=args.allow_missing,
-                     images_root=args.images_root)
+        run_generate(args.config, args.model, args.limit, max_new_tokens=args.max_new_tokens,
+                     allow_missing=args.allow_missing, images_root=args.images_root)
     else:
         ap.error("pick one of --person, --axis, --generate, --reanalyze")
 
