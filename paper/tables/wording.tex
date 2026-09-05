@@ -1,0 +1,24 @@
+\begin{table}[htbp]
+  \caption{Wording robustness (\qwen{}, matched pairs, 121 images, 9{,}000 trials per sweep). The six one-word valence swaps re-rendered in three further context frames and asked with three further questions, one axis varied at a time. \emph{Drop} is the shift a negative sentence produces on positive images; \emph{rise} is the shift a positive sentence produces on negative images; the mirror contrast is $|$drop$|-|$rise$|$. Drop is nearly constant across all seven wordings while rise varies threefold, so the mirror contrast keeps its sign throughout and its magnitude nowhere. The final column is the paired bootstrap change against the original wording, resampling the photographs both arms share.}
+  \label{tab:wording}
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lrrrcc}
+    \toprule
+    Wording & Drop & Rise & Mirror & Crossed 95\% CI & Change vs.\ original \\
+    \midrule
+    Original (both sweeps) & $-1.478$ & $+0.982$ & $+0.496$ & $[+0.11,+0.83]$ & --- \\
+    \addlinespace[2pt]
+    \multicolumn{6}{l}{\emph{Context frame varied, question fixed}} \\
+    \quad Caption & $-1.492$ & $+0.461$ & $+1.031$ & $[+0.68,+1.32]$ & $+0.534\ [+0.36,+0.71]$ \\
+    \quad Accompanying report & $-1.407$ & $+1.292$ & $+0.115$ & $[-0.23,+0.47]$ & $-0.382\ [-0.56,-0.21]$ \\
+    \quad Sender's message & $-1.492$ & $+0.671$ & $+0.821$ & $[+0.44,+1.15]$ & $+0.324\ [+0.12,+0.56]$ \\
+    \addlinespace[2pt]
+    \multicolumn{6}{l}{\emph{Question varied, context frame fixed}} \\
+    \quad ``best describes'' & $-1.448$ & $+1.412$ & $+0.036$ & $[-0.35,+0.42]$ & $-0.460\ [-0.75,-0.17]$ \\
+    \quad ``experiencing'' & $-1.340$ & $+0.580$ & $+0.760$ & $[+0.49,+1.00]$ & $+0.264\ [+0.02,+0.61]$ \\
+    \quad ``in one word'' & $-1.444$ & $+1.205$ & $+0.240$ & $[-0.18,+0.65]$ & $-0.257\ [-0.52,+0.00]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
