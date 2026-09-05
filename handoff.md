@@ -1,8 +1,19 @@
-# Handoff — VLM4RWD ready to upload; all five controls run, four usable; numbers audited
+# Handoff — VLM4RWD **SUBMITTED 2026-09-05**; both papers now under review
 
-_Updated 2026-09-05. Branch **`main`**, both builds at cap, tests **201 passed**.
-**Deadline 2026-09-05 ~21:00 PT** (Sep 6 03:59 UTC). A round-21 critique pass and a full numeric
-claim audit ran after the controls landed; both are recorded below._
+_Updated 2026-09-05. Branch **`main`**, both builds at cap, tests **201 passed**._
+
+## Submission status — record this, do not re-derive it
+
+- **VLM4RWD: SUBMITTED 2026-09-05**, before the OpenReview deadline of 8:59 PM PT that day
+  (confirmed in the portal, = Sep 6 03:59 UTC). Uploaded `overleaf/vlm4rwd.zip` as built at
+  commit `1c919a9`. Non-archival, double-blind, 8 main-text pages.
+- **Interp4Discovery: SUBMITTED 2026-09-02.** Under review.
+- Both are now under review; **do not edit either build's claims without a reason that survives
+  the fact that the PDFs are already lodged.** The repo source may legitimately drift from the
+  submitted PDFs for *corrections* (it already has, twice) but the PDFs themselves are fixed.
+
+_A round-21 critique pass, a full numeric claim audit, and two external review passes ran on
+2026-09-05 before submission; all are recorded below._
 
 ## Goal
 
@@ -139,7 +150,8 @@ public, because a reader can then check them.
 
 ## Next Steps
 
-1. **Upload `overleaf/vlm4rwd.zip` before 2026-09-05 ~21:00 PT.** Mandatory; the paper is ready.
+1. ~~Upload `overleaf/vlm4rwd.zip`.~~ **Done 2026-09-05.** Nothing further is required for either
+   submission; everything below is camera-ready or follow-on work.
    The audit found and fixed one real sourcing error (Appendix E compared a raw-HF probe against a
    superseded bridge-era random null: 0.128/0.300/0.362 -> 0.133/0.292/0.384, conclusion unchanged)
    and corrected "four to five times" to "more than four times", the per-pair ratios being 4.33-5.45.
