@@ -1,8 +1,8 @@
-# Handoff — VLM4RWD submittable at `ec743be`; all five controls run, four usable
+# Handoff — VLM4RWD ready to upload; all five controls run, four usable; numbers audited
 
-_Written 2026-09-04 evening. Branch **`main`**, tip `ec743be`, **3 commits ahead of origin
-(unpushed)**. Both builds at cap. Tests **201 passed** (was 197). **Deadline 2026-09-05 ~21:00 PT**
-(Sep 6 03:59 UTC)._
+_Updated 2026-09-05. Branch **`main`**, both builds at cap, tests **201 passed**.
+**Deadline 2026-09-05 ~21:00 PT** (Sep 6 03:59 UTC). A round-21 critique pass and a full numeric
+claim audit ran after the controls landed; both are recorded below._
 
 ## Goal
 
@@ -17,8 +17,11 @@ reviewer controls that ran on Colab, write the usable ones into the paper, and f
   Flattened, verified identical to the toggled build, no `\ifshort` leak, carries the new table.
   VLM4RWD 8pp (References p9), Interp4Discovery 5pp (p6). Zero rendered `TODO`, zero main-text em
   dashes, no undefined / multiply-defined / overfull warnings.
-- **The Interp4Discovery build is untouched**, verified by extracted-text hash at every step:
-  `943f47456780bf3e`, unchanged from session start. All new prose is behind `\ifshort\else`.
+- **The Interp4Discovery build is deliberately no longer byte-identical.** It held at
+  `943f47456780bf3e` through every *addition* (all new prose is behind `\ifshort\else`), then moved
+  when two shared-appendix **corrections** landed: the random-direction null and the "four to five
+  times" phrasing. Its submitted PDF is unaffected. The hash guards against accidental drift; it is
+  not a reason to keep a known-wrong number, which was the explicit trade.
 - **Four of the five controls are in the paper. The fifth is void and is not cited anywhere.**
 - 3 commits are **not pushed**.
 
@@ -110,10 +113,38 @@ ran in that one session. Restoring it means writing those values back by hand; t
 timestamps are lost and should not be invented. Not done, because it is metadata and it was the night
 before the deadline.
 
+## Camera-ready debts from the 2026-09-05 audit
+
+Neither is a wrong number and neither was actioned before the deadline. Both matter once the repo is
+public, because a reader can then check them.
+
+1. **The corrected override gap's intervals have no code path.** Six published intervals --
+   `tab:minimal`'s two corrected crossed and `tab:models`' four -- cannot be regenerated from the
+   repo. `shared/reporting.py::corrected_override_gap` returns only a photo-clustered CI; nothing in
+   `src/` computes a *crossed* interval for the *corrected* gap, and no results file stores one. A
+   reconstruction from `analyze_stage_f_unbounded::_crossed_bootstrap` reproduces the matched
+   interval ([-2.6,+45.5] vs the published [-2.6,+45.4]) but lands just outside the published varied
+   one across 12 seeds ([-12.4,-8.7] x [+48.1,+50.7] vs [-8.6,+48.0]). Point estimates match exactly
+   (+21.71%, +23.08%, test-covered) and every qualitative claim is unaffected. **Write the function,
+   persist the output, pin it in a test.**
+2. **The caption controls are bridge-era.** All six semipartials in `app:foundations`
+   (+0.310/+0.256/+0.201, -0.279/-0.198/-0.153) come from July runs tapping `hook_attn_out`; there is
+   no `caption_metrics_hf.json`. Section 3 says image-conditioned results use reference HuggingFace
+   implementations and does not flag these as an exception. By the project's own principle
+   (correlational measures survive the bridge bug -- Stage C reproduced +0.507 -> +0.510) they should
+   be stable, but that is an argument, not a measurement. **Re-run on raw HF, or disclose.**
+   Deliberately left undisclosed for submission: reviewers have no repo, and raising a flag nobody
+   can currently see was judged the worse trade hours before a deadline. That calculus inverts at
+   camera-ready.
+
 ## Next Steps
 
 1. **Upload `overleaf/vlm4rwd.zip` before 2026-09-05 ~21:00 PT.** Mandatory; the paper is ready.
-2. **Decide on pushing the 3 commits.** Nothing is pushed.
+   The audit found and fixed one real sourcing error (Appendix E compared a raw-HF probe against a
+   superseded bridge-era random null: 0.128/0.300/0.362 -> 0.133/0.292/0.384, conclusion unchanged)
+   and corrected "four to five times" to "more than four times", the per-pair ratios being 4.33-5.45.
+   Everything else in the paper verified exactly against the parquets, including the whole headline
+   chain: mirror +0.4964, photo [+0.3145,+0.6725], crossed [+0.1139,+0.8253], within-item +1.1480.
 3. **Restore the four clobbered provenance blocks** using the values above, or accept the loss and
    note it — a decision, not a task.
 4. **Re-run `--generate` if it is ever wanted**, now that the budget is 32:
