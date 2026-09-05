@@ -229,3 +229,58 @@ def test_paired_delta_absent_without_a_none_baseline():
     df = pd.read_parquet(MATCHED_PQ)
     doubled = pd.concat([df.assign(variant="a"), df.assign(variant="b")], ignore_index=True)
     assert "paired_delta" not in _analyze(doubled, "test", "controls_pytest", {})
+
+
+# --------------------------------------------------------------------------- run provenance
+def test_reanalysis_keeps_the_gpu_run_provenance():
+    """A CPU re-analysis must not claim the numbers were produced in its own environment.
+
+    `--reanalyze` recomputes from a saved parquet, so `run`/`git`/`versions` still describe the
+    machine that produced it. Restamping them is worse than losing them: it asserts a library set
+    the numbers never ran under, which is what per-run version capture exists to prevent.
+    """
+    from src.experiments.stage_f_controls import _keep_run_provenance
+
+    prior = {"run": "20260904T235623Z", "git": "1667b43",
+             "versions": {"transformers": "4.57.6", "torch": "2.11.0+cu128"}}
+    fresh = {"run": "20260905T002515Z", "git": "dff686e", "model": "qwen",
+             "versions": {"transformers": "5.13.0", "torch": "2.6.0"}}
+
+    merged = _keep_run_provenance(fresh, prior)
+    assert merged["run"] == prior["run"]
+    assert merged["git"] == prior["git"]
+    assert merged["versions"] == prior["versions"]
+    assert merged["reanalyzed"]["versions"] == fresh["versions"]
+    assert merged["model"] == "qwen", "non-provenance fields must survive untouched"
+
+
+def test_a_first_run_stamps_its_own_provenance():
+    from src.experiments.stage_f_controls import _keep_run_provenance
+
+    fresh = {"run": "r", "git": "g", "versions": {"torch": "2.6.0"}}
+    assert _keep_run_provenance(fresh, None) == fresh
+    assert _keep_run_provenance(fresh, {}) == fresh
+
+
+# --------------------------------------------------------------------------- generation budget
+def test_generation_budget_clears_an_instruct_preamble():
+    """8 tokens truncated every generation before the emotion word and read as a null result.
+
+    Qwen3-VL opens with e.g. "Based on the visual evidence in the photograph" — seven tokens of
+    preamble before any answer — so the budget has to be comfortably larger than that.
+    """
+    import inspect
+
+    from src.experiments.stage_f_controls import run_generate
+
+    default = inspect.signature(run_generate).parameters["max_new_tokens"].default
+    assert default >= 24, f"{default} tokens will not clear an instruct model's preamble"
+
+
+def test_unparsed_ceiling_flags_an_uninterpretable_generation_run():
+    """A run where nothing parsed must announce itself rather than print plausible flip rates."""
+    from src.experiments.stage_f_controls import UNPARSED_CEILING
+
+    assert 0 < UNPARSED_CEILING < 1
+    observed = 0.996  # the truncated 8-token run
+    assert observed > UNPARSED_CEILING
