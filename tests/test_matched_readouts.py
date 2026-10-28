@@ -144,3 +144,19 @@ def test_mid_valence_pool_is_one_row_per_photo_and_deterministic():
     assert a["valence"].between(4, 7).all()
     assert list(a["image_path"]) == list(select_mid_valence_pool(df, 8)["image_path"])
     assert set(a["image_group"]) == {"mid"}
+
+
+EMOTIC_PQ = Path("data/processed/emotic_test.parquet")
+
+
+@pytest.mark.skipif(not (EMOTIC_PQ.exists() and MATCHED_PQ.exists()), reason="data not on disk")
+def test_pinned_photo_index_is_exactly_the_published_matched_set():
+    """The neutral-bank run must score the photos that were published, not a re-selection."""
+    from src.experiments.stage_f_controls import select_published_photos
+    sel = select_published_photos(pd.read_parquet(EMOTIC_PQ))
+    published = pd.read_parquet(MATCHED_PQ)
+    published = published[published["condition"] == "none"]
+    assert set(sel["image_path"].map(photo_key)) == set(published["image_path"].map(photo_key))
+    for group in ("positive", "negative"):
+        assert (sel["image_group"] == group).sum() == \
+            published[published["image_group"] == group]["image_path"].nunique()

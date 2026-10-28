@@ -37,6 +37,7 @@ GPU pass runs on Colab in the `requirements-qwen.txt` env, with EMOTIC staged at
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -590,18 +591,40 @@ def run_equal_room(config_path: str, model_name: str, pool_size: int, max_photos
     return metrics
 
 
+MATCHED_PHOTOS = Path("config/stage_f_matched_photos.csv")
+
+
+def select_published_photos(emotic: pd.DataFrame, index_path: Path = MATCHED_PHOTOS) -> pd.DataFrame:
+    """The exact photographs behind the published matched run, one row per (photo, group).
+
+    `select_extreme_rows` cannot be trusted to reproduce them: it takes the n/2 extremes after an
+    unstable sort, EMOTIC has dozens of ties at valence 2 and 9, and on a different pandas/numpy
+    build it returns a different set (113 of 121 photos overlap on the analysis machine). The index
+    file pins the set that was actually run; the one photo in both groups appears once per group,
+    as in the published parquet.
+    """
+    from .analyze_matched_readouts import photo_key
+
+    index = pd.read_csv(index_path)
+    rows = emotic.assign(photo=emotic["image_path"].map(photo_key)).drop_duplicates("photo")
+    sel = index.merge(rows.drop(columns=["valence"]), on="photo", how="left", validate="m:1")
+    if sel["image_path"].isna().any():
+        raise ValueError(f"{int(sel['image_path'].isna().sum())} indexed photos are not in EMOTIC test")
+    return sel.rename(columns={"image_valence": "valence"}).reset_index(drop=True)
+
+
 def run_neutral_bank(config_path: str, model_name: str, limit: int | None,
                      allow_missing: bool = False, images_root: str | None = None) -> dict:
-    """Score neutral bank B on the published 150 annotations, plus the published neutral pair.
+    """Score neutral bank B on the published matched photographs, plus the published neutral pair.
 
     The published pair is re-scored in the same session as a reproduction check: the analysis merges
     bank B into the published matched parquet, which is only valid if this session's z0/z1 match the
-    published ones.
+    published ones. `limit` is ignored; the photo set is pinned by MATCHED_PHOTOS.
     """
-    cfg = load_config(config_path)
+    load_config(config_path)
     ensure_dirs()
-    sel = resolve_image_paths(select_extreme_images(limit or int(cfg.get("n_images", 150))),
-                              images_root)
+    emotic = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet")
+    sel = resolve_image_paths(select_published_photos(emotic), images_root)
     model, processor = load_qwen(model_name)
     tok_ids = first_content_token_ids(processor)
     conditions = ([("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]

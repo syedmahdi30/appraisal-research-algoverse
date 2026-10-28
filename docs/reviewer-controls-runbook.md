@@ -8,7 +8,7 @@ Three Qwen3-VL-8B runs, all on the same raw-HuggingFace path as the controls bel
 | # | Command | Passes | Rough A100 time | Answers |
 |---|---|---|---|---|
 | A | `python -m src.experiments.stage_f_controls --equal-room --images-root <root>` | ~1,800 screen + ~2,760 measure | ~35 min | n5aD #2: equal room for both sentences |
-| B | `python -m src.experiments.stage_f_controls --neutral-bank --images-root <root>` | 1,800 | ~15 min | yuT8 major 1: resamplable neutral bank |
+| B | `python -m src.experiments.stage_f_controls --neutral-bank --images-root <root>` | 1,464 | ~12 min | yuT8 major 1: resamplable neutral bank |
 | C | `python -m src.experiments.stage_f_controls --generate --images-root <root>` | 2,250 generations | ~30 min | both reviewers: what did generation show? |
 
 Run them in this order; each is usable without the ones after it.
@@ -22,10 +22,10 @@ re-run with `--pool 1500`**: the pool is a prefix of one fixed permutation, so a
 the smaller one and nothing already chosen moves. Coverage below 95% of the pool aborts, as for every
 control; mscoco/ade20k are needed (most of the mid-valence pool is mscoco).
 
-**B — neutral bank.** Scores the ten bank-B sentences on the published 150 annotations, and re-scores
+**B — neutral bank.** Scores the ten bank-B sentences on the 121 published matched photographs, pinned by `config/stage_f_matched_photos.csv` because `select_extreme_rows` breaks valence ties with an unstable sort and does not reproduce the published set on every machine. It re-scores
 the published z0/z1 in the same session. The CPU analysis merges bank B into the published matched
 parquet **only if** this session's z0/z1 match the published values within 0.01 — otherwise it refuses,
-and that refusal is the result to report back. **Do not pass `--limit`** (same reason as below).
+and that refusal is the result to report back.
 
 **C — generation.** Unchanged command; the default budget is now 32 tokens. If it prints the
 `UNPARSED_CEILING` warning, re-run once with `--max-new-tokens 64` before giving up.
