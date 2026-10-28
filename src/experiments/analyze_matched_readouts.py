@@ -1,0 +1,414 @@
+"""Camera-ready re-analysis: every readout x every contrast, on one image set, with crossed intervals.
+
+Both VLM4RWD reviewers and the meta-review asked for the same thing: the matched-set result read on
+every scale the paper defines, side by side, so a reader can see which conclusions depend on the
+bounded score. This module produces that grid from the stored parquets (`lp_{label}` log-probs, every
+row), on CPU, with no forward passes.
+
+Readouts (per row):
+  valence    P(pos) - P(neg), bounded in [-1, 1]                        (the published primary)
+  sum_lo     logsumexp(lp_pos) - logsumexp(lp_neg) = log P(pos)/P(neg)  (unbounded, summed category)
+  best_lo    max lp_pos - max lp_neg                                    (unbounded, best label)
+  headroom   valence shift / room left toward the bound it moves to     (mirror arms only)
+  category   argmax label's valence category, neutral-corrected        (mirror only; the paper's
+                                                                         corrected override gap)
+
+Contrasts (each effect is measured per photograph against that photograph's mean neutral response):
+  mirror      |drop| - |rise|: negative sentence on positive images vs positive sentence on negative
+              images, both CONFLICTING. Cell means first, then absolute values (published estimator).
+  within_pos  mean(|d_neg| - |d_pos|) on positive images. The negative member conflicts, the positive
+              member agrees, so this contrast confounds valence with conflict-vs-agreement.
+  within_neg  the same on negative images, where the roles reverse. If within_pos reflects valence,
+              within_neg should also be positive; if it reflects conflict, within_neg is negative.
+  equal_room  mean(|d_neg| - |d_pos|) on photographs whose neutral response is near zero, where both
+              members have the same room to move. The one contrast free of both confounds.
+
+Intervals are percentile bootstraps. `photo` resamples photographs only (sentences fixed). `crossed`
+also resamples sentences: matched pairs (or bank sentences) independently per image group, which is
+the published scheme for the mirror contrast. `+neutral` additionally resamples the neutral
+sentences that define every baseline, the reviewer's request; with the published two-sentence bank
+that draw is coarse (three distinct baselines), which is why bank B exists.
+
+    python -m src.experiments.analyze_matched_readouts                       # published matched set
+    python -m src.experiments.analyze_matched_readouts --equal-room <pq>     # equal-room run
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy.special import logsumexp
+
+from ..data.labels import EMOTION_LABELS
+from ..paths import STAGE_F_DIR, ensure_dirs
+from .common import git_hash, run_stamp, save_json
+from .shared.reporting import NEGATIVE_LABELS, POSITIVE_LABELS
+
+LP = [f"lp_{w}" for w in EMOTION_LABELS]
+_POS_IDX = [EMOTION_LABELS.index(w) for w in POSITIVE_LABELS]
+_NEG_IDX = [EMOTION_LABELS.index(w) for w in NEGATIVE_LABELS]
+GRADED = ("valence", "sum_lo", "best_lo")
+PUBLISHED_NEUTRAL = ("z0", "z1")
+ROOM_FLOOR = 1e-3
+
+
+def add_readouts(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach the unbounded margins and the argmax-category indicators to every row."""
+    d = df.copy()
+    lp = d[LP].to_numpy(dtype=float)
+    d["sum_lo"] = logsumexp(lp[:, _POS_IDX], axis=1) - logsumexp(lp[:, _NEG_IDX], axis=1)
+    d["best_lo"] = lp[:, _POS_IDX].max(axis=1) - lp[:, _NEG_IDX].max(axis=1)
+    top = lp.argmax(axis=1)
+    d["neg_top"] = np.isin(top, _NEG_IDX).astype(float)
+    d["pos_top"] = np.isin(top, _POS_IDX).astype(float)
+    return d
+
+
+# --------------------------------------------------------------------------- per-group arrays
+def group_arrays(d: pd.DataFrame, group: str, value: str, neutral_ids) -> dict | None:
+    """Photograph-by-sentence arrays for one image group.
+
+    Rows are photographs, not person-annotations: EMOTIC can annotate several people in one photo, the
+    model sees the whole photo, and those rows are byte-identical forward passes, so they are averaged
+    rather than counted twice (the convention `analyze_stage_f_unbounded` already uses).
+    Returns `neg` and `pos` (photos x context ids; NaN where a bank has no such member), `neutral`
+    (photos x neutral ids) and the photo index.
+    """
+    sub = d[d["image_group"] == group]
+    neutral = sub[(sub["condition"] == "neutral") & sub["context_id"].isin(neutral_ids)]
+    if neutral.empty:
+        return None
+    z = neutral.pivot_table(index="image_path", columns="context_id", values=value, aggfunc="mean")
+    z = z[[c for c in neutral_ids if c in z.columns]].dropna()
+    neg = sub[sub["condition"] == "negative"].pivot_table(
+        index="image_path", columns="context_id", values=value, aggfunc="mean")
+    pos = sub[sub["condition"] == "positive"].pivot_table(
+        index="image_path", columns="context_id", values=value, aggfunc="mean")
+    photos = z.index.intersection(neg.index).intersection(pos.index)
+    if not len(photos):
+        return None
+    cols = sorted(set(neg.columns) | set(pos.columns))
+    return {"photos": list(photos),
+            "neg": neg.reindex(index=photos, columns=cols).to_numpy(dtype=float),
+            "pos": pos.reindex(index=photos, columns=cols).to_numpy(dtype=float),
+            "neutral": z.loc[photos].to_numpy(dtype=float),
+            "context_ids": cols, "neutral_ids": list(z.columns)}
+
+
+def _effects(g: dict, rows, cols, ncols, headroom: bool = False):
+    """Per-cell shifts of the negative and positive members against each photo's neutral mean."""
+    base = g["neutral"][np.ix_(rows, ncols)].mean(axis=1, keepdims=True)
+    neg = g["neg"][np.ix_(rows, cols)] - base
+    pos = g["pos"][np.ix_(rows, cols)] - base
+    if headroom:
+        neg = neg / np.clip(base + 1.0, ROOM_FLOOR, None)
+        pos = pos / np.clip(1.0 - base, ROOM_FLOOR, None)
+    return neg, pos
+
+
+def _stat(name: str, P, N, headroom: bool = False) -> float:
+    """Evaluate contrast `name` on resampled positive-group (P) and negative-group (N) selections."""
+    if name == "mirror":
+        p_neg, _ = _effects(*P, headroom=headroom)
+        _, n_pos = _effects(*N, headroom=headroom)
+        return abs(np.nanmean(p_neg)) - abs(np.nanmean(n_pos))
+    g = P if name in ("within_pos", "equal_room") else N
+    neg, pos = _effects(*g)
+    return float(np.nanmean(np.abs(neg) - np.abs(pos)))
+
+
+def _draw(rng, g, resample_cols: bool, resample_neutral: bool, neutral_draw=None):
+    n_rows, n_cols = g["neg"].shape
+    rows = rng.integers(0, n_rows, n_rows)
+    cols = rng.integers(0, n_cols, n_cols) if resample_cols else np.arange(n_cols)
+    n_neu = g["neutral"].shape[1]
+    if neutral_draw is not None:
+        ncols = neutral_draw
+    else:
+        ncols = rng.integers(0, n_neu, n_neu) if resample_neutral else np.arange(n_neu)
+    return (g, rows, cols, ncols)
+
+
+def contrast(name: str, P: dict | None, N: dict | None, n_boot: int = 2000, seed: int = 0,
+             headroom: bool = False) -> dict:
+    """Point estimate plus photo, crossed and crossed+neutral intervals for one contrast."""
+    full = lambda g: (g, np.arange(g["neg"].shape[0]), np.arange(g["neg"].shape[1]),
+                      np.arange(g["neutral"].shape[1])) if g is not None else None
+    needs_n = name in ("mirror", "within_neg")
+    needs_p = name in ("mirror", "within_pos", "equal_room")
+    if (needs_p and P is None) or (needs_n and N is None):
+        return {}
+    point = _stat(name, full(P), full(N), headroom)
+    out = {"estimate": float(point)}
+    for label, cols, neutral in (("ci95_photo", False, False), ("ci95_crossed", True, False),
+                                 ("ci95_crossed_neutral", True, True)):
+        rng = np.random.default_rng(seed)
+        boot = np.empty(n_boot)
+        ref = P if P is not None else N
+        for k in range(n_boot):
+            # Neutral sentences are one shared bank, so a replicate draws ONE neutral sample and
+            # applies it to both image groups.
+            n_neu = ref["neutral"].shape[1]
+            draw = rng.integers(0, n_neu, n_neu) if neutral else None
+            Pd = _draw(rng, P, cols, neutral, draw) if P is not None else None
+            Nd = _draw(rng, N, cols, neutral, draw) if N is not None else None
+            boot[k] = _stat(name, Pd, Nd, headroom)
+        lo, hi = (float(x) for x in np.nanpercentile(boot, [2.5, 97.5]))
+        out[label] = [lo, hi]
+    lo, hi = out["ci95_crossed_neutral"]
+    out["crossed_neutral_excludes_zero"] = bool(lo > 0 or hi < 0)
+    return out
+
+
+def arms(P: dict | None, N: dict | None, headroom: bool = False) -> dict:
+    """The four shift means behind every contrast, so a reader can see what each subtracts."""
+    out = {}
+    for tag, g in (("positive_images", P), ("negative_images", N)):
+        if g is None:
+            continue
+        neg, pos = _effects(g, np.arange(g["neg"].shape[0]), np.arange(g["neg"].shape[1]),
+                            np.arange(g["neutral"].shape[1]), headroom=headroom)
+        out[tag] = {"neg_sentence": float(np.nanmean(neg)), "pos_sentence": float(np.nanmean(pos)),
+                    "n_photos": int(g["neg"].shape[0])}
+    return out
+
+
+def category_gap(d: pd.DataFrame, neutral_ids, n_boot: int = 2000, seed: int = 0) -> dict:
+    """Neutral-corrected override gap with all three interval types.
+
+    Corrected negative-label rate on positive images under negative sentences minus corrected
+    positive-label rate on negative images under positive sentences. Matches
+    `shared.reporting.corrected_override_gap` on the point estimate, and is the code path for the
+    crossed intervals that the paper's corrected-gap cells previously lacked.
+    """
+    P = group_arrays(d, "positive", "neg_top", neutral_ids)
+    N = group_arrays(d, "negative", "pos_top", neutral_ids)
+    if P is None or N is None:
+        return {}
+
+    def gap(Pd, Nd):
+        p_neg, _ = _effects(*Pd)
+        _, n_pos = _effects(*Nd)
+        return float(np.nanmean(p_neg) - np.nanmean(n_pos))
+
+    full = lambda g: (g, np.arange(g["neg"].shape[0]), np.arange(g["neg"].shape[1]),
+                      np.arange(g["neutral"].shape[1]))
+    out = {"estimate": gap(full(P), full(N))}
+    for label, cols, neutral in (("ci95_photo", False, False), ("ci95_crossed", True, False),
+                                 ("ci95_crossed_neutral", True, True)):
+        rng = np.random.default_rng(seed)
+        boot = np.empty(n_boot)
+        for k in range(n_boot):
+            n_neu = P["neutral"].shape[1]
+            draw = rng.integers(0, n_neu, n_neu) if neutral else None
+            boot[k] = gap(_draw(rng, P, cols, neutral, draw), _draw(rng, N, cols, neutral, draw))
+        out[label] = [float(x) for x in np.percentile(boot, [2.5, 97.5])]
+    return out
+
+
+# --------------------------------------------------------------------------- drivers
+def matched_grid(df: pd.DataFrame, neutral_ids=PUBLISHED_NEUTRAL, n_boot: int = 2000,
+                 seed: int = 0) -> dict:
+    """The reviewers' table: every graded readout x mirror / within_pos / within_neg, plus the
+    head-room-corrected mirror and the corrected categorical gap, all against `neutral_ids`."""
+    d = add_readouts(df[df["condition"] != "none"])
+    grid = {}
+    for value in GRADED:
+        P = group_arrays(d, "positive", value, neutral_ids)
+        N = group_arrays(d, "negative", value, neutral_ids)
+        grid[value] = {"arms": arms(P, N),
+                       **{name: contrast(name, P, N, n_boot, seed)
+                          for name in ("mirror", "within_pos", "within_neg")}}
+    P = group_arrays(d, "positive", "valence", neutral_ids)
+    N = group_arrays(d, "negative", "valence", neutral_ids)
+    grid["headroom"] = {"arms": arms(P, N, headroom=True),
+                        "mirror": contrast("mirror", P, N, n_boot, seed, headroom=True)}
+    grid["category"] = {"mirror": category_gap(d, neutral_ids, n_boot, seed)}
+    return grid
+
+
+def baseline_profile(df: pd.DataFrame, neutral_ids=PUBLISHED_NEUTRAL) -> dict:
+    """Distribution of each group's neutral-context valence: where the bounds sit for each arm."""
+    d = df[(df["condition"] == "neutral") & df["context_id"].isin(neutral_ids)]
+    out = {}
+    for group, sub in d.groupby("image_group"):
+        z = sub.groupby("image_path")["valence"].mean()
+        out[str(group)] = {"n_photos": int(len(z)),
+                           "quantiles": {str(q): float(z.quantile(q))
+                                         for q in (0.1, 0.25, 0.5, 0.75, 0.9)},
+                           "n_within_0.3": int((z.abs() <= 0.3).sum())}
+    return out
+
+
+def neutral_sentence_profile(df: pd.DataFrame, neutral_ids) -> dict:
+    """Each neutral sentence's mean shift from the no-context response, per image group.
+
+    A neutral sentence should leave the image-conditioned judgment where no sentence leaves it; this
+    is the image-conditioned definition of neutrality the reviewer asked for. (Text-only scores do
+    not work for Qwen: with no image it reads even a neutral sentence as sadness.)
+    """
+    out = {}
+    for group, sub in df.groupby("image_group"):
+        none = sub[sub["condition"] == "none"].groupby("image_path")["valence"].mean()
+        rows = {}
+        for cid in neutral_ids:
+            z = sub[sub["context_id"] == cid].groupby("image_path")["valence"].mean()
+            shared = z.index.intersection(none.index)
+            if len(shared):
+                rows[cid] = float((z[shared] - none[shared]).mean())
+        out[str(group)] = rows
+    return out
+
+
+def equal_room(df: pd.DataFrame, neutral_ids, threshold: float = 0.3, n_boot: int = 2000,
+               seed: int = 0) -> dict:
+    """|d_neg| - |d_pos| on photographs whose neutral response is within `threshold` of zero.
+
+    Every photo in `df` is treated as one group regardless of its EMOTIC label: the selection is on
+    the model's reading, which is the quantity that sets the room. `threshold` is applied to the
+    mean over `neutral_ids`, so with bank B the selection and the baseline share sentences; the
+    equal-room RUN avoids that by screening on the published bank first (see `screen_photos`).
+    """
+    d = add_readouts(df[df["condition"] != "none"]).assign(image_group="all")
+    base = d[(d["condition"] == "neutral") & d["context_id"].isin(neutral_ids)]
+    keep = base.groupby("image_path")["valence"].mean()
+    keep = keep[keep.abs() <= threshold].index
+    d = d[d["image_path"].isin(keep)]
+    out = {"threshold": threshold, "n_photos": int(len(keep)), "neutral_ids": list(neutral_ids)}
+    for value in GRADED:
+        P = group_arrays(d, "all", value, neutral_ids)
+        out[value] = {"arms": arms(P, None).get("positive_images", {}),
+                      "equal_room": contrast("equal_room", P, None, n_boot, seed)}
+    return out
+
+
+def screen_photos(screen: pd.DataFrame, threshold: float, max_photos: int | None,
+                  seed: int = 0) -> list[str]:
+    """Photographs whose mean response over no-context + the published neutral pair is near zero.
+
+    Deterministic: candidates are shuffled with `seed` before truncating to `max_photos`, so the kept
+    set does not favour any EMOTIC sub-corpus or file order.
+    """
+    v = screen.groupby("image_path")["valence"].mean()
+    kept = sorted(v[v.abs() <= threshold].index)
+    rng = np.random.default_rng(seed)
+    kept = [kept[i] for i in rng.permutation(len(kept))]
+    return kept[:max_photos] if max_photos else kept
+
+
+def photo_key(path: str) -> str:
+    """`<corpus>/images/<file>`: the part of an EMOTIC path that survives remounting on Colab."""
+    return "/".join(str(path).split("/")[-3:])
+
+
+REPRODUCTION_TOLERANCE = 0.01
+
+
+def merge_neutral_bank(matched: pd.DataFrame, bank: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Append bank-B rows to the published matched parquet, after checking the session reproduces it.
+
+    The bank run re-scores the published z0/z1 alongside bank B. Merging is only valid if those
+    match the published rows (same model, same images, same numerics), so the largest per-photo
+    difference is returned and the merge refuses beyond REPRODUCTION_TOLERANCE.
+    """
+    key = matched.assign(_k=matched["image_path"].map(photo_key))
+    by_key = key.drop_duplicates("_k").set_index("_k")["image_path"]
+    b = bank.assign(_k=bank["image_path"].map(photo_key))
+    missing = sorted(set(b["_k"]) - set(by_key.index))
+    if missing:
+        raise ValueError(f"{len(missing)} bank photos are not in the matched parquet, e.g. {missing[:3]}")
+    b["image_path"] = b["_k"].map(by_key)
+
+    pub = key[key["context_id"].isin(PUBLISHED_NEUTRAL)].groupby(["_k", "context_id"])["valence"].mean()
+    new = b[b["context_id"].isin(PUBLISHED_NEUTRAL)].groupby(["_k", "context_id"])["valence"].mean()
+    shared = pub.index.intersection(new.index)
+    worst = float((pub[shared] - new[shared]).abs().max()) if len(shared) else float("nan")
+    check = {"n_checked": int(len(shared)), "max_abs_valence_diff": worst}
+    if not len(shared) or worst > REPRODUCTION_TOLERANCE:
+        raise ValueError(f"bank session does not reproduce the published neutral rows: {check}")
+
+    rows = b[b["context_id"].str.startswith("zb")].drop(columns=["_k"])
+    rows = rows[[c for c in matched.columns if c in rows.columns]]
+    return pd.concat([matched, rows], ignore_index=True), check
+
+
+def _fmt_row(name: str, c: dict) -> str:
+    if not c:
+        return f"    {name:11s} n/a"
+    xn = c["ci95_crossed_neutral"]
+    flag = "*" if xn[0] > 0 or xn[1] < 0 else " "
+    p, x, xn = c["ci95_photo"], c["ci95_crossed"], c["ci95_crossed_neutral"]
+    return (f"    {name:11s} {c['estimate']:+9.3f}  photo [{p[0]:+.3f},{p[1]:+.3f}]  "
+            f"crossed [{x[0]:+.3f},{x[1]:+.3f}]  +neutral [{xn[0]:+.3f},{xn[1]:+.3f}] {flag}")
+
+
+def run(matched_pq: Path, equal_room_pq: Path | None, n_boot: int, seed: int,
+        bank_pq: Path | None = None) -> dict:
+    ensure_dirs()
+    out = {"run": run_stamp(), "git": git_hash(), "n_boot": n_boot, "seed": seed,
+           "matched_parquet": str(matched_pq), "matched": {}}
+    df = pd.read_parquet(matched_pq)
+    if bank_pq is not None and bank_pq.exists():
+        df, out["neutral_bank_reproduction"] = merge_neutral_bank(df, pd.read_parquet(bank_pq))
+        print(f"  merged neutral bank B: {out['neutral_bank_reproduction']}")
+    out["baseline_profile"] = baseline_profile(df)
+    banks = {"published": PUBLISHED_NEUTRAL, "z0_only": ("z0",), "z1_only": ("z1",)}
+    bank_b = tuple(sorted(c for c in df["context_id"].unique()
+                          if isinstance(c, str) and c.startswith("zb")))
+    if bank_b:
+        banks["bank_b"] = bank_b
+        banks["published_plus_b"] = PUBLISHED_NEUTRAL + bank_b
+        out["neutral_sentence_profile"] = neutral_sentence_profile(df, PUBLISHED_NEUTRAL + bank_b)
+    for tag, ids in banks.items():
+        grid = matched_grid(df, ids, n_boot, seed)
+        out["matched"][tag] = grid
+        print(f"\n== matched set, neutral = {tag} {ids}")
+        for value in (*GRADED, "headroom", "category"):
+            print(f"  {value}")
+            for name in ("mirror", "within_pos", "within_neg"):
+                if name in grid[value]:
+                    print(_fmt_row(name, grid[value][name]))
+    out["equal_room_post_hoc"] = equal_room(df, PUBLISHED_NEUTRAL, n_boot=n_boot, seed=seed)
+    print(f"\n== equal room, post hoc on the matched set "
+          f"(n={out['equal_room_post_hoc']['n_photos']} photos, |v|<=0.3)")
+    for value in GRADED:
+        print(f"  {value}")
+        print(_fmt_row("equal_room", out["equal_room_post_hoc"][value]["equal_room"]))
+
+    if equal_room_pq is not None and equal_room_pq.exists():
+        er = pd.read_parquet(equal_room_pq)
+        ids = tuple(sorted(c for c in er["context_id"].unique()
+                           if isinstance(c, str) and c.startswith("zb")))
+        # The run already screened; threshold=inf keeps every measured photo.
+        out["equal_room_run"] = equal_room(er, ids, threshold=np.inf, n_boot=n_boot, seed=seed)
+        out["equal_room_run"]["parquet"] = str(equal_room_pq)
+        out["equal_room_run"]["neutral_sentence_profile"] = neutral_sentence_profile(er, ids)
+        print(f"\n== equal-room RUN (n={out['equal_room_run']['n_photos']} screened photos, "
+              f"baseline = bank B)")
+        for value in GRADED:
+            print(f"  {value}")
+            print(_fmt_row("equal_room", out["equal_room_run"][value]["equal_room"]))
+
+    path = STAGE_F_DIR / "matched_readouts.json"
+    save_json(out, path)
+    print(f"\n  data -> {path}")
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--matched", type=Path,
+                    default=STAGE_F_DIR / "conflict_qwen3-vl-8b-instruct_minimal.parquet")
+    ap.add_argument("--equal-room", type=Path, default=STAGE_F_DIR / "equal_room_qwen.parquet")
+    ap.add_argument("--neutral-bank", type=Path,
+                    default=STAGE_F_DIR / "controls_neutral_bank_qwen.parquet")
+    ap.add_argument("--n-boot", type=int, default=2000)
+    ap.add_argument("--seed", type=int, default=0)
+    a = ap.parse_args()
+    run(a.matched, a.equal_room, a.n_boot, a.seed, a.neutral_bank)
+
+
+if __name__ == "__main__":
+    main()

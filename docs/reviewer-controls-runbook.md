@@ -1,3 +1,48 @@
+# Camera-ready runs — VLM4RWD reviews (added 2026-10-28, camera-ready due 2026-10-31 AoE)
+
+Three Qwen3-VL-8B runs, all on the same raw-HuggingFace path as the controls below. The setup in
+**Before you start** and **Staging the images** applies unchanged: find the root with
+`scripts/locate_emotic.py` and pass it as `--images-root`. Pull `main` first so the session has
+`--equal-room` and `--neutral-bank`.
+
+| # | Command | Passes | Rough A100 time | Answers |
+|---|---|---|---|---|
+| A | `python -m src.experiments.stage_f_controls --equal-room --images-root <root>` | ~1,800 screen + ~2,760 measure | ~35 min | n5aD #2: equal room for both sentences |
+| B | `python -m src.experiments.stage_f_controls --neutral-bank --images-root <root>` | 1,800 | ~15 min | yuT8 major 1: resamplable neutral bank |
+| C | `python -m src.experiments.stage_f_controls --generate --images-root <root>` | 2,250 generations | ~30 min | both reviewers: what did generation show? |
+
+Run them in this order; each is usable without the ones after it.
+
+**A — equal room.** Samples 600 photographs with mid-range EMOTIC valence (4–7, one row per photo,
+seed 0), scores each with no context plus the published neutral pair, and keeps up to 120 whose mean
+model valence is within ±0.3. Those are then scored on the six matched pairs and the ten bank-B
+neutral sentences. Effects are measured against bank B only, so the sentences that selected a photo
+never define its baseline. It prints the kept count after the screen. **If fewer than ~40 photos pass,
+re-run with `--pool 1500`**: the pool is a prefix of one fixed permutation, so a larger pool contains
+the smaller one and nothing already chosen moves. Coverage below 95% of the pool aborts, as for every
+control; mscoco/ade20k are needed (most of the mid-valence pool is mscoco).
+
+**B — neutral bank.** Scores the ten bank-B sentences on the published 150 annotations, and re-scores
+the published z0/z1 in the same session. The CPU analysis merges bank B into the published matched
+parquet **only if** this session's z0/z1 match the published values within 0.01 — otherwise it refuses,
+and that refusal is the result to report back. **Do not pass `--limit`** (same reason as below).
+
+**C — generation.** Unchanged command; the default budget is now 32 tokens. If it prints the
+`UNPARSED_CEILING` warning, re-run once with `--max-new-tokens 64` before giving up.
+
+**Bring back:**
+
+```
+results/stage_f/equal_room_screen_qwen.parquet
+results/stage_f/equal_room_qwen.parquet                + _metrics.json
+results/stage_f/controls_neutral_bank_qwen.parquet     + _metrics.json
+results/stage_f/controls_generate_qwen.parquet         + _metrics.json
+```
+
+Then on CPU: `python -m src.experiments.analyze_matched_readouts` picks up all of them by default.
+
+---
+
 # Reviewer controls — Colab runbook
 
 Five GPU runs answering an external reviewer's three priority objections. Written 2026-09-03, VLM4RWD

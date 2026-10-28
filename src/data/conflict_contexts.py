@@ -192,3 +192,55 @@ def build_frame_conditions(frame_index: int) -> list[tuple[str, str, str | None]
         conds.append(("negative", f"mp{i}", frame_sentence(frame_index, i, "negative")))
     conds += [("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
     return conds
+
+
+# --------------------------------------------------------------------------- camera-ready controls
+# Both VLM4RWD reviewers objected to the neutral baseline: the two published neutral sentences
+# disagree with each other by 0.57 on positive images, and every effect inherits whichever one is
+# used (the matched mirror contrast is +0.756 against z0 alone and +0.237 against z1 alone). A
+# baseline built from two sentences cannot be resampled, so this second bank is ten further
+# non-affective completions of the same frame. They are fixed here, before the GPU run, and the
+# analysis reports against all ten rather than a chosen subset; ids are `zb{i}` so they never mix
+# with the published `z{i}` baseline unless an analysis asks for both.
+NEUTRAL_BANK_B: tuple[str, ...] = (
+    "This photo was taken in the afternoon.",
+    "This photo was taken last spring.",
+    "This photo was taken with a phone camera.",
+    "This photo was taken in a public place.",
+    "This photo was taken from a few meters away.",
+    "This photo was taken on a Tuesday.",
+    "This photo was taken in natural light.",
+    "This photo was taken several years ago.",
+    "This photo was taken in a city.",
+    "This photo was taken during the day.",
+)
+
+# Equal-room design (reviewer n5aD). On the published extremes the neutral-context score sits near a
+# bound (median +0.994 on positive images, -1.000 on negative), so a sentence that pushes toward its
+# own end has almost no room to move and the within-item contrast measures head-room, not pull. On a
+# photograph the model reads as near-neutral, both sentences of a pair have equal room, and
+# |delta_neg| vs |delta_pos| is a direct comparison of text pull. Photographs are SCREENED on the
+# published neutral bank (plus no context) and MEASURED against bank B, so the sentences that select
+# a photograph never define its baseline.
+EQUAL_ROOM_VALENCE_RANGE: tuple[float, float] = (4.0, 7.0)   # EMOTIC human valence, 1-10 scale
+EQUAL_ROOM_SCREEN_THRESHOLD = 0.3                            # |model valence| on [-1, 1]
+
+
+def build_screen_conditions() -> list[tuple[str, str, str | None]]:
+    """No context plus the published neutral pair: the cheap pass that selects equal-room photos."""
+    return [("none", "none", None)] + [("neutral", f"z{i}", c)
+                                        for i, c in enumerate(NEUTRAL_CONTEXTS)]
+
+
+def build_neutral_bank_conditions() -> list[tuple[str, str, str | None]]:
+    """Bank B only, for adding a resamplable neutral baseline to an already-scored image set."""
+    return [("neutral", f"zb{i}", c) for i, c in enumerate(NEUTRAL_BANK_B)]
+
+
+def build_equal_room_conditions() -> list[tuple[str, str, str | None]]:
+    """Matched pairs plus bank B, with no-context kept for the descriptive table."""
+    conds: list[tuple[str, str, str | None]] = [("none", "none", None)]
+    for i, (pos, neg, _swap) in enumerate(MINIMAL_PAIRS):
+        conds.append(("positive", f"mp{i}", pos))
+        conds.append(("negative", f"mp{i}", neg))
+    return conds + build_neutral_bank_conditions()

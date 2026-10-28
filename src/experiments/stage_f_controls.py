@@ -38,16 +38,19 @@ from __future__ import annotations
 
 import argparse
 
+import numpy as np
 import pandas as pd
 import torch
 from PIL import Image, ImageDraw
 from tqdm import tqdm
 
-from ..data.conflict_contexts import (CONTEXT_FRAMES, QUESTION_VARIANTS, TEXT_CODE,
-                                      build_conditions,
-                                      build_frame_conditions)
+from ..data.conflict_contexts import (CONTEXT_FRAMES, EQUAL_ROOM_SCREEN_THRESHOLD,
+                                      EQUAL_ROOM_VALENCE_RANGE, NEUTRAL_CONTEXTS,
+                                      QUESTION_VARIANTS, TEXT_CODE, build_conditions,
+                                      build_equal_room_conditions, build_frame_conditions,
+                                      build_neutral_bank_conditions, build_screen_conditions)
 from ..data.labels import EMOTION_LABELS, verify_label_tokenization
-from ..paths import STAGE_F_DIR, ensure_dirs
+from ..paths import PROCESSED_DIR, STAGE_F_DIR, ensure_dirs
 from .common import git_hash, load_config, run_stamp, save_json
 from .shared.readouts import (QUESTION, closed_vocab_logprobs, first_content_token_ids,
                               model_readout)
@@ -520,6 +523,104 @@ def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str,
     return metrics
 
 
+# --------------------------------------------------------------------------- camera-ready runs
+def select_mid_valence_pool(df: pd.DataFrame, n: int, seed: int = 0) -> pd.DataFrame:
+    """One row per photograph with mid-range EMOTIC valence, shuffled deterministically.
+
+    One row per photo because the model sees the whole photograph, so a second annotated person in
+    the same photo is a byte-identical forward pass. Shuffling with a fixed seed before truncating
+    keeps the pool from favouring a sub-corpus or file order.
+    """
+    lo, hi = EQUAL_ROOM_VALENCE_RANGE
+    pool = df[(df["valence"] >= lo) & (df["valence"] <= hi)].drop_duplicates("image_path")
+    pool = pool.sort_values("image_path").reset_index(drop=True)
+    order = np.random.default_rng(seed).permutation(len(pool))
+    return pool.iloc[order[:n]].assign(image_group="mid").reset_index(drop=True)
+
+
+def run_equal_room(config_path: str, model_name: str, pool_size: int, max_photos: int,
+                   allow_missing: bool = False, images_root: str | None = None) -> dict:
+    """Screen mid-valence photos for a near-neutral model reading, then run the matched pairs on them.
+
+    Two passes. The screen scores no context plus the published neutral pair and keeps photographs
+    whose mean valence is within EQUAL_ROOM_SCREEN_THRESHOLD of zero. The measurement pass scores
+    the six matched pairs and neutral bank B on the kept photographs; effects are taken against
+    bank B only, so the sentences that selected a photograph never define its baseline.
+    """
+    from .analyze_matched_readouts import equal_room, screen_photos
+
+    load_config(config_path)
+    ensure_dirs()
+    emotic = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet")
+    pool = resolve_image_paths(select_mid_valence_pool(emotic, pool_size), images_root)
+    model, processor = load_qwen(model_name)
+    tok_ids = first_content_token_ids(processor)
+
+    screen, n_missing, _ = _score_rows(model, processor, tok_ids, pool,
+                                       [("screen", build_screen_conditions(), QUESTION)], "none",
+                                       "equal-room screen")
+    check_coverage(int(screen["image_path"].nunique()) if len(screen) else 0, len(pool),
+                   n_missing, allow_missing)
+    screen.to_parquet(STAGE_F_DIR / "equal_room_screen_qwen.parquet")
+    kept = screen_photos(screen, EQUAL_ROOM_SCREEN_THRESHOLD, max_photos)
+    print(f"\n  screen: {len(kept)} of {screen['image_path'].nunique()} photos within "
+          f"+-{EQUAL_ROOM_SCREEN_THRESHOLD} (kept up to {max_photos})")
+    if not kept:
+        raise RuntimeError("no photograph passed the equal-room screen; widen the pool")
+
+    sel = pool[pool["image_path"].isin(kept)]
+    df, _, _ = _score_rows(model, processor, tok_ids, sel,
+                           [("equal_room", build_equal_room_conditions(), QUESTION)], "none",
+                           "equal-room measure")
+    df.to_parquet(STAGE_F_DIR / "equal_room_qwen.parquet")
+    ids = tuple(f"zb{i}" for i in range(len(build_neutral_bank_conditions())))
+    result = equal_room(df, ids, threshold=np.inf)
+    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
+               "versions": _versions(), "pool_size": int(len(pool)), "n_skipped": n_missing,
+               "n_screened": int(screen["image_path"].nunique()), "n_kept": len(kept),
+               "screen_threshold": EQUAL_ROOM_SCREEN_THRESHOLD,
+               "valence_range": list(EQUAL_ROOM_VALENCE_RANGE), "equal_room": result}
+    save_json(metrics, STAGE_F_DIR / "equal_room_qwen_metrics.json")
+    for value in ("valence", "sum_lo", "best_lo"):
+        c = result[value]["equal_room"]
+        print(f"  {value:8s} |d_neg|-|d_pos| {c['estimate']:+.3f}  "
+              f"crossed+neutral [{c['ci95_crossed_neutral'][0]:+.3f},"
+              f"{c['ci95_crossed_neutral'][1]:+.3f}]")
+    print(f"  data -> {STAGE_F_DIR / 'equal_room_qwen.parquet'}")
+    return metrics
+
+
+def run_neutral_bank(config_path: str, model_name: str, limit: int | None,
+                     allow_missing: bool = False, images_root: str | None = None) -> dict:
+    """Score neutral bank B on the published 150 annotations, plus the published neutral pair.
+
+    The published pair is re-scored in the same session as a reproduction check: the analysis merges
+    bank B into the published matched parquet, which is only valid if this session's z0/z1 match the
+    published ones.
+    """
+    cfg = load_config(config_path)
+    ensure_dirs()
+    sel = resolve_image_paths(select_extreme_images(limit or int(cfg.get("n_images", 150))),
+                              images_root)
+    model, processor = load_qwen(model_name)
+    tok_ids = first_content_token_ids(processor)
+    conditions = ([("neutral", f"z{i}", c) for i, c in enumerate(NEUTRAL_CONTEXTS)]
+                  + build_neutral_bank_conditions())
+    df, n_missing, _ = _score_rows(model, processor, tok_ids, sel,
+                                   [("neutral_bank", conditions, QUESTION)], "none",
+                                   "neutral bank B")
+    check_coverage(int(df["image_path"].nunique()) if len(df) else 0, len(sel), n_missing,
+                   allow_missing)
+    stem = "controls_neutral_bank_qwen"
+    df.to_parquet(STAGE_F_DIR / f"{stem}.parquet")
+    metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
+               "versions": _versions(), "n_rows": int(len(df)), "n_skipped": n_missing}
+    save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
+    print(f"\n  {len(df)} rows -> {STAGE_F_DIR / (stem + '.parquet')}")
+    print("  Analyse on CPU: python -m src.experiments.analyze_matched_readouts")
+    return metrics
+
+
 def reanalyze(stem: str) -> dict:
     """Recompute a saved control run's metrics on CPU, no model load."""
     ensure_dirs()
@@ -542,6 +643,12 @@ def main() -> None:
     ap.add_argument("--person", choices=["crop", "box"], help="target-person grounding control")
     ap.add_argument("--axis", choices=["frame", "question"], help="wording robustness sweep")
     ap.add_argument("--generate", action="store_true", help="free-form generation control")
+    ap.add_argument("--equal-room", action="store_true",
+                    help="screen mid-valence photos for a near-neutral reading, run matched pairs")
+    ap.add_argument("--neutral-bank", action="store_true",
+                    help="score neutral bank B on the published 150 annotations")
+    ap.add_argument("--pool", type=int, default=600, help="--equal-room screening pool size")
+    ap.add_argument("--max-photos", type=int, default=120, help="--equal-room photos kept")
     ap.add_argument("--limit", type=int, default=None, help="EMOTIC image count")
     ap.add_argument("--images-root", default=None,
                     help="rebuild image paths under this root from the parquet's folder/filename "
@@ -566,8 +673,15 @@ def main() -> None:
     elif args.generate:
         run_generate(args.config, args.model, args.limit, max_new_tokens=args.max_new_tokens,
                      allow_missing=args.allow_missing, images_root=args.images_root)
+    elif args.equal_room:
+        run_equal_room(args.config, args.model, args.pool, args.max_photos, args.allow_missing,
+                       args.images_root)
+    elif args.neutral_bank:
+        run_neutral_bank(args.config, args.model, args.limit, args.allow_missing,
+                         args.images_root)
     else:
-        ap.error("pick one of --person, --axis, --generate, --reanalyze")
+        ap.error("pick one of --person, --axis, --generate, --equal-room, --neutral-bank, "
+                 "--reanalyze")
 
 
 if __name__ == "__main__":
