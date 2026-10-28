@@ -28,9 +28,12 @@ def grid():
 # --------------------------------------------------------------------------- published anchors
 @needs_matched
 def test_bounded_mirror_reproduces_the_published_value(grid):
-    m = grid["valence"]["mirror"]
-    assert m["estimate"] == pytest.approx(0.4964, abs=1e-3)
-    assert m["ci95_crossed"] == pytest.approx([0.114, 0.825], abs=2e-3)
+    from src.experiments.analyze_stage_f_unbounded import add_readouts as legacy, mirror_contrast
+    assert grid["valence"]["mirror"]["estimate"] == pytest.approx(0.4964, abs=1e-3)
+    # The published interval came from independent per-group pair draws in the older module.
+    df = pd.read_parquet(MATCHED_PQ)
+    published = mirror_contrast(legacy(df[df["condition"] != "none"]), "valence")
+    assert published["ci95_crossed"] == pytest.approx([0.114, 0.825], abs=2e-3)
 
 
 @needs_matched
@@ -39,10 +42,23 @@ def test_within_item_reproduces_the_published_value(grid):
 
 
 @needs_matched
-def test_corrected_category_gap_has_a_code_path_for_its_crossed_interval(grid):
-    c = grid["category"]["mirror"]
-    assert c["estimate"] == pytest.approx(0.2308, abs=1e-3)
-    assert c["ci95_crossed"] == pytest.approx([-0.026, 0.455], abs=2e-3)
+def test_corrected_category_gap_point_estimate(grid):
+    assert grid["category"]["mirror"]["estimate"] == pytest.approx(0.2308, abs=1e-3)
+
+
+def test_shared_pairs_are_drawn_once_for_both_groups():
+    """The same six pairs appear in both groups, so a replicate must resample them jointly."""
+    from src.experiments.analyze_matched_readouts import _replicate
+    g = lambda: {"neg": np.zeros((5, 6)), "pos": np.zeros((5, 6)), "neutral": np.zeros((5, 2)),
+                 "context_ids": [f"mp{i}" for i in range(6)]}
+    rng = np.random.default_rng(1)
+    for _ in range(20):
+        Pd, Nd = _replicate(rng, g(), g(), True, True)
+        assert list(Pd[2]) == list(Nd[2]) and list(Pd[3]) == list(Nd[3])
+    P, N = g(), g()
+    N["context_ids"] = [f"p{i}" for i in range(6)]   # varied set: different sentences per group
+    draws = [_replicate(rng, P, N, True, False) for _ in range(20)]
+    assert any(list(a[2]) != list(b[2]) for a, b in draws)
 
 
 @needs_matched
@@ -76,6 +92,28 @@ def test_equal_room_is_zero_when_both_sentences_pull_equally():
     out = equal_room(_synthetic(0.5, 0.5), tuple(f"zb{i}" for i in range(10)), threshold=np.inf,
                      n_boot=200)
     assert out["valence"]["equal_room"]["estimate"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_room_adjusted_contrast_removes_a_baseline_driven_imbalance():
+    """Pure geometry: each member moves a fixed fraction of its room, so the raw contrast is driven
+    by where the baseline sits and the zero-baseline intercept is ~0."""
+    rows = []
+    for k, b in enumerate(np.linspace(-0.3, 0.3, 13)):
+        path = f"/x/emodb_small/images/{k}.jpg"
+        for i in range(4):
+            rows.append(dict(image_path=path, image_group="mid", condition="neutral",
+                             context_id=f"zb{i}", valence=b))
+        for i in range(6):
+            rows.append(dict(image_path=path, image_group="mid", condition="negative",
+                             context_id=f"mp{i}", valence=b - 0.5 * (b + 1)))
+            rows.append(dict(image_path=path, image_group="mid", condition="positive",
+                             context_id=f"mp{i}", valence=b + 0.5 * (1 - b)))
+    df = pd.DataFrame(rows)
+    from src.data.labels import EMOTION_LABELS
+    for w in EMOTION_LABELS:
+        df[f"lp_{w}"] = np.log(1 / 13)
+    out = equal_room(df, tuple(f"zb{i}" for i in range(4)), threshold=np.inf, n_boot=50)
+    assert out["valence"]["at_zero_baseline"]["estimate"] == pytest.approx(0.0, abs=1e-9)
 
 
 def test_equal_room_is_positive_when_negative_pulls_harder():
@@ -112,27 +150,62 @@ def test_equal_room_measurement_never_uses_the_screening_sentences():
 
 
 # --------------------------------------------------------------------------- merge guard
-def _rows(prefix, cid, v):
-    return dict(image_path=f"{prefix}/emotic/mscoco/images/a.jpg", image_group="positive",
-                condition="neutral", context_id=cid, valence=v)
+def _bank_rows(prefix, overrides=None, drop=()):
+    """One photo, both published neutral rows plus all ten bank-B rows, with log-probs."""
+    from src.data.labels import EMOTION_LABELS
+    overrides = overrides or {}
+    rows = []
+    for cid in ("z0", "z1", *[f"zb{i}" for i in range(10)]):
+        if cid in drop:
+            continue
+        lp = {f"lp_{w}": np.log(1 / 13) for w in EMOTION_LABELS}
+        lp["lp_joy"] = overrides.get(cid, np.log(1 / 13))
+        rows.append(dict(image_path=f"{prefix}/emotic/mscoco/images/a.jpg", image_group="positive",
+                         condition="neutral", context_id=cid, valence=0.0, **lp))
+    return pd.DataFrame(rows)
+
+
+def _published():
+    return _bank_rows("/content/old", drop=[f"zb{i}" for i in range(10)])
 
 
 def test_merge_maps_remounted_paths_and_checks_reproduction():
-    matched = pd.DataFrame([_rows("/content/old", "z0", 0.9), _rows("/content/old", "z1", 0.3)])
-    bank = pd.DataFrame([_rows("/content/new", "z0", 0.9), _rows("/content/new", "z1", 0.3),
-                         _rows("/content/new", "zb0", 0.5)])
-    merged, check = merge_neutral_bank(matched, bank)
-    assert check["max_abs_valence_diff"] == 0.0
+    merged, check = merge_neutral_bank(_published(), _bank_rows("/content/new"))
+    assert check["max_abs_valence_diff"] == 0.0 and check["max_abs_sum_lo_diff"] == 0.0
     zb = merged[merged["context_id"] == "zb0"]
     assert list(zb["image_path"]) == ["/content/old/emotic/mscoco/images/a.jpg"]
     assert photo_key(zb["image_path"].iloc[0]) == "mscoco/images/a.jpg"
 
 
-def test_merge_refuses_a_session_that_does_not_reproduce():
-    matched = pd.DataFrame([_rows("/a", "z0", 0.9), _rows("/a", "z1", 0.3)])
-    bank = pd.DataFrame([_rows("/b", "z0", 0.7), _rows("/b", "z1", 0.3), _rows("/b", "zb0", 0.5)])
+def test_merge_refuses_a_log_odds_drift_that_bounded_valence_hides():
     with pytest.raises(ValueError, match="does not reproduce"):
-        merge_neutral_bank(matched, bank)
+        merge_neutral_bank(_published(), _bank_rows("/b", overrides={"z0": -1.0}))
+
+
+def test_merge_refuses_incomplete_coverage():
+    with pytest.raises(ValueError, match="coverage"):
+        merge_neutral_bank(_published(), _bank_rows("/b", drop=("zb3",)))
+    with pytest.raises(ValueError, match="coverage"):
+        merge_neutral_bank(_published(), _bank_rows("/b", drop=("z1",)))
+
+
+def test_merge_refuses_non_finite_log_probs():
+    with pytest.raises(ValueError, match="non-finite"):
+        merge_neutral_bank(_published(), _bank_rows("/b", overrides={"zb0": np.nan}))
+
+
+# --------------------------------------------------------------------------- generation parser
+@pytest.mark.parametrize("text, label, polarity", [
+    ("Joy, not sadness.", "joy", "positive"),
+    ("Based on the photo, the person feels sadness rather than joy.", "sadness", "negative"),
+    ("Neutral.", "neutral", "neither"),
+    ("Surprise!", "surprise", "neither"),
+    ("Based on the visual evidence in the photograph", "other", "other"),
+])
+def test_generation_parser_takes_the_earliest_label_and_matches_forced_choice_polarity(
+        text, label, polarity):
+    from src.experiments.stage_f_controls import parse_generated
+    assert parse_generated(text) == (label, polarity)
 
 
 def test_mid_valence_pool_is_one_row_per_photo_and_deterministic():

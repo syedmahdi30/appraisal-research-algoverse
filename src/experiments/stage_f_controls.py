@@ -427,6 +427,24 @@ def run_person(config_path: str, model_name: str, mode: str, limit: int | None,
                      "n_ungrounded": n_ungrounded})
 
 
+_POSITIVE = {"joy", "pride", "relief", "trust"}
+_NEGATIVE = {"anger", "boredom", "disgust", "fear", "guilt", "sadness", "shame"}
+
+
+def parse_generated(text: str) -> tuple[str, str]:
+    """(label, polarity) of a generated answer: the EARLIEST of the 13 labels in the text.
+
+    The earliest mention, not the first label in vocabulary order: "joy, not sadness" answers joy.
+    Polarity follows the forced-choice readout exactly -- surprise and neutral count toward neither
+    side -- so the generated and probability readouts are comparable. No label at all is `other`.
+    """
+    words = [w.strip(".,!?;:'\"()*").lower() for w in text.split()]
+    label = next((w for w in words if w in EMOTION_LABELS), "other")
+    polarity = ("positive" if label in _POSITIVE else "negative" if label in _NEGATIVE
+                else "other" if label == "other" else "neither")
+    return label, polarity
+
+
 def run_generate(config_path: str, model_name: str, limit: int | None,
                  max_new_tokens: int = 32, allow_missing: bool = False,
                  images_root: str | None = None) -> dict:
@@ -443,14 +461,14 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
     null result rather than the empty measurement it is. UNPARSED_CEILING below turns that into a
     visible warning; keep the budget well above the preamble.
     """
-    cfg = load_config(config_path)
+    load_config(config_path)
     ensure_dirs()
-    sel = resolve_image_paths(select_extreme_images(limit or int(cfg.get("n_images", 150))),
-                              images_root)
+    # The pinned published photographs, so generated and forced-choice answers share one set.
+    emotic = pd.read_parquet(PROCESSED_DIR / "emotic_test.parquet")
+    sel = resolve_image_paths(select_published_photos(emotic), images_root)
     model, processor = load_qwen(model_name)
     conditions = build_conditions("minimal")
 
-    positive = {"joy", "pride", "relief", "trust"}
     rows, n_missing = [], 0
     for _, row in tqdm(list(sel.iterrows()), desc="stage-f controls generate"):
         try:
@@ -465,13 +483,11 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
                 out = model.generate(**moved, max_new_tokens=max_new_tokens, do_sample=False)
             text = processor.tokenizer.decode(
                 out[0][moved["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
-            words = {w.strip(".,!?;:'\"").lower() for w in text.split()}
-            hit = next((label for label in EMOTION_LABELS if label in words), "other")
+            hit, polarity = parse_generated(text)
             rows.append({"image_path": row["image_path"], "image_group": row["image_group"],
                          "condition": condition, "context_id": context_id,
                          "context": sentence or "", "generated": text, "generated_label": hit,
-                         "generated_polarity": ("positive" if hit in positive
-                                                else "other" if hit == "other" else "negative")})
+                         "generated_polarity": polarity})
 
     df = pd.DataFrame(rows)
     check_coverage(int(df["image_path"].nunique()) if len(df) else 0, len(sel), n_missing,
@@ -488,7 +504,13 @@ UNPARSED_CEILING = 0.20
 
 def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str,
                       prior: dict | None = None) -> dict:
-    """Override rate computed on generated answers, per image group."""
+    """Override rate computed on generated answers, per image group.
+
+    Labels are re-parsed from the stored text, so a parquet written by an older parser is scored by
+    the current one.
+    """
+    parsed = df["generated"].fillna("").map(parse_generated)
+    df = df.assign(generated_label=parsed.str[0], generated_polarity=parsed.str[1])
     summary = {}
     for group in ("positive", "negative"):
         sub = df[df["image_group"] == group]
