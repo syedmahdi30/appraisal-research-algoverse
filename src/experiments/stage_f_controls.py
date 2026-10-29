@@ -37,6 +37,7 @@ GPU pass runs on Colab in the `requirements-qwen.txt` env, with EMOTIC staged at
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import numpy as np
@@ -431,22 +432,34 @@ _POSITIVE = {"joy", "pride", "relief", "trust"}
 _NEGATIVE = {"anger", "boredom", "disgust", "fear", "guilt", "sadness", "shame"}
 
 
-def parse_generated(text: str) -> tuple[str, str]:
-    """(label, polarity) of a generated answer: the EARLIEST of the 13 labels in the text.
+# A label within this many words after a negator is a rejection, not an answer: "the person is not
+# feeling joy" must not parse as joy.
+_NEGATORS = {"not", "no", "never", "isn't", "isn’t", "aren't", "aren’t", "rather", "instead"}
+_NEGATION_WINDOW = 3
 
-    The earliest mention, not the first label in vocabulary order: "joy, not sadness" answers joy.
-    Polarity follows the forced-choice readout exactly -- surprise and neutral count toward neither
-    side -- so the generated and probability readouts are comparable. No label at all is `other`.
+
+def parse_generated(text: str) -> tuple[str, str]:
+    """(label, polarity) of a generated answer.
+
+    A bolded label (`**sadness**`, how Qwen marks its committed answer) wins. Otherwise the EARLIEST
+    label that is not negated: "joy, not sadness" answers joy, "not feeling joy; he is crying with
+    sadness" answers sadness. Polarity follows the forced-choice readout exactly -- surprise and
+    neutral count toward neither side -- so the generated and probability readouts are comparable.
+    No label at all is `other`.
     """
-    words = [w.strip(".,!?;:'\"()*").lower() for w in text.split()]
-    label = next((w for w in words if w in EMOTION_LABELS), "other")
+    bold = [m.lower() for m in re.findall(r"\*\*\s*([A-Za-z]+)\s*\*\*", text)]
+    label = next((w for w in bold if w in EMOTION_LABELS), None)
+    if label is None:
+        words = [w.strip(".,!?;:'\"()*—-").lower() for w in text.split()]
+        label = next((w for k, w in enumerate(words) if w in EMOTION_LABELS
+                      and not _NEGATORS & set(words[max(0, k - _NEGATION_WINDOW):k])), "other")
     polarity = ("positive" if label in _POSITIVE else "negative" if label in _NEGATIVE
                 else "other" if label == "other" else "neither")
     return label, polarity
 
 
 def run_generate(config_path: str, model_name: str, limit: int | None,
-                 max_new_tokens: int = 32, allow_missing: bool = False,
+                 max_new_tokens: int = 128, allow_missing: bool = False,
                  images_root: str | None = None) -> dict:
     """Greedy free-form generation on the matched bank, mapped onto the 13 labels.
 
@@ -469,8 +482,19 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
     model, processor = load_qwen(model_name)
     conditions = build_conditions("minimal")
 
-    rows, n_missing = [], 0
+    # Qwen bolds its committed answer, so generation stops there instead of spending the budget on
+    # the justification that follows. Answers that never bold run to max_new_tokens.
+    stops = [f"**{w}**" for lab in EMOTION_LABELS for w in (lab, lab.capitalize())]
+    # A session can drop mid-run; finished photographs are kept in a partial file and skipped.
+    partial = STAGE_F_DIR / "controls_generate_qwen.partial.parquet"
+    rows = pd.read_parquet(partial).to_dict("records") if partial.exists() else []
+    done = {(r["image_path"], r["image_group"]) for r in rows}
+    if done:
+        print(f"  resuming: {len(done)} photographs already generated")
+    n_missing = 0
     for _, row in tqdm(list(sel.iterrows()), desc="stage-f controls generate"):
+        if (row["image_path"], row["image_group"]) in done:
+            continue
         try:
             image = Image.open(row["image_path"]).convert("RGB")
         except (FileNotFoundError, OSError):
@@ -480,7 +504,8 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
             inputs = build_inputs(processor, image, sentence)
             moved = {k: v.to(model.device) for k, v in inputs.items()}
             with torch.no_grad():
-                out = model.generate(**moved, max_new_tokens=max_new_tokens, do_sample=False)
+                out = model.generate(**moved, max_new_tokens=max_new_tokens, do_sample=False,
+                                     stop_strings=stops, tokenizer=processor.tokenizer)
             text = processor.tokenizer.decode(
                 out[0][moved["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
             hit, polarity = parse_generated(text)
@@ -488,12 +513,14 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
                          "condition": condition, "context_id": context_id,
                          "context": sentence or "", "generated": text, "generated_label": hit,
                          "generated_polarity": polarity})
+        pd.DataFrame(rows).to_parquet(partial)
 
     df = pd.DataFrame(rows)
     check_coverage(int(df["image_path"].nunique()) if len(df) else 0, len(sel), n_missing,
                    allow_missing)
     stem = "controls_generate_qwen"
     df.to_parquet(STAGE_F_DIR / f"{stem}.parquet")
+    partial.unlink(missing_ok=True)
     return _analyze_generate(df, model_name, stem)
 
 
@@ -708,7 +735,7 @@ def main() -> None:
                          "(e.g. /content/emotic) when the baked-in absolute paths do not resolve")
     ap.add_argument("--allow-missing", action="store_true",
                     help="score a partial image set anyway (NOT comparable to published numbers)")
-    ap.add_argument("--max-new-tokens", type=int, default=32,
+    ap.add_argument("--max-new-tokens", type=int, default=128,
                     help="generation budget for --generate; must clear the model's preamble "
                          "as well as the answer (see UNPARSED_CEILING)")
     ap.add_argument("--reanalyze", metavar="STEM",

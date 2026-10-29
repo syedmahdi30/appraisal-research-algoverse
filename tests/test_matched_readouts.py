@@ -209,6 +209,12 @@ def test_merge_refuses_non_finite_log_probs():
     ("Neutral.", "neutral", "neither"),
     ("Surprise!", "surprise", "neither"),
     ("Based on the visual evidence in the photograph", "other", "other"),
+    # Rejections of a label are not answers (both seen in the 32-token Colab run).
+    ("Based on the visual evidence, the person is not feeling joy or satisfaction.", "other", "other"),
+    ("Actually, he is not experiencing joy. He is crying with sadness", "sadness", "negative"),
+    # The bolded label is the committed answer, wherever earlier labels appear.
+    ("The context suggests joy, but the single emotion is **sadness**.", "sadness", "negative"),
+    ("Despite the context, the emotion is **Joy**.", "joy", "positive"),
 ])
 def test_generation_parser_takes_the_earliest_label_and_matches_forced_choice_polarity(
         text, label, polarity):
