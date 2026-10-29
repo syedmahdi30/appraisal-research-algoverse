@@ -756,6 +756,40 @@
   "emotic_columns_stripped": []
  },
  {
+  "path": "stage_f/controls_generate_qwen_t32.parquet",
+  "sha256": "ab66a3351f1b6ee31397d7580eb9b2e6771c24ee874719db8a859d0add338b05",
+  "bytes": 63051,
+  "cited_in_paper": true,
+  "where": "App. on generated answers (second, void run)",
+  "emotic_columns_stripped": []
+ },
+ {
+  "path": "stage_f/controls_generate_qwen_t32_metrics.json",
+  "sha256": "91dc1c8d465b5a217cc4fd5405163b153a3af6fc4ff60881f8a36e985bb05e16",
+  "bytes": 659,
+  "cited_in_paper": false,
+  "where": null,
+  "emotic_columns_stripped": []
+ },
+ {
+  "path": "stage_f/controls_neutral_bank_qwen.parquet",
+  "sha256": "532baff7b6b79ce80cd5f1bec71f71745b3906827304607c398c95bb14ad07bb",
+  "bytes": 165922,
+  "cited_in_paper": true,
+  "where": "App. on the neutral baseline (bank B)",
+  "emotic_columns_stripped": [
+   "image_valence"
+  ]
+ },
+ {
+  "path": "stage_f/controls_neutral_bank_qwen_metrics.json",
+  "sha256": "01c5a1a74799a7cb5249cb4702c40f9eac1bc3bd8268c93198a7c9796b2c6afa",
+  "bytes": 272,
+  "cited_in_paper": false,
+  "where": null,
+  "emotic_columns_stripped": []
+ },
+ {
   "path": "stage_f/controls_person_box_qwen.parquet",
   "sha256": "7ae67a8ef069561117103cb7b89449255b842c7b6ff97c768fc1d97439147bf1",
   "bytes": 446851,
@@ -793,7 +827,7 @@
  },
  {
   "path": "stage_f/controls_pytest_metrics.json",
-  "sha256": "f142171b4f75423cb5aedcecfc5b6e7cd2fa89cab600a36b67b135c33d8cfd2f",
+  "sha256": "35a225cdc95ccba75d00919e80aa52a84998e8d26a1f60bf2d74d11a86bea17b",
   "bytes": 6652,
   "cited_in_paper": false,
   "where": null,
@@ -880,6 +914,34 @@
   "emotic_columns_stripped": []
  },
  {
+  "path": "stage_f/equal_room_qwen.parquet",
+  "sha256": "79eaae2d6f0c2f259b196600cd71b730c1177821f7a54088d87b8eaacac55a02",
+  "bytes": 302166,
+  "cited_in_paper": true,
+  "where": "Table 2, App. on the equal-room comparison",
+  "emotic_columns_stripped": [
+   "image_valence"
+  ]
+ },
+ {
+  "path": "stage_f/equal_room_qwen_metrics.json",
+  "sha256": "71ab65d00bbe125a68f6a90ebbe2e51248988630779242f4f50323dbfca291a1",
+  "bytes": 5177,
+  "cited_in_paper": false,
+  "where": null,
+  "emotic_columns_stripped": []
+ },
+ {
+  "path": "stage_f/equal_room_screen_qwen.parquet",
+  "sha256": "21cb9e5a306c824800df7bd7f50a9fe862d514dcfb6153154a54ae16889f6ad9",
+  "bytes": 218874,
+  "cited_in_paper": true,
+  "where": "App. on the equal-room comparison (screen)",
+  "emotic_columns_stripped": [
+   "image_valence"
+  ]
+ },
+ {
   "path": "stage_f/judge_robustness.json",
   "sha256": "707550797b89f96c531f1415b7074be2e9d6937d189a11a078a2a2816909f0e2",
   "bytes": 15864,
@@ -953,8 +1015,8 @@
  },
  {
   "path": "stage_f/matched_readouts.json",
-  "sha256": "f27f3a6bd2fa20e3da489cf145fa86beb09cb439ef77970557aa39b8ab9fa851",
-  "bytes": 24830,
+  "sha256": "97a9fae19477b40a444d5654c47239183414b0623a4ae6ed7f1fc39bbf1605f5",
+  "bytes": 44051,
   "cited_in_paper": true,
   "where": "Table 2 and Sec. 4.2.2 (every readout x contrast)",
   "emotic_columns_stripped": []

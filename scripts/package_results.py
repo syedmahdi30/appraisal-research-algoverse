@@ -61,6 +61,7 @@ CITED = {
     "stage_f/controls_frame_qwen.parquet": "App. B, Table 6 (wording: frame)",
     "stage_f/controls_question_qwen.parquet": "App. B, Table 6 (wording: question)",
     "stage_f/controls_generate_qwen.parquet": "App. on generated answers (first, void run)",
+    "stage_f/controls_generate_qwen_t32.parquet": "App. on generated answers (second, void run)",
     "stage_f/patching_hf.parquet": "Table 7 (same-image patching, pair 2)",
     "stage_f/patching_hf_pair1.parquet": "Table 7 (same-image patching, pair 1)",
     "stage_f/cross_patching_hf.parquet": "Table 8 (cross-image patching, 18-28)",

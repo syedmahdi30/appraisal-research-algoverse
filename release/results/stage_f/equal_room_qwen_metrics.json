@@ -1,0 +1,215 @@
+{
+  "run": "20261029T002537Z",
+  "git": "e513769",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "versions": {
+    "torch": "2.11.0+cu130",
+    "transformers": "4.57.6",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "PIL": "11.3.0"
+  },
+  "pool_size": 600,
+  "n_skipped": 0,
+  "n_screened": 600,
+  "n_kept": 117,
+  "screen_threshold": 0.3,
+  "valence_range": [
+    4.0,
+    7.0
+  ],
+  "equal_room": {
+    "threshold": Infinity,
+    "n_photos": 117,
+    "neutral_ids": [
+      "zb0",
+      "zb1",
+      "zb2",
+      "zb3",
+      "zb4",
+      "zb5",
+      "zb6",
+      "zb7",
+      "zb8",
+      "zb9"
+    ],
+    "measured_baseline": {
+      "quantiles": {
+        "0.0": -0.5594498931489376,
+        "0.1": 0.34421050480446513,
+        "0.25": 0.6040233170414334,
+        "0.5": 0.8139512433438562,
+        "0.75": 0.967118808455273,
+        "0.9": 0.997549216997028,
+        "1.0": 0.9999029587089175
+      },
+      "room_window": 0.3,
+      "n_within_room_window": 9
+    },
+    "valence": {
+      "arms": {
+        "neg_sentence": -1.718904262489542,
+        "pos_sentence": 0.21218451855004875,
+        "n_photos": 117
+      },
+      "equal_room": {
+        "estimate": 1.46383392649729,
+        "ci95_photo": [
+          1.3567461914628738,
+          1.5695312226774694
+        ],
+        "ci95_crossed": [
+          1.3560770080399096,
+          1.5657091509208603
+        ],
+        "ci95_crossed_neutral": [
+          1.2746452380964943,
+          1.61837723573739
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "within_room_window": {
+        "estimate": 0.25240101237868573,
+        "ci95_photo": [
+          0.03528646989335169,
+          0.47967605032875044
+        ],
+        "ci95_crossed": [
+          0.024739512027765514,
+          0.5006295176776521
+        ],
+        "ci95_crossed_neutral": [
+          -0.12830836894073827,
+          0.5928973191270897
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "at_zero_baseline": {
+        "estimate": 0.1093278096216806,
+        "ci95_photo": [
+          0.06927523442583751,
+          0.1705614007083448
+        ],
+        "ci95_crossed": [
+          0.026765649767869572,
+          0.2342432669762427
+        ],
+        "ci95_crossed_neutral": [
+          0.027431844974868995,
+          0.21762604313820336
+        ],
+        "crossed_neutral_excludes_zero": true
+      }
+    },
+    "sum_lo": {
+      "arms": {
+        "neg_sentence": -14.279617868901328,
+        "pos_sentence": 3.09742601006916,
+        "n_photos": 117
+      },
+      "equal_room": {
+        "estimate": 10.359959817446502,
+        "ci95_photo": [
+          9.660675221955064,
+          11.082797356325036
+        ],
+        "ci95_crossed": [
+          9.149689994895605,
+          11.60389013770329
+        ],
+        "ci95_crossed_neutral": [
+          8.811822967431034,
+          11.828158899631228
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "within_room_window": {
+        "estimate": 5.137408406594998,
+        "ci95_photo": [
+          4.25445784207566,
+          6.075990885091272
+        ],
+        "ci95_crossed": [
+          3.4775420767436676,
+          6.778720947534999
+        ],
+        "ci95_crossed_neutral": [
+          3.204462935322328,
+          6.9192163989057365
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "at_zero_baseline": {
+        "estimate": 5.480680192229553,
+        "ci95_photo": [
+          4.9023702996623415,
+          6.060997508046723
+        ],
+        "ci95_crossed": [
+          3.76204846162356,
+          7.082692485225188
+        ],
+        "ci95_crossed_neutral": [
+          3.688039779018792,
+          7.12994692835563
+        ],
+        "crossed_neutral_excludes_zero": true
+      }
+    },
+    "best_lo": {
+      "arms": {
+        "neg_sentence": -14.707594378424005,
+        "pos_sentence": 3.0058582608140982,
+        "n_photos": 117
+      },
+      "equal_room": {
+        "estimate": 10.748717963716038,
+        "ci95_photo": [
+          10.054735356737707,
+          11.478407682489737
+        ],
+        "ci95_crossed": [
+          9.54326722197816,
+          11.979184914204263
+        ],
+        "ci95_crossed_neutral": [
+          9.222959650409331,
+          12.196035205298038
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "within_room_window": {
+        "estimate": 5.287036969767301,
+        "ci95_photo": [
+          4.282696638833287,
+          6.315627828548685
+        ],
+        "ci95_crossed": [
+          3.571704129610633,
+          7.013405596050193
+        ],
+        "ci95_crossed_neutral": [
+          3.2800028425456382,
+          7.122633134566396
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "at_zero_baseline": {
+        "estimate": 5.6437787225099125,
+        "ci95_photo": [
+          5.01770164385615,
+          6.2772985884417825
+        ],
+        "ci95_crossed": [
+          3.8385219892499425,
+          7.335421980001894
+        ],
+        "ci95_crossed_neutral": [
+          3.8004845173004953,
+          7.400274460244811
+        ],
+        "crossed_neutral_excludes_zero": true
+      }
+    }
+  }
+}

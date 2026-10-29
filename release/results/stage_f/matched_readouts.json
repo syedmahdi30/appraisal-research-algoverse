@@ -1,6 +1,6 @@
 {
-  "run": "20261029T000153Z",
-  "git": "e5e0bbe",
+  "run": "20261029T015003Z",
+  "git": "85039c8",
   "n_boot": 10000,
   "seed": 0,
   "matched_parquet": "results/stage_f/conflict_qwen3-vl-8b-instruct_minimal.parquet",
@@ -709,7 +709,483 @@
           ]
         }
       }
+    },
+    "bank_b": {
+      "valence": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -1.7184753410072795,
+            "pos_sentence": 0.06629096377456146,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": -0.03342199024992338,
+            "pos_sentence": 0.9807415204226816,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.7377338205845979,
+          "ci95_photo": [
+            0.570366803031939,
+            0.894118764524464
+          ],
+          "ci95_crossed": [
+            0.4161736646295312,
+            1.0833701706473096
+          ],
+          "ci95_crossed_neutral": [
+            0.42154440198582876,
+            1.0747308427552091
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_pos": {
+          "estimate": 1.6296629091618677,
+          "ci95_photo": [
+            1.4793420189819257,
+            1.7626664120307585
+          ],
+          "ci95_crossed": [
+            1.463862095755739,
+            1.7760138166456598
+          ],
+          "ci95_crossed_neutral": [
+            1.4504611110632424,
+            1.780957969770597
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -0.9464455804161948,
+          "ci95_photo": [
+            -1.0914098077611885,
+            -0.7869239739598164
+          ],
+          "ci95_crossed": [
+            -1.284562981521648,
+            -0.5986097947868173
+          ],
+          "ci95_crossed_neutral": [
+            -1.273591743576062,
+            -0.60786683965042
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "sum_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -13.570082469813912,
+            "pos_sentence": 0.8403706768881968,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 1.104984575625985,
+            "pos_sentence": 13.7892887594186,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -0.21920628960468846,
+          "ci95_photo": [
+            -1.5226683215831807,
+            1.063062708826517
+          ],
+          "ci95_crossed": [
+            -2.3654067098640126,
+            2.068569360050017
+          ],
+          "ci95_crossed_neutral": [
+            -2.416751206503662,
+            2.0835650275591897
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 10.599870580095757,
+          "ci95_photo": [
+            9.472748720198124,
+            11.6347299786385
+          ],
+          "ci95_crossed": [
+            8.959848883519234,
+            12.233181786919904
+          ],
+          "ci95_crossed_neutral": [
+            8.719292643647712,
+            12.498386109212207
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -11.189465031555583,
+          "ci95_photo": [
+            -12.123568496295075,
+            -10.13129248709325
+          ],
+          "ci95_crossed": [
+            -12.837673036094271,
+            -9.480866005825241
+          ],
+          "ci95_crossed_neutral": [
+            -12.804528247851064,
+            -9.485637162444222
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "best_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -13.865440181768594,
+            "pos_sentence": 0.7554435483758487,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 1.0091530994682243,
+            "pos_sentence": 14.052382232372358,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -0.18694205060376312,
+          "ci95_photo": [
+            -1.5392823423545456,
+            1.1340784711004337
+          ],
+          "ci95_crossed": [
+            -2.3750751070645895,
+            2.122384087611494
+          ],
+          "ci95_crossed_neutral": [
+            -2.421495001742861,
+            2.1671892792251892
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 10.868069557256325,
+          "ci95_photo": [
+            9.72327955992576,
+            11.925057957655776
+          ],
+          "ci95_crossed": [
+            9.169281313905817,
+            12.54092554325833
+          ],
+          "ci95_crossed_neutral": [
+            8.93476939841752,
+            12.803456216083989
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -11.408411438475312,
+          "ci95_photo": [
+            -12.4016167201571,
+            -10.287601942795808
+          ],
+          "ci95_crossed": [
+            -13.083805055055839,
+            -9.646812743715259
+          ],
+          "ci95_crossed_neutral": [
+            -13.051978429957554,
+            -9.658951773155596
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "headroom": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -0.9043393042880958,
+            "pos_sentence": -4.116745104227784,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.05972257924619632,
+            "pos_sentence": 0.5071648060539229,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.39717449823417295,
+          "ci95_photo": [
+            0.31544805051847596,
+            0.47207283971997677
+          ],
+          "ci95_crossed": [
+            0.23611154274599255,
+            0.5699278543038196
+          ],
+          "ci95_crossed_neutral": [
+            0.24032244619703783,
+            0.5639422549209524
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "category": {
+        "mirror": {
+          "estimate": 0.3808243727598567,
+          "ci95_photo": [
+            0.28216397849462366,
+            0.47420250896057353
+          ],
+          "ci95_crossed": [
+            0.15716173835125435,
+            0.6144287634408602
+          ],
+          "ci95_crossed_neutral": [
+            0.1644153225806453,
+            0.6082459677419355
+          ]
+        }
+      }
+    },
+    "published_plus_b": {
+      "valence": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -1.6784245567855591,
+            "pos_sentence": 0.10634174799628192,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": -0.03325401133543086,
+            "pos_sentence": 0.980909499337174,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.6975150574483852,
+          "ci95_photo": [
+            0.5308526305097799,
+            0.852586608595682
+          ],
+          "ci95_crossed": [
+            0.37664990405905857,
+            1.0429334671320922
+          ],
+          "ci95_crossed_neutral": [
+            0.3687900033531703,
+            1.0372911476198758
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_pos": {
+          "estimate": 1.5539335400488767,
+          "ci95_photo": [
+            1.4057757459371654,
+            1.6836894105285118
+          ],
+          "ci95_crossed": [
+            1.3913591109456809,
+            1.6977772377041924
+          ],
+          "ci95_crossed_neutral": [
+            1.308729301460528,
+            1.7506538962027647
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -0.9468639374231208,
+          "ci95_photo": [
+            -1.091233377301031,
+            -0.7890250877663779
+          ],
+          "ci95_crossed": [
+            -1.2845385896380095,
+            -0.5999404929579855
+          ],
+          "ci95_crossed_neutral": [
+            -1.28016820555412,
+            -0.6063109411232456
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "sum_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -13.373213553706265,
+            "pos_sentence": 1.0372395929958453,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 1.059248812924601,
+            "pos_sentence": 13.743552996717218,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -0.3703394430109537,
+          "ci95_photo": [
+            -1.6379828626992237,
+            0.8684142965226749
+          ],
+          "ci95_crossed": [
+            -2.498435585011188,
+            1.8794454302653663
+          ],
+          "ci95_crossed_neutral": [
+            -2.5338785471571468,
+            1.8970986441753968
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 10.35684846534588,
+          "ci95_photo": [
+            9.254076734682144,
+            11.365974209788334
+          ],
+          "ci95_crossed": [
+            8.752047343016619,
+            11.927061535361124
+          ],
+          "ci95_crossed_neutral": [
+            8.445610062060238,
+            12.12334147345296
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -11.177679816974969,
+          "ci95_photo": [
+            -12.091848372350814,
+            -10.146549366237954
+          ],
+          "ci95_crossed": [
+            -12.807461637779372,
+            -9.480230202543227
+          ],
+          "ci95_crossed_neutral": [
+            -12.754709127403698,
+            -9.522112394434146
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "best_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -13.67084592955509,
+            "pos_sentence": 0.950037800589354,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.9572360523572359,
+            "pos_sentence": 14.00046518526137,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -0.32961925570628026,
+          "ci95_photo": [
+            -1.638331679191159,
+            0.9500823322038022
+          ],
+          "ci95_crossed": [
+            -2.504770094172936,
+            1.9684787515953157
+          ],
+          "ci95_crossed_neutral": [
+            -2.540205752721476,
+            1.9723718883738675
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 10.6242509518862,
+          "ci95_photo": [
+            9.497650666968529,
+            11.655259796581898
+          ],
+          "ci95_crossed": [
+            8.974788204814809,
+            12.23190836425874
+          ],
+          "ci95_crossed_neutral": [
+            8.67242451675485,
+            12.422553364321455
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -11.38571322150575,
+          "ci95_photo": [
+            -12.361690262982831,
+            -10.290067786237183
+          ],
+          "ci95_crossed": [
+            -13.036514186431955,
+            -9.641967698809529
+          ],
+          "ci95_crossed_neutral": [
+            -12.996132732100808,
+            -9.679654195669436
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "headroom": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -0.9048497951624416,
+            "pos_sentence": -1.6600317221746017,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.03446052309229843,
+            "pos_sentence": 0.5071279450246329,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.3977218501378087,
+          "ci95_photo": [
+            0.3167015788030924,
+            0.4720648638595168
+          ],
+          "ci95_crossed": [
+            0.23673213779357583,
+            0.5710575352069843
+          ],
+          "ci95_crossed_neutral": [
+            0.23814893950756336,
+            0.5632772484705044
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "category": {
+        "mirror": {
+          "estimate": 0.3558243727598567,
+          "ci95_photo": [
+            0.2577038530465949,
+            0.44910618279569886
+          ],
+          "ci95_crossed": [
+            0.13405017921146956,
+            0.5889807347670251
+          ],
+          "ci95_crossed_neutral": [
+            0.1311805555555556,
+            0.5836536738351247
+          ]
+        }
+      }
     }
+  },
+  "neutral_bank_reproduction": {
+    "n_checked": 244,
+    "max_abs_valence_diff": 1.1102230246251565e-16,
+    "max_abs_sum_lo_diff": 1.7763568394002505e-15,
+    "max_abs_best_lo_diff": 0.0
   },
   "baseline_profile": {
     "negative": {
@@ -733,6 +1209,36 @@
         "0.9": 0.9999945035300888
       },
       "n_within_0.3": 18
+    }
+  },
+  "neutral_sentence_profile": {
+    "negative": {
+      "z0": 0.018538512551541198,
+      "z1": 0.017793179454054633,
+      "zb0": 0.019519931312222783,
+      "zb1": 0.019367615127417737,
+      "zb2": 0.019597260200625036,
+      "zb3": 0.01982234600388788,
+      "zb4": 0.018445794881563272,
+      "zb5": 0.018738153828021874,
+      "zb6": 0.019161168967368896,
+      "zb7": 0.018194782305018625,
+      "zb8": 0.01969626470700815,
+      "zb9": 0.019193877564396822
+    },
+    "positive": {
+      "z0": 0.3725410837327113,
+      "z1": -0.14572408989561197,
+      "zb0": 0.3834488134018815,
+      "zb1": 0.30693116465623466,
+      "zb2": 0.39529858130372947,
+      "zb3": 0.3764763212311574,
+      "zb4": 0.3839216643878188,
+      "zb5": 0.3408538042628888,
+      "zb6": 0.3476488508605088,
+      "zb7": 0.3217874556250269,
+      "zb8": 0.3341080054796823,
+      "zb9": 0.3466573612797953
     }
   },
   "equal_room_post_hoc": {
@@ -918,6 +1424,215 @@
           6.814616050189436
         ],
         "crossed_neutral_excludes_zero": false
+      }
+    }
+  },
+  "equal_room_run": {
+    "threshold": Infinity,
+    "n_photos": 117,
+    "neutral_ids": [
+      "zb0",
+      "zb1",
+      "zb2",
+      "zb3",
+      "zb4",
+      "zb5",
+      "zb6",
+      "zb7",
+      "zb8",
+      "zb9"
+    ],
+    "measured_baseline": {
+      "quantiles": {
+        "0.0": -0.5594498931489376,
+        "0.1": 0.34421050480446513,
+        "0.25": 0.6040233170414334,
+        "0.5": 0.8139512433438562,
+        "0.75": 0.967118808455273,
+        "0.9": 0.997549216997028,
+        "1.0": 0.9999029587089175
+      },
+      "room_window": 0.3,
+      "n_within_room_window": 9
+    },
+    "valence": {
+      "arms": {
+        "neg_sentence": -1.718904262489542,
+        "pos_sentence": 0.21218451855004875,
+        "n_photos": 117
+      },
+      "equal_room": {
+        "estimate": 1.46383392649729,
+        "ci95_photo": [
+          1.3548380636822042,
+          1.5654998572244647
+        ],
+        "ci95_crossed": [
+          1.355072222772473,
+          1.5653696706245517
+        ],
+        "ci95_crossed_neutral": [
+          1.2762521806920994,
+          1.6148637817114957
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "within_room_window": {
+        "estimate": 0.25240101237868573,
+        "ci95_photo": [
+          0.03206350548326856,
+          0.471285371505715
+        ],
+        "ci95_crossed": [
+          0.017571892047028408,
+          0.4941616717414351
+        ],
+        "ci95_crossed_neutral": [
+          -0.12299346118063886,
+          0.5963341096138167
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "at_zero_baseline": {
+        "estimate": 0.1093278096216806,
+        "ci95_photo": [
+          0.06946727962229558,
+          0.16686287506576328
+        ],
+        "ci95_crossed": [
+          0.028226510574847746,
+          0.22859396721793382
+        ],
+        "ci95_crossed_neutral": [
+          0.027554439665334676,
+          0.21626833703895898
+        ],
+        "crossed_neutral_excludes_zero": true
+      }
+    },
+    "sum_lo": {
+      "arms": {
+        "neg_sentence": -14.279617868901328,
+        "pos_sentence": 3.09742601006916,
+        "n_photos": 117
+      },
+      "equal_room": {
+        "estimate": 10.359959817446502,
+        "ci95_photo": [
+          9.672699347848425,
+          11.05422497660899
+        ],
+        "ci95_crossed": [
+          9.156344159492434,
+          11.640369170797882
+        ],
+        "ci95_crossed_neutral": [
+          8.807533313744033,
+          11.820964985494848
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "within_room_window": {
+        "estimate": 5.137408406594998,
+        "ci95_photo": [
+          4.248709409528819,
+          6.065186247207271
+        ],
+        "ci95_crossed": [
+          3.4741116094457247,
+          6.769919064415671
+        ],
+        "ci95_crossed_neutral": [
+          3.1480258546683566,
+          7.008370674986744
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "at_zero_baseline": {
+        "estimate": 5.480680192229556,
+        "ci95_photo": [
+          4.901286724680841,
+          6.071471123112986
+        ],
+        "ci95_crossed": [
+          3.7848919898111815,
+          7.081312004590435
+        ],
+        "ci95_crossed_neutral": [
+          3.7478641292349537,
+          7.094850549964541
+        ],
+        "crossed_neutral_excludes_zero": true
+      }
+    },
+    "best_lo": {
+      "arms": {
+        "neg_sentence": -14.707594378424005,
+        "pos_sentence": 3.0058582608140982,
+        "n_photos": 117
+      },
+      "equal_room": {
+        "estimate": 10.748717963716038,
+        "ci95_photo": [
+          10.049905649384023,
+          11.44879097069513
+        ],
+        "ci95_crossed": [
+          9.5510188058497,
+          12.017134750770554
+        ],
+        "ci95_crossed_neutral": [
+          9.218536324452565,
+          12.188333814739988
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "within_room_window": {
+        "estimate": 5.287036969767301,
+        "ci95_photo": [
+          4.284791502301183,
+          6.314583299337734
+        ],
+        "ci95_crossed": [
+          3.555763744711457,
+          6.998810726677258
+        ],
+        "ci95_crossed_neutral": [
+          3.2190883938378696,
+          7.228480867232318
+        ],
+        "crossed_neutral_excludes_zero": true
+      },
+      "at_zero_baseline": {
+        "estimate": 5.643778722509909,
+        "ci95_photo": [
+          5.014899652523776,
+          6.277263180185941
+        ],
+        "ci95_crossed": [
+          3.8866649077009052,
+          7.312308510464919
+        ],
+        "ci95_crossed_neutral": [
+          3.8501491535736614,
+          7.336901798735178
+        ],
+        "crossed_neutral_excludes_zero": true
+      }
+    },
+    "parquet": "results/stage_f/equal_room_qwen.parquet",
+    "neutral_sentence_profile": {
+      "mid": {
+        "zb0": 1.292747937288655,
+        "zb1": 1.2554981157688085,
+        "zb2": 1.2650339069636527,
+        "zb3": 1.3256356498579351,
+        "zb4": 0.9150545043654572,
+        "zb5": 1.2019000659195602,
+        "zb6": 1.22770837049309,
+        "zb7": 1.19194696190726,
+        "zb8": 1.1357833563093456,
+        "zb9": 1.2536867262114402
       }
     }
   }
