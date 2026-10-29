@@ -79,7 +79,7 @@ drift from its source.
 
 ## Data
 
-* **crowd-enVENT** (text, public): `python scripts/download_data.py --dataset crowd_envent`
+* **crowd-enVENT** (text, public): `python scripts/download_data.py --dataset crowd-envent`
 * **EMOTIC** (images, gated non-commercial agreement): request access from the EMOTIC authors, then
   `python scripts/download_data.py --dataset emotic --archive emotic.zip --annotations Annotations.mat`.
   MSCOCO and ADE20K images are distributed by their own projects.
