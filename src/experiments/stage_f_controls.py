@@ -455,23 +455,40 @@ _NEGATORS = {"not", "no", "never", "isn't", "isn’t", "aren't", "aren’t", "ra
 _NEGATION_WINDOW = 3
 
 
-def parse_generated(text: str) -> tuple[str, str]:
+# Free generation answers with emotions outside the 13 forced-choice labels ("grief" alone is the
+# committed answer in ~9% of the final run). These map words whose valence is not in doubt onto the
+# forced-choice polarity; anything else (compassion, shock, exhaustion) stays unparsed. The list was
+# written after reading the final run's answers, so the strict 13-label parse is always reported too.
+SYNONYM_POLARITY = {
+    **dict.fromkeys(("grief", "sorrow", "despair", "heartbreak", "anguish", "agony", "pain",
+                     "distress", "disappointment", "frustration", "stress", "misery", "devastation",
+                     "loneliness", "anxiety", "worry", "desperation", "helplessness", "hopelessness",
+                     "regret", "dejection"), "negative"),
+    **dict.fromkeys(("happiness", "contentment", "ecstasy", "excitement", "love", "elation",
+                     "delight", "euphoria", "gratitude", "amusement", "enjoyment", "satisfaction",
+                     "triumph", "cheerfulness", "jubilation", "exhilaration", "affection"), "positive"),
+}
+
+
+def parse_generated(text: str, synonyms: bool = False) -> tuple[str, str]:
     """(label, polarity) of a generated answer.
 
     A bolded label (`**sadness**`, how Qwen marks its committed answer) wins. Otherwise the EARLIEST
     label that is not negated: "joy, not sadness" answers joy, "not feeling joy; he is crying with
     sadness" answers sadness. Polarity follows the forced-choice readout exactly -- surprise and
     neutral count toward neither side -- so the generated and probability readouts are comparable.
-    No label at all is `other`.
+    With `synonyms`, the words of SYNONYM_POLARITY count as answers too, under the same rules.
+    No answer at all is `other`.
     """
-    bold = [m.lower() for m in re.findall(r"\*\*\s*([A-Za-z]+)\s*\*\*", text)]
-    label = next((w for w in bold if w in EMOTION_LABELS), None)
+    vocab = set(EMOTION_LABELS) | (set(SYNONYM_POLARITY) if synonyms else set())
+    bold = [w.lower() for b in re.findall(r"\*\*\s*([A-Za-z ]+?)\s*\*\*", text) for w in b.split()]
+    label = next((w for w in bold if w in vocab), None)
     if label is None:
         words = [w.strip(".,!?;:'\"()*—-").lower() for w in text.split()]
-        label = next((w for k, w in enumerate(words) if w in EMOTION_LABELS
+        label = next((w for k, w in enumerate(words) if w in vocab
                       and not _NEGATORS & set(words[max(0, k - _NEGATION_WINDOW):k])), "other")
     polarity = ("positive" if label in _POSITIVE else "negative" if label in _NEGATIVE
-                else "other" if label == "other" else "neither")
+                else SYNONYM_POLARITY.get(label, "other" if label == "other" else "neither"))
     return label, polarity
 
 
@@ -549,46 +566,80 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
 UNPARSED_CEILING = 0.20
 
 
+def generation_flips(df: pd.DataFrame, synonyms: bool, n_boot: int = 10_000,
+                     seed: int = 0) -> dict:
+    """How often a conflicting sentence flips the generated answer's valence, per image group.
+
+    The `gap` is the categorical override gap of the paper read from generated text: (flip rate on
+    positive photographs - their neutral-sentence flip rate) - (the same on negative photographs),
+    so positive means negative text overrides more often. Its interval resamples photographs within
+    each group and the six pairs, with the same pairs drawn for both groups in a replicate, as the
+    forced-choice gap does. An unparsed answer counts as no flip.
+    """
+    pol = df["generated"].fillna("").map(lambda t: parse_generated(t, synonyms)[1])
+    df = df.assign(polarity=pol, photo=df["image_path"] + "|" + df["image_group"])
+    pairs = sorted(df.loc[df["condition"] == "positive", "context_id"].unique())
+    out, mats = {}, {}
+    for group, opposite in (("positive", "negative"), ("negative", "positive")):
+        sub = df[df["image_group"] == group]
+        conflicting = sub[sub["condition"] == opposite]
+        neutral = sub[sub["condition"] == "neutral"]
+        flips = (conflicting.assign(f=conflicting["polarity"] == opposite)
+                 .pivot_table(index="photo", columns="context_id", values="f", aggfunc="mean")[pairs])
+        base = (neutral["polarity"] == opposite).groupby(neutral["photo"]).mean()
+        mats[group] = (flips.to_numpy(float), base.reindex(flips.index).to_numpy(float))
+        out[group] = {"n": int(len(conflicting)), "n_photos": int(len(flips)),
+                      "conflicting_context_flips": float(flips.to_numpy().mean()),
+                      "neutral_context_flips": float(base.mean()),
+                      "unparsed_rate": float((sub["polarity"] == "other").mean())}
+
+    def gap(rows_p, rows_n, cols):
+        (fp, bp), (fn, bn) = mats["positive"], mats["negative"]
+        return ((fp[rows_p][:, cols].mean() - bp[rows_p].mean())
+                - (fn[rows_n][:, cols].mean() - bn[rows_n].mean()))
+
+    n_p, n_n, k = len(mats["positive"][0]), len(mats["negative"][0]), len(pairs)
+    rng = np.random.default_rng(seed)
+    boot = [gap(rng.integers(0, n_p, n_p), rng.integers(0, n_n, n_n), rng.integers(0, k, k))
+            for _ in range(n_boot)]
+    out["gap"] = {"estimate": float(gap(np.arange(n_p), np.arange(n_n), np.arange(k))),
+                  "ci95_crossed": [float(x) for x in np.percentile(boot, [2.5, 97.5])],
+                  "n_boot": n_boot, "seed": seed}
+    return out
+
+
 def _analyze_generate(df: pd.DataFrame, model_name: str, stem: str,
                       prior: dict | None = None) -> dict:
-    """Override rate computed on generated answers, per image group.
+    """Override rates and the override gap computed on generated answers.
 
     Labels are re-parsed from the stored text, so a parquet written by an older parser is scored by
-    the current one.
+    the current one. Reported twice: the strict 13-label parse, and with SYNONYM_POLARITY.
     """
     parsed = df["generated"].fillna("").map(parse_generated)
     df = df.assign(generated_label=parsed.str[0], generated_polarity=parsed.str[1])
-    summary = {}
-    for group in ("positive", "negative"):
-        sub = df[df["image_group"] == group]
-        if sub.empty:
-            continue
-        opposite = "negative" if group == "positive" else "positive"
-        conflicting = sub[sub["condition"] == opposite]
-        neutral = sub[sub["condition"] == "neutral"]
-        summary[group] = {
-            "n": int(len(conflicting)),
-            "conflicting_context_flips": float(
-                (conflicting["generated_polarity"] == opposite).mean()) if len(conflicting) else None,
-            "neutral_context_flips": float(
-                (neutral["generated_polarity"] == opposite).mean()) if len(neutral) else None,
-            "unparsed_rate": float((sub["generated_label"] == "other").mean()),
-        }
+    results = {"strict": generation_flips(df, synonyms=False),
+               "synonyms": generation_flips(df, synonyms=True)}
     metrics = {"run": run_stamp(), "git": git_hash(), "model": model_name,
-               "n_rows": int(len(df)), "per_group": summary, "versions": _versions()}
+               "n_rows": int(len(df)), **results, "versions": _versions()}
     metrics = _keep_run_provenance(metrics, prior)
     save_json(metrics, STAGE_F_DIR / f"{stem}_metrics.json")
     print(f"\nStage F controls [generation] — {model_name}, {len(df)} generations")
-    for group, m in summary.items():
-        print(f"  {group:8s} images: conflicting context flips the generated answer "
-              f"{_fmt(m['conflicting_context_flips'], '.1%')} vs neutral "
-              f"{_fmt(m['neutral_context_flips'], '.1%')} "
-              f"(unparsed {_fmt(m['unparsed_rate'], '.1%')}, n={m['n']})")
-    worst = max((m["unparsed_rate"] for m in summary.values()), default=0.0)
+    for parse, r in results.items():
+        print(f"  parse={parse}")
+        for group in ("positive", "negative"):
+            m = r[group]
+            print(f"    {group:8s} images: conflicting context flips the generated answer "
+                  f"{_fmt(m['conflicting_context_flips'], '.1%')} vs neutral "
+                  f"{_fmt(m['neutral_context_flips'], '.1%')} "
+                  f"(unparsed {_fmt(m['unparsed_rate'], '.1%')}, n={m['n']})")
+        g = r["gap"]
+        print(f"    corrected gap {g['estimate']:+.1%}  crossed [{g['ci95_crossed'][0]:+.1%},"
+              f"{g['ci95_crossed'][1]:+.1%}]")
+    worst = max(results["synonyms"][g]["unparsed_rate"] for g in ("positive", "negative"))
     if worst > UNPARSED_CEILING:
-        print(f"\n!! {worst:.1%} of generations matched no label (ceiling {UNPARSED_CEILING:.0%}). "
-              f"The flip rates above are NOT interpretable -- the run measured truncated or "
-              f"non-committal text, not the model's answer. Raise --max-new-tokens and re-run.\n")
+        print(f"\n!! {worst:.1%} of generations matched no label even with synonyms (ceiling "
+              f"{UNPARSED_CEILING:.0%}). The flip rates above are NOT interpretable -- the run "
+              f"measured truncated or non-committal text, not the model's answer.\n")
     print(f"  data -> {STAGE_F_DIR / (stem + '.parquet')}")
     return metrics
 

@@ -222,6 +222,20 @@ def test_generation_parser_takes_the_earliest_label_and_matches_forced_choice_po
     assert parse_generated(text) == (label, polarity)
 
 
+@pytest.mark.parametrize("text, strict, synonyms", [
+    # The committed answer is off the 13-label list; strict parsing falls back to an earlier label.
+    ("The image shows radiant joy, but the person is feeling **grief**.",
+     ("joy", "positive"), ("grief", "negative")),
+    ("**Profound grief or sorrow**.", ("other", "other"), ("grief", "negative")),
+    ("Grief.", ("other", "other"), ("grief", "negative")),
+    ("The emotion is **compassion**.", ("other", "other"), ("other", "other")),
+])
+def test_generation_parser_synonyms_only_extend_the_vocabulary(text, strict, synonyms):
+    from src.experiments.stage_f_controls import parse_generated
+    assert parse_generated(text) == strict
+    assert parse_generated(text, synonyms=True) == synonyms
+
+
 def test_mid_valence_pool_is_one_row_per_photo_and_deterministic():
     from src.experiments.stage_f_controls import select_mid_valence_pool
     df = pd.DataFrame({"image_path": [f"p{k // 2}" for k in range(40)],

@@ -71,6 +71,7 @@ Each command reads `results/` and was checked against a fresh rehydrated copy of
 | Balanced label subsets (Sec. 4.3) | `python -m src.experiments.analyze_label_balance` |
 | Tables 7–8 (patching intervals) | `python -m src.experiments.patching_intervals` |
 | Wording robustness (Table 6) | `python -m src.experiments.stage_f_controls --reanalyze controls_frame_qwen` and `... controls_question_qwen` |
+| Generated answers (appendix): flip rates, override gap, strict and synonym parses | `python -m src.experiments.stage_f_controls --reanalyze controls_generate_qwen` |
 | Person grounding (App. A) | `python -m src.experiments.stage_f_controls --reanalyze controls_person_box_qwen` and `... controls_person_crop_qwen` |
 | Probe localization (Table 11) | `python -m src.experiments.analyze_stage_a` |
 
