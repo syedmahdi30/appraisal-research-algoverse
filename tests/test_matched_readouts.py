@@ -47,26 +47,34 @@ def test_corrected_category_gap_point_estimate(grid):
 
 
 def test_shared_pairs_are_drawn_once_for_both_groups():
-    """The same six pairs appear in both groups, so a replicate must resample them jointly."""
+    """The same six pairs appear in both groups, so a replicate must resample them jointly, and a
+    pair's two members together; the varied bank resamples each arm within its own sentences."""
     from src.experiments.analyze_matched_readouts import _replicate
-    g = lambda: {"neg": np.zeros((5, 6)), "pos": np.zeros((5, 6)), "neutral": np.zeros((5, 2)),
-                 "context_ids": [f"mp{i}" for i in range(6)]}
+
+    def g(neg_ids, pos_ids):
+        return {"neg": np.zeros((5, len(neg_ids))), "pos": np.zeros((5, len(pos_ids))),
+                "neutral": np.zeros((5, 2)), "neg_ids": neg_ids, "pos_ids": pos_ids,
+                "paired": neg_ids == pos_ids}
+    mp = [f"mp{i}" for i in range(6)]
     rng = np.random.default_rng(1)
     for _ in range(20):
-        Pd, Nd = _replicate(rng, g(), g(), True, True)
-        assert list(Pd[2]) == list(Nd[2]) and list(Pd[3]) == list(Nd[3])
-    P, N = g(), g()
-    N["context_ids"] = [f"p{i}" for i in range(6)]   # varied set: different sentences per group
-    draws = [_replicate(rng, P, N, True, False) for _ in range(20)]
-    assert any(list(a[2]) != list(b[2]) for a, b in draws)
+        Pd, Nd = _replicate(rng, g(mp, mp), g(mp, mp), True, True)
+        assert list(Pd[2][0]) == list(Pd[2][1]) == list(Nd[2][0])
+        assert list(Pd[3]) == list(Nd[3])
+    n, p = [f"n{i}" for i in range(6)], [f"p{i}" for i in range(6)]
+    draws = [_replicate(rng, g(n, p), g(n, p), True, False) for _ in range(20)]
+    assert all(max(a[2][0]) < 6 and max(a[2][1]) < 6 for a, _ in draws)
+    assert any(list(a[2][0]) != list(b[2][1]) for a, b in draws)
 
 
 @needs_matched
-def test_within_item_reverses_on_negative_images(grid):
-    """The reason the within-item contrast cannot carry a valence claim: it tracks conflict."""
-    for value in ("valence", "sum_lo", "best_lo"):
-        assert grid[value]["within_pos"]["estimate"] > 0
-        assert grid[value]["within_neg"]["estimate"] < 0
+def test_varied_bank_reproduces_the_published_crossed_gap_interval_shape():
+    """Each varied arm resamples only its own six sentences: no all-NaN draws, finite intervals."""
+    from src.experiments.analyze_matched_readouts import add_readouts, category_gap
+    df = pd.read_parquet("results/stage_f/conflict_qwen.parquet")
+    c = category_gap(add_readouts(df[df["condition"] != "none"]), ("z0", "z1"), n_boot=500)
+    assert c["estimate"] == pytest.approx(0.2171, abs=1e-3)
+    assert np.isfinite(c["ci95_crossed"]).all()
 
 
 # --------------------------------------------------------------------------- equal-room estimator

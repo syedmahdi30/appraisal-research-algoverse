@@ -1,0 +1,62 @@
+{
+  "run": "20260822T010706Z",
+  "git": "1427a3c",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "max_side": 1344,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 262,
+    "prompt_tokens_with_image": 278,
+    "prompt_tokens_text_only": 16,
+    "image_token_fraction": 0.9424460431654677,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.5735466260441697,
+    "mean_valence_negative_images": -0.9879897618503073,
+    "discriminability_gap": 1.561536387894477,
+    "auc": 0.9864888888888889,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -1.1535543135530868,
+    "rise_neg_img_pos_ctx": 0.7711813399691663,
+    "congruent_pos_img_pos_ctx": 0.3166414270428054,
+    "congruent_neg_img_neg_ctx": -0.017317286557841396,
+    "asymmetry_index": 0.38237297358392053,
+    "asymmetry_ci95": [
+      0.2371088632383265,
+      0.529712437850472
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 3963.0,
+    "mannwhitney_p_greater": 7.702857360327861e-06,
+    "valence_bounds_p5_p95": [
+      -0.9999997646990375,
+      0.9999891877271619
+    ],
+    "headroom_norm_pull_drop": 0.712296190842884,
+    "headroom_norm_pull_rise": 0.39838208766276634,
+    "headroom_norm_asymmetry": 0.31391410318011764,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.382 valence (CI +0.237,+0.530); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.7634408602150539,
+    "pos_ctx_overrides_neg_img": 0.3777777777777778,
+    "dominance_gap": 0.38566308243727604,
+    "dominance_gap_ci95": [
+      0.2864650537634409,
+      0.4811827956989248
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {}
+}

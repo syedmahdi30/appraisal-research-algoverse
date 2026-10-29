@@ -1,0 +1,51 @@
+{
+  "run": "20260823T185850Z",
+  "git": "ecf7b02",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "bank": "minimal",
+  "keyed_by": "model + bank (no image in this pass; --max-side cannot affect it)",
+  "neutral_baseline": -0.9964003944018573,
+  "none_baseline": -0.995302342564969,
+  "pos_effect": 1.9963985194076546,
+  "neg_effect": -0.00359304033556875,
+  "pos_raw": 0.9999981250057971,
+  "neg_raw": -0.9999934347374261,
+  "text_only_ratio_vs_neutral": 0.0017997610700667271,
+  "text_only_ratio_raw": 0.9999953097228348,
+  "reference_ratio": 0.9999953097228348,
+  "per_base_run": [
+    {
+      "base_run": "conflict_qwen3-vl-8b-instruct_minimal_metrics.json",
+      "max_side": null,
+      "image_tokens": 262,
+      "image_conditioned_ratio": 4.598698371279762,
+      "verdict": "CROSS-MODAL amplification (image inflates the ratio)"
+    }
+  ],
+  "tokenization_multi_token": {},
+  "readouts": {
+    "saturation_frac": 0.8666666666666667,
+    "n_rows": 15,
+    "bounded_valence": {
+      "pos_raw": 0.9999981250057971,
+      "neg_raw": -0.9999934347374261,
+      "neutral_baseline": -0.9964003944018573,
+      "ratio_raw": 0.9999953097228348,
+      "pos_vs_neutral": 1.9963985194076543,
+      "neg_vs_neutral": -0.0035930403355687313,
+      "ratio_vs_neutral": 0.0017997610700667178,
+      "mirror_contrast_raw": -4.690268371021489e-06
+    },
+    "unbounded_margin": {
+      "pos_raw": 15.804687443428397,
+      "neg_raw": -16.132812147733222,
+      "neutral_baseline": -8.187500049360096,
+      "ratio_raw": 1.0207612270397197,
+      "pos_vs_neutral": 23.992187492788496,
+      "neg_vs_neutral": -7.945312098373126,
+      "ratio_vs_neutral": 0.33116247114863145,
+      "mirror_contrast_raw": 0.328124704304825
+    }
+  },
+  "reanalyzed": "20260823T192157Z"
+}

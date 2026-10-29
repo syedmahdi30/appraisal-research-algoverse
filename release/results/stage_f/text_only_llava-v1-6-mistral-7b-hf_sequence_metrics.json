@@ -1,0 +1,132 @@
+{
+  "run": "20260823T225456Z",
+  "git": "062c377",
+  "model": "llava-hf/llava-v1.6-mistral-7b-hf",
+  "score_mode": "sequence",
+  "score_rule": "sum of teacher-forced conditional token log probabilities",
+  "neutral_baseline": 0.1562663888290702,
+  "pos_effect": 0.6448377925217479,
+  "neg_effect": -0.8282613010527481,
+  "pos_raw": 0.8011041813508181,
+  "neg_raw": -0.671994912223678,
+  "text_only_ratio_vs_neutral": 1.2844490671269302,
+  "text_only_ratio_raw": 0.8388358566429692,
+  "image_conditioned_ratio": 3.3218657695555853,
+  "tokenization_multi_token": {
+    "anger": {
+      "ids": [
+        28705,
+        11217
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "boredom": {
+      "ids": [
+        28705,
+        19739,
+        300
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "disgust": {
+      "ids": [
+        28705,
+        21536
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "fear": {
+      "ids": [
+        28705,
+        4813
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "guilt": {
+      "ids": [
+        28705,
+        19150
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "joy": {
+      "ids": [
+        28705,
+        10186
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "pride": {
+      "ids": [
+        28705,
+        14384
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "relief": {
+      "ids": [
+        28705,
+        10853
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "sadness": {
+      "ids": [
+        28705,
+        7456,
+        1467
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "shame": {
+      "ids": [
+        28705,
+        14717
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "surprise": {
+      "ids": [
+        28705,
+        8982
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "trust": {
+      "ids": [
+        28705,
+        4893
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "neutral": {
+      "ids": [
+        28705,
+        14214
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    }
+  },
+  "sensitivity_content_mean": {
+    "neutral_baseline": -0.9615270386397254,
+    "pos_effect": 0.5782368495082483,
+    "neg_effect": -0.029731689278757006,
+    "pos_raw": -0.3832901891314772,
+    "neg_raw": -0.9912587279184825,
+    "text_only_ratio_vs_neutral": 0.05141783908106482,
+    "text_only_ratio_raw": 2.5861834088804665
+  }
+}

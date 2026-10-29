@@ -1,0 +1,65 @@
+{
+  "run": "20260716T094005Z",
+  "layer": 18,
+  "tap": "hook_attn_out",
+  "seed": 0,
+  "n_captioned": 1000,
+  "n_skipped_unreadable": 0,
+  "caption_prompt": "<start_of_turn>user\n<start_of_image>Describe this image in one sentence.<end_of_turn>\n<start_of_turn>model",
+  "max_new_tokens": 64,
+  "sample_captions": [
+    "A baseball player in a gray uniform is swinging a bat powerfully at a pitched ball, while a catcher in blue gear prepares to catch the ball in a nighttime stadium setting.",
+    "A smiling Derek Jeter, wearing a New York Yankees uniform, is shown swinging a baseball bat at the plate during a game, with a blurred crowd of spectators in the background.",
+    "A stressed-looking woman in a business suit is being aggressively confronted by a stern-faced man in a suit, who is pointing emphatically at her.",
+    "A cyclist speeds down a city street with painted bike lanes, a bus in the background, and pedestrians walking along the sidewalk.",
+    "A blurred, silhouetted woman walks with a vibrant, rainbow-colored umbrella under a rainy sky, suggesting a gloomy and wet day.",
+    "A middle-aged man with a beard and glasses is seated at a table with a laptop, gesturing while appearing to be engaged in a discussion at a conference or meeting.",
+    "A young boy in a Star Wars t-shirt chases a pink soccer ball on a grassy field with a girl in goalie gear and a soccer goal in the background.",
+    "A young, blonde tennis player with a determined expression is holding her racquet after a match, with a blurred background of spectators and the tennis court.",
+    "A bustling boardwalk scene at dusk features a large crowd of people strolling along the wooden planks, lined with shops and attractions under a cloudy sky.",
+    "A smiling woman embraces two young daughters, creating a warm and loving family portrait. \n\nWould you like me to describe any specific details in the image, like their clothing or expressions?"
+  ],
+  "readout": {
+    "pleasantness": {
+      "image": {
+        "n": 1000,
+        "pearson": 0.49856053963299096,
+        "spearman": 0.48211627434322835
+      },
+      "caption": {
+        "n": 1000,
+        "pearson": 0.40490333722335803,
+        "spearman": 0.3792361507857833
+      },
+      "semipartial": {
+        "n": 1000,
+        "part_r_image_unique": 0.3095732600925112,
+        "p": 1.494807139120364e-27,
+        "r_iv": 0.48211627434322835,
+        "r_cv": 0.3792361507857833,
+        "r_ic": 0.6531542017495262
+      }
+    },
+    "unpleasantness": {
+      "image": {
+        "n": 1000,
+        "pearson": -0.4554982760035127,
+        "spearman": -0.44200714550198394
+      },
+      "caption": {
+        "n": 1000,
+        "pearson": -0.40062668950875807,
+        "spearman": -0.35591789429985005
+      },
+      "semipartial": {
+        "n": 1000,
+        "part_r_image_unique": -0.2791630918440973,
+        "p": 4.860045988039669e-22,
+        "r_iv": -0.44200714550198394,
+        "r_cv": -0.35591789429985005,
+        "r_ic": 0.6377257316696637
+      }
+    }
+  },
+  "verdict": "caption reproduces ~79% of the image read-out (r_cap=+0.38 vs r_img=+0.48); image retains a SIGNIFICANT unique contribution beyond a neutral caption (semipartial r=+0.31, p=0.000) \u2014 but caption lossiness confounds this residual, so it is an upper bound, NOT proof of non-verbal shared geometry"
+}

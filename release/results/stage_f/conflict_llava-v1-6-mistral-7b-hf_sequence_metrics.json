@@ -1,0 +1,192 @@
+{
+  "run": "20260823T225435Z",
+  "git": "062c377",
+  "model": "llava-hf/llava-v1.6-mistral-7b-hf",
+  "score_mode": "sequence",
+  "score_rule": "sum of teacher-forced conditional token log probabilities",
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_skipped": 0,
+  "n_rows": 2250,
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -0.47830113660824963,
+    "rise_neg_img_pos_ctx": 0.3742849404547716,
+    "congruent_pos_img_pos_ctx": 0.143985690509174,
+    "congruent_neg_img_neg_ctx": -0.09359591647665755,
+    "asymmetry_index": 0.10401619615347801,
+    "asymmetry_ci95": [
+      0.05518673464235838,
+      0.15367215047496577
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 3809.0,
+    "mannwhitney_p_greater": 9.058353412594158e-05,
+    "valence_bounds_p5_p95": [
+      -0.7748580395137878,
+      0.9357490642488493
+    ],
+    "headroom_norm_pull_drop": 0.3386078403007629,
+    "headroom_norm_pull_rise": 0.26264987167338916,
+    "headroom_norm_asymmetry": 0.07595796862737375,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.104 valence (CI +0.055,+0.154); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.21236559139784944,
+    "pos_ctx_overrides_neg_img": 0.3583333333333334,
+    "dominance_gap": -0.14596774193548395,
+    "dominance_gap_ci95": [
+      -0.25485887096774196,
+      -0.026512096774193614
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {
+    "anger": {
+      "ids": [
+        28705,
+        11217
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "boredom": {
+      "ids": [
+        28705,
+        19739,
+        300
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "disgust": {
+      "ids": [
+        28705,
+        21536
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "fear": {
+      "ids": [
+        28705,
+        4813
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "guilt": {
+      "ids": [
+        28705,
+        19150
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "joy": {
+      "ids": [
+        28705,
+        10186
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "pride": {
+      "ids": [
+        28705,
+        14384
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "relief": {
+      "ids": [
+        28705,
+        10853
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "sadness": {
+      "ids": [
+        28705,
+        7456,
+        1467
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "shame": {
+      "ids": [
+        28705,
+        14717
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "surprise": {
+      "ids": [
+        28705,
+        8982
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "trust": {
+      "ids": [
+        28705,
+        4893
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "neutral": {
+      "ids": [
+        28705,
+        14214
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    }
+  },
+  "sensitivity_content_mean": {
+    "score_rule": "mean conditional log probability over content tokens after shared prefix",
+    "asymmetry_vs_floor": {
+      "drop_pos_img_neg_ctx": -0.11718834203643617,
+      "rise_neg_img_pos_ctx": 0.020923910095106142,
+      "congruent_pos_img_pos_ctx": 0.15843468793958995,
+      "congruent_neg_img_neg_ctx": -0.0037857336551689437,
+      "asymmetry_index": 0.09626443194133003,
+      "asymmetry_ci95": [
+        0.07499070039751776,
+        0.11745833410110372
+      ],
+      "symmetric": false,
+      "mannwhitney_u": 5140.0,
+      "mannwhitney_p_greater": 1.0944887630745326e-18,
+      "valence_bounds_p5_p95": [
+        -0.9961729833920505,
+        -0.4837916624469186
+      ],
+      "headroom_norm_pull_drop": 0.7277208345049215,
+      "headroom_norm_pull_rise": 0.04240844693342855,
+      "headroom_norm_asymmetry": 0.6853123875714929,
+      "n_pos_images": 75,
+      "n_neg_images": 75,
+      "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.096 valence (CI +0.075,+0.117); negative context moves valence more than the floor alone allows."
+    },
+    "flip_override": {
+      "neg_ctx_overrides_pos_img": 1.0,
+      "pos_ctx_overrides_neg_img": 0.0,
+      "dominance_gap": 1.0,
+      "dominance_gap_ci95": [
+        1.0,
+        1.0
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    }
+  }
+}

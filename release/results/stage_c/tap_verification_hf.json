@@ -1,0 +1,28 @@
+{
+  "run": "20260822T040022Z",
+  "git": "01c8778",
+  "model": "google/gemma-3-4b-it",
+  "layer": 18,
+  "appraisal": "pleasantness",
+  "n_text": 300,
+  "stage_a_reference_r2": 0.6410822618912011,
+  "candidates": {
+    "self_attn": {
+      "r2": -6.263677023740004,
+      "spearman": 0.04108454177609533,
+      "d_model": 2560
+    },
+    "self_attn.o_proj": {
+      "r2": -6.263677023740004,
+      "spearman": 0.04108454177609533,
+      "d_model": 2560
+    },
+    "post_attention_layernorm": {
+      "r2": 0.6344831296464353,
+      "spearman": 0.7753068249262881,
+      "d_model": 2560
+    }
+  },
+  "best_tap": "post_attention_layernorm",
+  "verdict": "MATCH \u2014 'post_attention_layernorm' reproduces the Stage A probe (r^2 0.634 vs reference 0.641); use --tap post_attention_layernorm"
+}

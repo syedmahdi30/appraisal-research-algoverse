@@ -1,0 +1,101 @@
+{
+  "run": "20260822T210847Z",
+  "git": "b7f0c32",
+  "critical_layer": 18,
+  "patch_layers": [
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "n_pairs": 60,
+  "n_skipped": 0,
+  "n_segmentation_dropped": 0,
+  "context_polarity": "neutral",
+  "context": "This photo was taken on a weekday.",
+  "recovery": {
+    "pos_probe": 4.607162765661875,
+    "neg_probe": 2.5748732964197796,
+    "pos_val": 0.875779073996353,
+    "neg_val": -0.8512697754068024,
+    "image": {
+      "probe": 0.748675023302869,
+      "probe_ci95": [
+        0.7126627905966131,
+        0.7891881302281505
+      ],
+      "val": 0.960115377286739,
+      "val_ci95": [
+        0.9207666395108489,
+        0.9964599765221465
+      ]
+    },
+    "context": {
+      "probe": 0.027871385420611332,
+      "probe_ci95": [
+        0.017466489015760218,
+        0.03849692758627603
+      ],
+      "val": 0.009137786847012132,
+      "val_ci95": [
+        -0.0006940430163443906,
+        0.021357324602926137
+      ]
+    },
+    "question": {
+      "probe": 0.38966277435536234,
+      "probe_ci95": [
+        0.36715493302628394,
+        0.41245608067133965
+      ],
+      "val": 0.19897248618022523,
+      "val_ci95": [
+        0.14833887674066995,
+        0.2564886111890482
+      ]
+    },
+    "structure": {
+      "probe": 0.4566460467685402,
+      "probe_ci95": [
+        0.43795228188191093,
+        0.4751606964056919
+      ],
+      "val": 0.17330462412440925,
+      "val_ci95": [
+        0.1248843926051918,
+        0.2269216095390616
+      ]
+    },
+    "text_all": {
+      "probe": 0.8736173181233231,
+      "probe_ci95": [
+        0.8585582378134667,
+        0.8877146456520577
+      ],
+      "val": 0.7408678387728355,
+      "val_ci95": [
+        0.6646737380813456,
+        0.8157260710028198
+      ]
+    },
+    "all": {
+      "probe": 1.0070014161184382,
+      "probe_ci95": [
+        1.0018122607706608,
+        1.0121328799694076
+      ],
+      "val": 0.9999528086851692,
+      "val_ci95": [
+        0.9937099471571805,
+        1.005128644648818
+      ]
+    },
+    "n_pairs": 60
+  },
+  "probe_valid": true,
+  "verdict": "VISUAL VALENCE LIVES IN THE IMAGE TOKENS: patching image tokens recovers 75% [71%,79%] of the image-driven read-out gap, vs all-text 87%. Sanity: patching every token bar the read-out query recovers 101% (expect ~100%). Mirror of the same-image result, where image tokens were inert for the TEXT context delta.",
+  "design": "CROSS-IMAGE: donor=positive image, recipient=negative image, SAME context \u2192 identical input_ids, all positions (incl. context) patchable. recovery = (patched-neg_img)/(pos_img-neg_img) at L18 read-out, resid_post over band [13, 14, 15, 16, 17].",
+  "stack": "raw_hf",
+  "tap": "post_attention_layernorm"
+}

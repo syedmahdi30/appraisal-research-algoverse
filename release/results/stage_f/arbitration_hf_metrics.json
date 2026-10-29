@@ -1,0 +1,49 @@
+{
+  "run": "20260823T043919Z",
+  "git": "4142a21",
+  "stack": "raw_hf",
+  "layer": 18,
+  "betas": [
+    -3,
+    -2,
+    -1,
+    1,
+    2,
+    3
+  ],
+  "seed": 0,
+  "n_dir": 1200,
+  "n_incongruent_cells": 150,
+  "n_skipped": 0,
+  "n_forwards": 1050,
+  "dmu_norm": 352.3135681152344,
+  "site_check": {
+    "published": 352.8188,
+    "rel_err": 0.0014319868577457753,
+    "ok": true
+  },
+  "arbitration": {
+    "valence": {
+      "-3": -0.6892905782901388,
+      "-2": -0.5894654286835878,
+      "-1": -0.36198598139637295,
+      "1": 0.45199664460253425,
+      "2": 0.8993379223396236,
+      "3": 1.1704910567806024
+    },
+    "probe": {
+      "-3": 0.0,
+      "-2": 0.0,
+      "-1": 0.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 0.0
+    },
+    "valence_slope": 0.3346762226163413,
+    "probe_slope": 0.0
+  },
+  "stage_d_slope_hf": 0.33602,
+  "fraction_of_no_conflict_slope": 0.9960009005902664,
+  "published_conflict_slope": 0.215,
+  "note": "PRIMARY = behavioral valence, which is downstream of the resid_post injection. The probe read-out at attn_out L18 is UPSTREAM of it and is therefore invariant to steering by construction \u2014 recorded to demonstrate that, not to score."
+}

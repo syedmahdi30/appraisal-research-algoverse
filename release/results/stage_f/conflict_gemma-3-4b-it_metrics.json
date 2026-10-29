@@ -1,0 +1,62 @@
+{
+  "run": "20260822T012352Z",
+  "git": "5b953ba",
+  "model": "google/gemma-3-4b-it",
+  "max_side": null,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 259,
+    "prompt_tokens_with_image": 277,
+    "prompt_tokens_text_only": 18,
+    "image_token_fraction": 0.9350180505415162,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.9164861853181812,
+    "mean_valence_negative_images": -0.757756316866222,
+    "discriminability_gap": 1.6742425021844032,
+    "auc": 0.9822222222222222,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -0.7224026055012616,
+    "rise_neg_img_pos_ctx": 0.40385443220556183,
+    "congruent_pos_img_pos_ctx": 0.05549444380690055,
+    "congruent_neg_img_neg_ctx": -0.012089232765049578,
+    "asymmetry_index": 0.31854817329569973,
+    "asymmetry_ci95": [
+      0.18063553302413626,
+      0.4508009911229085
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 3685.0,
+    "mannwhitney_p_greater": 0.0005230702547565238,
+    "valence_bounds_p5_p95": [
+      -0.9917906528741063,
+      0.9999929037692351
+    ],
+    "headroom_norm_pull_drop": 62.7163718608643,
+    "headroom_norm_pull_rise": 0.259050939489638,
+    "headroom_norm_asymmetry": 62.45732092137466,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.319 valence (CI +0.181,+0.451); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.43548387096774194,
+    "pos_ctx_overrides_neg_img": 0.313888888888889,
+    "dominance_gap": 0.12159498207885294,
+    "dominance_gap_ci95": [
+      -0.003857526881720495,
+      0.23683019713261647
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {}
+}

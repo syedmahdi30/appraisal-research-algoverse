@@ -1,0 +1,285 @@
+{
+  "run": "20260822T004152Z",
+  "git": "1427a3c",
+  "n_boot": 2000,
+  "seed": 0,
+  "readout_note": "margin = logsumexp(lp_pos) - logsumexp(lp_neg) = log P(pos)/P(neg); unbounded log-odds. Margin contrasts are NOT in valence units.",
+  "models": {
+    "Gemma-3-4B": {
+      "parquet": "/content/appraisal-research-algoverse/results/stage_f/conflict_pilot.parquet",
+      "bounded_valence": {
+        "readout": "valence",
+        "drop": -0.5978757125567997,
+        "rise": 0.33295448115667936,
+        "asymmetry_index": 0.26492123140012036,
+        "ratio_abs_drop_over_rise": 1.7956680158794907,
+        "ci95_image_only": [
+          0.09463728285030842,
+          0.43138938803217136
+        ],
+        "ci95_crossed": [
+          -0.013347928838392437,
+          0.5271942487632248
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "unbounded_margin": {
+        "readout": "margin",
+        "drop": -3.038279085620118,
+        "rise": 3.9963878257612406,
+        "asymmetry_index": -0.9581087401411228,
+        "ratio_abs_drop_over_rise": 0.7602563159748841,
+        "ci95_image_only": [
+          -2.3129106026264195,
+          0.38095817734921683
+        ],
+        "ci95_crossed": [
+          -3.1094743833698586,
+          1.2055025153534105
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override": {
+        "neg_ctx_overrides_pos_img": 0.8266666666666667,
+        "pos_ctx_overrides_neg_img": 0.21555555555555556,
+        "dominance_gap": 0.6111111111111112,
+        "ci95_image_only": [
+          0.5333333333333333,
+          0.6866666666666666
+        ],
+        "ci95_crossed": [
+          0.44216666666666665,
+          0.7622222222222221
+        ],
+        "crossed_clears_zero": true,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    },
+    "Qwen3-VL-8B": {
+      "parquet": "/content/appraisal-research-algoverse/results/stage_f/conflict_qwen.parquet",
+      "bounded_valence": {
+        "readout": "valence",
+        "drop": -1.1555412171779098,
+        "rise": 0.7616010128495022,
+        "asymmetry_index": 0.3939402043284076,
+        "ratio_abs_drop_over_rise": 1.5172527316560345,
+        "ci95_image_only": [
+          0.24930020032704064,
+          0.5416400839294748
+        ],
+        "ci95_crossed": [
+          -0.18702103463466116,
+          0.8907451140752383
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "unbounded_margin": {
+        "readout": "margin",
+        "drop": -10.495744560631023,
+        "rise": 12.062368619791284,
+        "asymmetry_index": -1.5666240591602616,
+        "ratio_abs_drop_over_rise": 0.8701230157574666,
+        "ci95_image_only": [
+          -2.797419716950016,
+          -0.4266849255827354
+        ],
+        "ci95_crossed": [
+          -4.994661845469636,
+          1.8110249648482295
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override": {
+        "neg_ctx_overrides_pos_img": 0.7755555555555556,
+        "pos_ctx_overrides_neg_img": 0.37777777777777777,
+        "dominance_gap": 0.3977777777777778,
+        "ci95_image_only": [
+          0.31777777777777777,
+          0.4733333333333333
+        ],
+        "ci95_crossed": [
+          0.07333333333333336,
+          0.6688888888888889
+        ],
+        "crossed_clears_zero": true,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    },
+    "LLaVA-1.5-7B": {
+      "parquet": "/content/appraisal-research-algoverse/results/stage_f/conflict_llava.parquet",
+      "bounded_valence": {
+        "readout": "valence",
+        "drop": -0.5163816253695889,
+        "rise": 0.5341035458910726,
+        "asymmetry_index": -0.01772192052148369,
+        "ratio_abs_drop_over_rise": 0.9668193168575256,
+        "ci95_image_only": [
+          -0.08060489308236438,
+          0.04885383048143833
+        ],
+        "ci95_crossed": [
+          -0.44721326259080163,
+          0.3673019606913087
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "unbounded_margin": {
+        "readout": "margin",
+        "drop": -1.8078795137459398,
+        "rise": 1.7119769449247728,
+        "asymmetry_index": 0.09590256882116699,
+        "ratio_abs_drop_over_rise": 1.0560186100084317,
+        "ci95_image_only": [
+          -0.08321357272524423,
+          0.26827154689732635
+        ],
+        "ci95_crossed": [
+          -1.0904577245916987,
+          1.1595439283414937
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override": {
+        "neg_ctx_overrides_pos_img": 0.24,
+        "pos_ctx_overrides_neg_img": 0.41555555555555557,
+        "dominance_gap": -0.17555555555555558,
+        "ci95_image_only": [
+          -0.2577777777777778,
+          -0.08661111111111142
+        ],
+        "ci95_crossed": [
+          -0.4955555555555555,
+          0.13111111111111112
+        ],
+        "crossed_clears_zero": false,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    },
+    "Gemma-3-4B (minimal pairs)": {
+      "parquet": "results/stage_f/conflict_minimal.parquet",
+      "bounded_valence": {
+        "readout": "valence",
+        "drop": -0.6291378960139089,
+        "rise": 0.2994831807938569,
+        "asymmetry_index": 0.329654715220052,
+        "ratio_abs_drop_over_rise": 2.100745338506883,
+        "ci95_image_only": [
+          0.15123167918008532,
+          0.5007879634217396
+        ],
+        "ci95_crossed": [
+          0.09545385191511213,
+          0.5644162213130057
+        ],
+        "crossed_clears_zero": true,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "unbounded_margin": {
+        "readout": "margin",
+        "drop": -3.148912861726359,
+        "rise": 4.083925054387678,
+        "asymmetry_index": -0.9350121926613193,
+        "ratio_abs_drop_over_rise": 0.7710505995557477,
+        "ci95_image_only": [
+          -2.427443484829917,
+          0.4975090296601568
+        ],
+        "ci95_crossed": [
+          -2.8184104875107963,
+          0.9013311148436091
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          75,
+          75
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override": {
+        "neg_ctx_overrides_pos_img": 0.86,
+        "pos_ctx_overrides_neg_img": 0.2,
+        "dominance_gap": 0.6599999999999999,
+        "ci95_image_only": [
+          0.5777777777777777,
+          0.74
+        ],
+        "ci95_crossed": [
+          0.52,
+          0.78
+        ],
+        "crossed_clears_zero": true,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    }
+  }
+}

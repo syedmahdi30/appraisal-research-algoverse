@@ -1,0 +1,71 @@
+{
+  "run": "20260818T231809Z",
+  "git": "04a47df",
+  "layer": 18,
+  "tap": "hook_attn_out",
+  "bank": "minimal",
+  "n_forwards": 15,
+  "asymmetry": {
+    "valence": {
+      "neutral_baseline": 0.07066711741166909,
+      "pos_effect": 0.6662592854472565,
+      "neg_effect": -0.831603051220294,
+      "abs_pos": 0.6662592854472565,
+      "abs_neg": 0.831603051220294,
+      "neg_over_pos_ratio": 1.2481672967034794,
+      "asymmetry_index": 0.16534376577303744,
+      "mannwhitney_p_greater": 0.12012987012987013,
+      "per_pos": [
+        0.9194467565807245,
+        0.5459329272943236,
+        0.9255386678026373,
+        0.8395749624345762,
+        -0.1598341572562878,
+        0.9268965558275659
+      ],
+      "per_neg": [
+        -1.0688022799535708,
+        -0.3954863351427127,
+        -1.0705621705372175,
+        -1.0634933003032117,
+        -1.03782246716523,
+        -0.35345175421982056
+      ]
+    },
+    "probe_readout": {
+      "neutral_baseline": 2.8253984451293945,
+      "pos_effect": 1.8058418035507202,
+      "neg_effect": 0.04884036382039388,
+      "abs_pos": 1.8058418035507202,
+      "abs_neg": 0.04884036382039388,
+      "neg_over_pos_ratio": 0.02704575989123851,
+      "asymmetry_index": -1.7570014397303264,
+      "mannwhitney_p_greater": 1.0,
+      "per_pos": [
+        1.5609569549560547,
+        2.3474831581115723,
+        1.8999600410461426,
+        1.8836588859558105,
+        1.166504144668579,
+        1.976487636566162
+      ],
+      "per_neg": [
+        0.4405241012573242,
+        0.0015845298767089844,
+        -0.035033226013183594,
+        -0.2738933563232422,
+        0.008950233459472656,
+        0.1509099006652832
+      ]
+    }
+  },
+  "image_comparison": {
+    "image_ratio": 3.581310799293137,
+    "text_ratio": 1.2481672967034794,
+    "image_neg": -0.5978757125567998,
+    "image_pos": 0.16694326353211397,
+    "verdict": "CROSS-MODAL AMPLIFICATION \u2014 the image inflates the neg/pos context ratio from 1.25 (text alone) to 3.58 (with image). The negativity asymmetry is NOT just stronger negative sentences; the image amplifies it. Real cross-modal effect \u2014 proceed to the L18 image-vs-context-token attribution."
+  },
+  "tokenization_multi_token": {},
+  "note": "image-ablated context baseline: same prompt as the base pass minus <start_of_image>. Isolates whether the negativity asymmetry is a stimulus property of the context bank (matched here) or cross-modal amplification (needs the image)."
+}

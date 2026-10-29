@@ -1,0 +1,924 @@
+{
+  "run": "20261029T000153Z",
+  "git": "e5e0bbe",
+  "n_boot": 10000,
+  "seed": 0,
+  "matched_parquet": "results/stage_f/conflict_qwen3-vl-8b-instruct_minimal.parquet",
+  "matched": {
+    "published": {
+      "valence": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -1.4781706356769568,
+            "pos_sentence": 0.3065956691048842,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": -0.03241411676296818,
+            "pos_sentence": 0.9817493939096368,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.49642124176732005,
+          "ci95_photo": [
+            0.31547209654407043,
+            0.6697313237268445
+          ],
+          "ci95_crossed": [
+            0.17140681455318219,
+            0.8471177759653276
+          ],
+          "ci95_crossed_neutral": [
+            -0.0019555224510340538,
+            0.9715033766849273
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 1.1480072716435483,
+          "ci95_photo": [
+            0.9366050683914053,
+            1.3517068909406678
+          ],
+          "ci95_crossed": [
+            0.9249307319726628,
+            1.359374316488339
+          ],
+          "ci95_crossed_neutral": [
+            0.3943896388444899,
+            1.7721191706168395
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -0.9492705806366887,
+          "ci95_photo": [
+            -1.0892753204346672,
+            -0.8001906611179154
+          ],
+          "ci95_crossed": [
+            -1.2837180732210423,
+            -0.6071299825109548
+          ],
+          "ci95_crossed_neutral": [
+            -1.2735793107763662,
+            -0.6145465276134415
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "sum_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -12.388868973168023,
+            "pos_sentence": 2.021584173534088,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.8305699994176794,
+            "pos_sentence": 13.514874183210297,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -1.1260052100422744,
+          "ci95_photo": [
+            -2.44963501214029,
+            0.18429132130938697
+          ],
+          "ci95_crossed": [
+            -3.303929703679605,
+            1.1836301974159413
+          ],
+          "ci95_crossed_neutral": [
+            -3.899022811293884,
+            1.5615255558112502
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 8.448543495290046,
+          "ci95_photo": [
+            7.216482494699258,
+            9.645946173905774
+          ],
+          "ci95_crossed": [
+            6.819303230152349,
+            10.065359932432562
+          ],
+          "ci95_crossed_neutral": [
+            3.329076557986456,
+            12.124867665356833
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -10.74908665905604,
+          "ci95_photo": [
+            -11.646984898986034,
+            -9.790346168337889
+          ],
+          "ci95_crossed": [
+            -12.339862880693039,
+            -9.06567806208786
+          ],
+          "ci95_crossed_neutral": [
+            -12.483385143801243,
+            -8.547490534772322
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "best_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -12.697874668487561,
+            "pos_sentence": 1.9230090616568802,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.6976508168022936,
+            "pos_sentence": 13.740879949706429,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -1.0430052812188677,
+          "ci95_photo": [
+            -2.40282747108284,
+            0.30682164074876955
+          ],
+          "ci95_crossed": [
+            -3.2577133463787518,
+            1.2861036468865477
+          ],
+          "ci95_crossed_neutral": [
+            -3.864721122467646,
+            1.6840794330827595
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 8.752856206172414,
+          "ci95_photo": [
+            7.529863967786724,
+            9.947425255518247
+          ],
+          "ci95_crossed": [
+            7.111519197650459,
+            10.370166639559825
+          ],
+          "ci95_crossed_neutral": [
+            3.5516917084815143,
+            12.446331057973897
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -10.886718720370062,
+          "ci95_photo": [
+            -11.84388670782403,
+            -9.867389253280367
+          ],
+          "ci95_crossed": [
+            -12.50834201227698,
+            -9.149283814002128
+          ],
+          "ci95_crossed_neutral": [
+            -12.682126762671526,
+            -8.578601221326537
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "headroom": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -0.9057665807520062,
+            "pos_sentence": -5.300372106597268,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.023055278034446708,
+            "pos_sentence": 0.5068686501212472,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.39889793063075907,
+          "ci95_photo": [
+            0.31974807343529915,
+            0.47124591531486426
+          ],
+          "ci95_crossed": [
+            0.24015211372580855,
+            0.5703297178855986
+          ],
+          "ci95_crossed_neutral": [
+            0.21402407352682562,
+            0.5564634835445094
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "category": {
+        "mirror": {
+          "estimate": 0.23082437275985668,
+          "ci95_photo": [
+            0.12204077060931891,
+            0.33539874551971316
+          ],
+          "ci95_crossed": [
+            0.007166218637992902,
+            0.4664000896057347
+          ],
+          "ci95_crossed_neutral": [
+            -0.07115815412186384,
+            0.5267921146953405
+          ]
+        }
+      }
+    },
+    "z0_only": {
+      "valence": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -1.7373032224911187,
+            "pos_sentence": 0.047463082290722595,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": -0.03278678331171146,
+            "pos_sentence": 0.9813767273608933,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.7559264951302254,
+          "ci95_photo": [
+            0.5835076149242371,
+            0.917393975130481
+          ],
+          "ci95_crossed": [
+            0.4328278121724539,
+            1.1042975990191422
+          ],
+          "ci95_crossed_neutral": [
+            0.4328278121724539,
+            1.1042975990191422
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_pos": {
+          "estimate": 1.6570267946831638,
+          "ci95_photo": [
+            1.4880354943250684,
+            1.8022950675557614
+          ],
+          "ci95_crossed": [
+            1.4714556168304425,
+            1.818969565358108
+          ],
+          "ci95_crossed_neutral": [
+            1.4714556168304425,
+            1.818969565358108
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -0.9477363930150593,
+          "ci95_photo": [
+            -1.091786539857874,
+            -0.7900375127933797
+          ],
+          "ci95_crossed": [
+            -1.2851575298887739,
+            -0.6007878451783458
+          ],
+          "ci95_crossed_neutral": [
+            -1.2851575298887739,
+            -0.6007878451783458
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "sum_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -13.954578778687393,
+            "pos_sentence": 0.45587436801471387,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 1.3481602976809335,
+            "pos_sentence": 14.03246448147355,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -0.07788570278615659,
+          "ci95_photo": [
+            -1.4196263542756664,
+            1.24488317901413
+          ],
+          "ci95_crossed": [
+            -2.2564223592697084,
+            2.2253876932451666
+          ],
+          "ci95_crossed_neutral": [
+            -2.2564223592697084,
+            2.2253876932451666
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 10.951729515781405,
+          "ci95_photo": [
+            9.793745091106906,
+            12.040292917143455
+          ],
+          "ci95_crossed": [
+            9.196464329242497,
+            12.69664934088679
+          ],
+          "ci95_crossed_neutral": [
+            9.196464329242497,
+            12.69664934088679
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -11.271137195909798,
+          "ci95_photo": [
+            -12.149269990882997,
+            -10.298195138127989
+          ],
+          "ci95_crossed": [
+            -12.902592558281931,
+            -9.611401510589095
+          ],
+          "ci95_crossed_neutral": [
+            -12.902592558281931,
+            -9.611401510589095
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "best_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -14.308131704032848,
+            "pos_sentence": 0.3127520261115941,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 1.2503038814580654,
+            "pos_sentence": 14.293533014362199,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.014598689670648923,
+          "ci95_photo": [
+            -1.3832555659062944,
+            1.3985004168427835
+          ],
+          "ci95_crossed": [
+            -2.2030827726750966,
+            2.334945235674658
+          ],
+          "ci95_crossed_neutral": [
+            -2.2030827726750966,
+            2.334945235674658
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 11.2670530684711,
+          "ci95_photo": [
+            10.087027452459582,
+            12.359293110614724
+          ],
+          "ci95_crossed": [
+            9.476422790859798,
+            13.05463609066462
+          ],
+          "ci95_crossed_neutral": [
+            9.476422790859798,
+            13.05463609066462
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -11.468489557337845,
+          "ci95_photo": [
+            -12.407725693867521,
+            -10.43354601232024
+          ],
+          "ci95_crossed": [
+            -13.131534301691504,
+            -9.749902328518578
+          ],
+          "ci95_crossed_neutral": [
+            -13.131534301691504,
+            -9.749902328518578
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "headroom": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -0.904589968531567,
+            "pos_sentence": -8.07638141433866,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.09141371121616013,
+            "pos_sentence": 0.5071984440040639,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.39739152452750315,
+          "ci95_photo": [
+            0.31562218148604804,
+            0.4722499358011549
+          ],
+          "ci95_crossed": [
+            0.23645253516680692,
+            0.5701747635121663
+          ],
+          "ci95_crossed_neutral": [
+            0.23645253516680692,
+            0.5701747635121663
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "category": {
+        "mirror": {
+          "estimate": 0.3759856630824373,
+          "ci95_photo": [
+            0.2720430107526882,
+            0.47464157706093185
+          ],
+          "ci95_crossed": [
+            0.14946012544802864,
+            0.6105801971326164
+          ],
+          "ci95_crossed_neutral": [
+            0.14946012544802864,
+            0.6105801971326164
+          ]
+        }
+      }
+    },
+    "z1_only": {
+      "valence": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -1.2190380488627952,
+            "pos_sentence": 0.5657282559190459,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": -0.0320414502142249,
+            "pos_sentence": 0.9821220604583799,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.2369159884044153,
+          "ci95_photo": [
+            0.007881677610226638,
+            0.45858899647875984
+          ],
+          "ci95_crossed": [
+            -0.12237847285461612,
+            0.6149032684878858
+          ],
+          "ci95_crossed_neutral": [
+            -0.12237847285461612,
+            0.6149032684878858
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 0.6345201802996786,
+          "ci95_photo": [
+            0.2561776664139936,
+            0.9892788648417878
+          ],
+          "ci95_crossed": [
+            0.25397375066168915,
+            0.994419747421766
+          ],
+          "ci95_crossed_neutral": [
+            0.25397375066168915,
+            0.994419747421766
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -0.9508514659415196,
+          "ci95_photo": [
+            -1.087113214190149,
+            -0.8091593498937872
+          ],
+          "ci95_crossed": [
+            -1.280798804313804,
+            -0.6094935694268575
+          ],
+          "ci95_crossed_neutral": [
+            -1.280798804313804,
+            -0.6094935694268575
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "sum_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -10.823159167648646,
+            "pos_sentence": 3.587293979053462,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.312979701154425,
+            "pos_sentence": 12.997283884947041,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -2.1741247172983957,
+          "ci95_photo": [
+            -4.00423451696625,
+            -0.3652096125184105
+          ],
+          "ci95_crossed": [
+            -4.6680422765345595,
+            0.4300893786695648
+          ],
+          "ci95_crossed_neutral": [
+            -4.6680422765345595,
+            0.4300893786695648
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 4.985882670765656,
+          "ci95_photo": [
+            2.6330886450689293,
+            7.21949523136552
+          ],
+          "ci95_crossed": [
+            2.412810011486853,
+            7.490809816855706
+          ],
+          "ci95_crossed_neutral": [
+            2.412810011486853,
+            7.490809816855706
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -9.696631980590274,
+          "ci95_photo": [
+            -10.841536947158554,
+            -8.4721125086383
+          ],
+          "ci95_crossed": [
+            -11.395188343559571,
+            -7.881211886784961
+          ],
+          "ci95_crossed_neutral": [
+            -11.395188343559571,
+            -7.881211886784961
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "best_lo": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -11.087617632942276,
+            "pos_sentence": 3.533266097202167,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.14499775214652194,
+            "pos_sentence": 13.188226885050655,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": -2.100609252108379,
+          "ci95_photo": [
+            -3.9810495794752967,
+            -0.24408222957682021
+          ],
+          "ci95_crossed": [
+            -4.627113613987039,
+            0.557783648250248
+          ],
+          "ci95_crossed_neutral": [
+            -4.627113613987039,
+            0.557783648250248
+          ],
+          "crossed_neutral_excludes_zero": false
+        },
+        "within_pos": {
+          "estimate": 5.2221102622511895,
+          "ci95_photo": [
+            2.8449681561182074,
+            7.4683793825743106
+          ],
+          "ci95_crossed": [
+            2.630372203458314,
+            7.745312604503025
+          ],
+          "ci95_crossed_neutral": [
+            2.630372203458314,
+            7.745312604503025
+          ],
+          "crossed_neutral_excludes_zero": true
+        },
+        "within_neg": {
+          "estimate": -9.769357577484932,
+          "ci95_photo": [
+            -10.98951497719988,
+            -8.465135502972709
+          ],
+          "ci95_crossed": [
+            -11.52078551118417,
+            -7.864063560884841
+          ],
+          "ci95_crossed_neutral": [
+            -11.52078551118417,
+            -7.864063560884841
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "headroom": {
+        "arms": {
+          "positive_images": {
+            "neg_sentence": -0.860882007842138,
+            "pos_sentence": -9.594623901577654,
+            "n_photos": 62
+          },
+          "negative_images": {
+            "neg_sentence": 0.0034558639208529997,
+            "pos_sentence": 0.5065025763179349,
+            "n_photos": 60
+          }
+        },
+        "mirror": {
+          "estimate": 0.35437943152420304,
+          "ci95_photo": [
+            0.26079516548626697,
+            0.43855373068054143
+          ],
+          "ci95_crossed": [
+            0.17012052304092548,
+            0.5444627706602477
+          ],
+          "ci95_crossed_neutral": [
+            0.17012052304092548,
+            0.5444627706602477
+          ],
+          "crossed_neutral_excludes_zero": true
+        }
+      },
+      "category": {
+        "mirror": {
+          "estimate": 0.08566308243727605,
+          "ci95_photo": [
+            -0.05564740143369177,
+            0.22231182795698923
+          ],
+          "ci95_crossed": [
+            -0.15367383512544802,
+            0.33531362007168447
+          ],
+          "ci95_crossed_neutral": [
+            -0.15367383512544802,
+            0.33531362007168447
+          ]
+        }
+      }
+    }
+  },
+  "baseline_profile": {
+    "negative": {
+      "n_photos": 60,
+      "quantiles": {
+        "0.1": -0.9999999698294005,
+        "0.25": -0.9999997929713743,
+        "0.5": -0.9999920506567512,
+        "0.75": -0.9998689505257758,
+        "0.9": -0.9966903695399434
+      },
+      "n_within_0.3": 0
+    },
+    "positive": {
+      "n_photos": 62,
+      "quantiles": {
+        "0.1": 0.02217091274585649,
+        "0.25": 0.1907764476768372,
+        "0.5": 0.9936801945330314,
+        "0.75": 0.9999011041314384,
+        "0.9": 0.9999945035300888
+      },
+      "n_within_0.3": 18
+    }
+  },
+  "equal_room_post_hoc": {
+    "threshold": 0.3,
+    "n_photos": 18,
+    "neutral_ids": [
+      "z0",
+      "z1"
+    ],
+    "measured_baseline": {
+      "quantiles": {
+        "0.0": -0.2602804218141088,
+        "0.1": -0.059770755290076846,
+        "0.25": 0.022841751111236347,
+        "0.5": 0.08158631109593245,
+        "0.75": 0.17301712612922643,
+        "0.9": 0.2327085840882904,
+        "1.0": 0.2783325241009413
+      },
+      "room_window": 0.3,
+      "n_within_room_window": 18
+    },
+    "valence": {
+      "arms": {
+        "neg_sentence": -1.044081932105765,
+        "pos_sentence": 0.8864830017587324,
+        "n_photos": 18
+      },
+      "equal_room": {
+        "estimate": 0.15759893034703273,
+        "ci95_photo": [
+          0.04102674948946592,
+          0.2620570511582931
+        ],
+        "ci95_crossed": [
+          0.039015980212852686,
+          0.2668490736682702
+        ],
+        "ci95_crossed_neutral": [
+          -1.5215223187582736,
+          1.8836840767864693
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "within_room_window": {
+        "estimate": 0.15759893034703273,
+        "ci95_photo": [
+          0.04102674948946592,
+          0.2620570511582931
+        ],
+        "ci95_crossed": [
+          0.039015980212852686,
+          0.2668490736682702
+        ],
+        "ci95_crossed_neutral": [
+          -1.5215223187582736,
+          1.8836840767864693
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "at_zero_baseline": {
+        "estimate": 0.02321763666795807,
+        "ci95_photo": [
+          -0.014009972041461411,
+          0.08491408078378211
+        ],
+        "ci95_crossed": [
+          -0.026105401182134856,
+          0.10565999724069017
+        ],
+        "ci95_crossed_neutral": [
+          -0.06652313896498276,
+          0.48061838629937204
+        ],
+        "crossed_neutral_excludes_zero": false
+      }
+    },
+    "sum_lo": {
+      "arms": {
+        "neg_sentence": -9.163389196369632,
+        "pos_sentence": 5.610643448266783,
+        "n_photos": 18
+      },
+      "equal_room": {
+        "estimate": 3.378535945267823,
+        "ci95_photo": [
+          2.2830735356858463,
+          4.5018077909243095
+        ],
+        "ci95_crossed": [
+          1.6260140437403765,
+          5.03791757283738
+        ],
+        "ci95_crossed_neutral": [
+          -7.237709841828496,
+          12.216783564326478
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "within_room_window": {
+        "estimate": 3.378535945267823,
+        "ci95_photo": [
+          2.2830735356858463,
+          4.5018077909243095
+        ],
+        "ci95_crossed": [
+          1.6260140437403765,
+          5.03791757283738
+        ],
+        "ci95_crossed_neutral": [
+          -7.237709841828496,
+          12.216783564326478
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "at_zero_baseline": {
+        "estimate": 2.2828287801939626,
+        "ci95_photo": [
+          0.6979442873826958,
+          3.6778009011943618
+        ],
+        "ci95_crossed": [
+          0.007529794191654497,
+          4.443086902357224
+        ],
+        "ci95_crossed_neutral": [
+          -7.097776133274119,
+          6.266129392227173
+        ],
+        "crossed_neutral_excludes_zero": false
+      }
+    },
+    "best_lo": {
+      "arms": {
+        "neg_sentence": -9.491030093799331,
+        "pos_sentence": 5.442419002619791,
+        "n_photos": 18
+      },
+      "equal_room": {
+        "estimate": 3.8246527496670555,
+        "ci95_photo": [
+          2.7303095449813006,
+          4.951967549485376
+        ],
+        "ci95_crossed": [
+          2.0572121766936466,
+          5.496534999438762
+        ],
+        "ci95_crossed_neutral": [
+          -6.972815260995753,
+          12.621035737070088
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "within_room_window": {
+        "estimate": 3.8246527496670555,
+        "ci95_photo": [
+          2.7303095449813006,
+          4.951967549485376
+        ],
+        "ci95_crossed": [
+          2.0572121766936466,
+          5.496534999438762
+        ],
+        "ci95_crossed_neutral": [
+          -6.972815260995753,
+          12.621035737070088
+        ],
+        "crossed_neutral_excludes_zero": false
+      },
+      "at_zero_baseline": {
+        "estimate": 2.7667704148902756,
+        "ci95_photo": [
+          0.9616702167921832,
+          4.400075030395227
+        ],
+        "ci95_crossed": [
+          0.2648103793464357,
+          5.172275791285698
+        ],
+        "ci95_crossed_neutral": [
+          -6.707229556317364,
+          6.814616050189436
+        ],
+        "crossed_neutral_excludes_zero": false
+      }
+    }
+  }
+}

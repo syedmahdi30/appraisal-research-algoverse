@@ -1,0 +1,78 @@
+{
+  "per_variant": {
+    "v0_original": {
+      "neg_ctx_overrides_pos_img": 0.838709677419355,
+      "pos_ctx_overrides_neg_img": 0.1888888888888889,
+      "dominance_gap": 0.6498207885304661,
+      "dominance_gap_ci95": [
+        0.5652307347670253,
+        0.732168458781362
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    },
+    "v1_howfeel": {
+      "neg_ctx_overrides_pos_img": 0.8225806451612904,
+      "pos_ctx_overrides_neg_img": 0.25555555555555554,
+      "dominance_gap": 0.5670250896057348,
+      "dominance_gap_ci95": [
+        0.47123207885304674,
+        0.6594153225806453
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    },
+    "v2_oneword": {
+      "neg_ctx_overrides_pos_img": 0.7580645161290321,
+      "pos_ctx_overrides_neg_img": 0.2944444444444444,
+      "dominance_gap": 0.46362007168458774,
+      "dominance_gap_ci95": [
+        0.37066980286738344,
+        0.5594108422939068
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    },
+    "v3_mostlikely": {
+      "neg_ctx_overrides_pos_img": 0.7607526881720432,
+      "pos_ctx_overrides_neg_img": 0.26666666666666666,
+      "dominance_gap": 0.49408602150537656,
+      "dominance_gap_ci95": [
+        0.38466621863799294,
+        0.5969623655913976
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    },
+    "v4_ctx_after": {
+      "neg_ctx_overrides_pos_img": 0.838709677419355,
+      "pos_ctx_overrides_neg_img": 0.29444444444444445,
+      "dominance_gap": 0.5442652329749105,
+      "dominance_gap_ci95": [
+        0.44569668458781364,
+        0.6336939964157705
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    },
+    "v5_no_label": {
+      "neg_ctx_overrides_pos_img": 0.8924731182795699,
+      "pos_ctx_overrides_neg_img": 0.15555555555555553,
+      "dominance_gap": 0.7369175627240143,
+      "dominance_gap_ci95": [
+        0.6531339605734768,
+        0.8138015232974911
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    }
+  },
+  "summary": {
+    "n_variants": 6,
+    "gap_min": 0.46362007168458774,
+    "gap_max": 0.7369175627240143,
+    "gap_mean": 0.5759557945041816,
+    "all_variants_clear_zero": true,
+    "min_gap_variant": "v2_oneword"
+  }
+}

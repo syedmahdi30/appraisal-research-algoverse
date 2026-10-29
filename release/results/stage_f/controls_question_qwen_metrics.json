@@ -1,0 +1,444 @@
+{
+  "run": "20260905T000418Z",
+  "git": "0da2d27",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "read_out": "behavioral_valence",
+  "n_rows": 9000,
+  "per_variant": {
+    "original": {
+      "n_rows": 2250,
+      "n_images": 121,
+      "minimal_pair_asymmetry": {
+        "image_group": "positive",
+        "n_pairs": 6,
+        "n_images": 62,
+        "paired_asymmetry": 1.1480072716435483,
+        "ci95": [
+          0.943299666360928,
+          1.3440868887791808
+        ],
+        "wilcoxon_p_greater": 5.457849334503058e-11,
+        "per_pair": {
+          "mp0": {
+            "swap": "won \u2194 lost",
+            "neg_effect": -1.4308652320969864,
+            "pos_effect": 0.26236078362397697,
+            "asymmetry": 1.1685044484730094,
+            "ratio": 5.453807586379768,
+            "n_images": 62
+          },
+          "mp1": {
+            "swap": "best \u2194 worst",
+            "neg_effect": -1.5259105097236942,
+            "pos_effect": 0.3138498030550535,
+            "asymmetry": 1.2120607066686406,
+            "ratio": 4.861913230055553,
+            "n_images": 62
+          },
+          "mp2": {
+            "swap": "got \u2194 lost",
+            "neg_effect": -1.4091410371412874,
+            "pos_effect": 0.2877815102721181,
+            "asymmetry": 1.1213595268691692,
+            "ratio": 4.896565577853988,
+            "n_images": 62
+          },
+          "mp3": {
+            "swap": "wonderful \u2194 devastating",
+            "neg_effect": -1.4325702772072362,
+            "pos_effect": 0.3309647399254101,
+            "asymmetry": 1.101605537281826,
+            "ratio": 4.328467973748793,
+            "n_images": 62
+          },
+          "mp4": {
+            "swap": "celebration \u2194 memorial",
+            "neg_effect": -1.4480027231746415,
+            "pos_effect": 0.3136832017156975,
+            "asymmetry": 1.134319521458944,
+            "ratio": 4.6161309093211145,
+            "n_images": 62
+          },
+          "mp5": {
+            "swap": "joyful \u2194 heartbreaking",
+            "neg_effect": -1.6225340347178947,
+            "pos_effect": 0.33093397603704905,
+            "asymmetry": 1.2916000586808456,
+            "ratio": 4.902893483914287,
+            "n_images": 62
+          }
+        }
+      },
+      "mirror_contrast": {
+        "readout": "valence",
+        "drop": -1.4781706356769568,
+        "rise": 0.9817493939096368,
+        "asymmetry_index": 0.49642124176732005,
+        "ratio_abs_drop_over_rise": 1.5056496544300513,
+        "ci95_image_only": [
+          0.31448424373117856,
+          0.6725243918138553
+        ],
+        "ci95_crossed": [
+          0.11387484159848477,
+          0.8253392213196612
+        ],
+        "crossed_clears_zero": true,
+        "n_images": [
+          62,
+          60
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override_gap": {
+        "neg_ctx_overrides_pos_img": 0.9354838709677419,
+        "pos_ctx_overrides_neg_img": 0.5277777777777778,
+        "dominance_gap": 0.4077060931899641,
+        "ci95_image_only": [
+          0.3129009856630825,
+          0.49006048387096773
+        ],
+        "ci95_crossed": [
+          0.1671460573476703,
+          0.6318301971326165
+        ],
+        "crossed_clears_zero": true,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    },
+    "best_word": {
+      "n_rows": 2250,
+      "n_images": 121,
+      "minimal_pair_asymmetry": {
+        "image_group": "positive",
+        "n_pairs": 6,
+        "n_images": 62,
+        "paired_asymmetry": 1.4264826743103847,
+        "ci95": [
+          1.2842668281959326,
+          1.5647790867486047
+        ],
+        "wilcoxon_p_greater": 3.97900369735641e-12,
+        "per_pair": {
+          "mp0": {
+            "swap": "won \u2194 lost",
+            "neg_effect": -1.351376968048954,
+            "pos_effect": 0.021545115933953758,
+            "asymmetry": 1.3298318521150003,
+            "ratio": 62.72312352328856,
+            "n_images": 62
+          },
+          "mp1": {
+            "swap": "best \u2194 worst",
+            "neg_effect": -1.2392673215333425,
+            "pos_effect": 0.021547271289840086,
+            "asymmetry": 1.2177200502435024,
+            "ratio": 57.51388678703269,
+            "n_images": 62
+          },
+          "mp2": {
+            "swap": "got \u2194 lost",
+            "neg_effect": -1.2590263885956707,
+            "pos_effect": 0.021547368900071414,
+            "asymmetry": 1.2374790196955994,
+            "ratio": 58.43063227044384,
+            "n_images": 62
+          },
+          "mp3": {
+            "swap": "wonderful \u2194 devastating",
+            "neg_effect": -1.1674411357767793,
+            "pos_effect": 0.021547237812489264,
+            "asymmetry": 1.14589389796429,
+            "ratio": 54.180547220772034,
+            "n_images": 62
+          },
+          "mp4": {
+            "swap": "celebration \u2194 memorial",
+            "neg_effect": -1.74001989006905,
+            "pos_effect": 0.02154714103486497,
+            "asymmetry": 1.7184727490341851,
+            "ratio": 80.75409574075562,
+            "n_images": 62
+          },
+          "mp5": {
+            "swap": "joyful \u2194 heartbreaking",
+            "neg_effect": -1.9310599528486032,
+            "pos_effect": 0.02155723943124399,
+            "asymmetry": 1.9095027134173592,
+            "ratio": 89.57825787516285,
+            "n_images": 62
+          }
+        }
+      },
+      "mirror_contrast": {
+        "readout": "valence",
+        "drop": -1.448031942812067,
+        "rise": 1.4119046539606794,
+        "asymmetry_index": 0.036127288851387496,
+        "ratio_abs_drop_over_rise": 1.0255876264378356,
+        "ci95_image_only": [
+          -0.16534642151905926,
+          0.2418547023001852
+        ],
+        "ci95_crossed": [
+          -0.3481902108945632,
+          0.42139758076346173
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          62,
+          60
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override_gap": {
+        "neg_ctx_overrides_pos_img": 0.760752688172043,
+        "pos_ctx_overrides_neg_img": 0.7222222222222222,
+        "dominance_gap": 0.03853046594982079,
+        "ci95_image_only": [
+          -0.06290770609318994,
+          0.14283154121863795
+        ],
+        "ci95_crossed": [
+          -0.17204301075268813,
+          0.24584005376344048
+        ],
+        "crossed_clears_zero": false,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    },
+    "state": {
+      "n_rows": 2250,
+      "n_images": 121,
+      "minimal_pair_asymmetry": {
+        "image_group": "positive",
+        "n_pairs": 6,
+        "n_images": 62,
+        "paired_asymmetry": 0.85658009872594,
+        "ci95": [
+          0.6321629855002638,
+          1.078375256833082
+        ],
+        "wilcoxon_p_greater": 5.050151397224951e-08,
+        "per_pair": {
+          "mp0": {
+            "swap": "won \u2194 lost",
+            "neg_effect": -1.2286501332941953,
+            "pos_effect": 0.19580667036389632,
+            "asymmetry": 1.032843462930299,
+            "ratio": 6.274812451541177,
+            "n_images": 62
+          },
+          "mp1": {
+            "swap": "best \u2194 worst",
+            "neg_effect": -1.3989451724087965,
+            "pos_effect": 0.4473581885683591,
+            "asymmetry": 0.9515869838404374,
+            "ratio": 3.1271254403227022,
+            "n_images": 62
+          },
+          "mp2": {
+            "swap": "got \u2194 lost",
+            "neg_effect": -1.2513241070115158,
+            "pos_effect": 0.35079972052103864,
+            "asymmetry": 0.9005243864904771,
+            "ratio": 3.567061299686724,
+            "n_images": 62
+          },
+          "mp3": {
+            "swap": "wonderful \u2194 devastating",
+            "neg_effect": -1.2796416353202165,
+            "pos_effect": 0.4791215373517628,
+            "asymmetry": 0.8005200979684537,
+            "ratio": 2.6708080008115465,
+            "n_images": 62
+          },
+          "mp4": {
+            "swap": "celebration \u2194 memorial",
+            "neg_effect": -1.4096821729633613,
+            "pos_effect": 0.3543899030260412,
+            "asymmetry": 1.0552922699373202,
+            "ratio": 3.9777718296330113,
+            "n_images": 62
+          },
+          "mp5": {
+            "swap": "joyful \u2194 heartbreaking",
+            "neg_effect": -1.4746143211684164,
+            "pos_effect": 0.4810461501412678,
+            "asymmetry": 0.9935681710271487,
+            "ratio": 3.0654321227503214,
+            "n_images": 62
+          }
+        }
+      },
+      "mirror_contrast": {
+        "readout": "valence",
+        "drop": -1.3404762570277502,
+        "rise": 0.5804448574614393,
+        "asymmetry_index": 0.7600313995663109,
+        "ratio_abs_drop_over_rise": 2.309394664792602,
+        "ci95_image_only": [
+          0.5968221262006154,
+          0.9149304269256071
+        ],
+        "ci95_crossed": [
+          0.49164439191466935,
+          1.0016437024927938
+        ],
+        "crossed_clears_zero": true,
+        "n_images": [
+          62,
+          60
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override_gap": {
+        "neg_ctx_overrides_pos_img": 0.9704301075268817,
+        "pos_ctx_overrides_neg_img": 0.2222222222222222,
+        "dominance_gap": 0.7482078853046595,
+        "ci95_image_only": [
+          0.6617943548387097,
+          0.8256317204301075
+        ],
+        "ci95_crossed": [
+          0.6008826164874552,
+          0.8756317204301075
+        ],
+        "crossed_clears_zero": true,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    },
+    "one_word": {
+      "n_rows": 2250,
+      "n_images": 121,
+      "minimal_pair_asymmetry": {
+        "image_group": "positive",
+        "n_pairs": 6,
+        "n_images": 62,
+        "paired_asymmetry": 1.4273470193649558,
+        "ci95": [
+          1.2911496103790587,
+          1.5595582913985808
+        ],
+        "wilcoxon_p_greater": 3.97900369735641e-12,
+        "per_pair": {
+          "mp0": {
+            "swap": "won \u2194 lost",
+            "neg_effect": -1.3584315040838657,
+            "pos_effect": 0.016870516703961,
+            "asymmetry": 1.3415609873799048,
+            "ratio": 80.52103725814882,
+            "n_images": 62
+          },
+          "mp1": {
+            "swap": "best \u2194 worst",
+            "neg_effect": -1.4755618729551931,
+            "pos_effect": 0.016879777062285158,
+            "asymmetry": 1.458682095892908,
+            "ratio": 87.41595742114818,
+            "n_images": 62
+          },
+          "mp2": {
+            "swap": "got \u2194 lost",
+            "neg_effect": -1.1798025058587187,
+            "pos_effect": 0.016876085899845593,
+            "asymmetry": 1.1629264199588731,
+            "ratio": 69.90972390520442,
+            "n_images": 62
+          },
+          "mp3": {
+            "swap": "wonderful \u2194 devastating",
+            "neg_effect": -1.24652405419571,
+            "pos_effect": 0.016881379820731592,
+            "asymmetry": 1.2296426743749784,
+            "ratio": 73.84017582880789,
+            "n_images": 62
+          },
+          "mp4": {
+            "swap": "celebration \u2194 memorial",
+            "neg_effect": -1.5217116042950662,
+            "pos_effect": 0.016879766760773837,
+            "asymmetry": 1.5048318375342924,
+            "ratio": 90.15003737085433,
+            "n_images": 62
+          },
+          "mp5": {
+            "swap": "joyful \u2194 heartbreaking",
+            "neg_effect": -1.8834384018965136,
+            "pos_effect": 0.01697003540609483,
+            "asymmetry": 1.8664683664904187,
+            "ratio": 110.9861209376188,
+            "n_images": 62
+          }
+        }
+      },
+      "mirror_contrast": {
+        "readout": "valence",
+        "drop": -1.4442449905475112,
+        "rise": 1.2045820537897702,
+        "asymmetry_index": 0.23966293675774097,
+        "ratio_abs_drop_over_rise": 1.1989594116928195,
+        "ci95_image_only": [
+          0.030729301871789672,
+          0.4459146368023037
+        ],
+        "ci95_crossed": [
+          -0.17585158008095395,
+          0.648092989356987
+        ],
+        "crossed_clears_zero": false,
+        "n_images": [
+          62,
+          60
+        ],
+        "n_sentences": [
+          6,
+          6
+        ]
+      },
+      "override_gap": {
+        "neg_ctx_overrides_pos_img": 0.7473118279569892,
+        "pos_ctx_overrides_neg_img": 0.6333333333333333,
+        "dominance_gap": 0.11397849462365595,
+        "ci95_image_only": [
+          0.012616487455197188,
+          0.21730958781362006
+        ],
+        "ci95_crossed": [
+          -0.10609543010752691,
+          0.3278830645161289
+        ],
+        "crossed_clears_zero": false,
+        "n_sentences": [
+          6,
+          6
+        ]
+      }
+    }
+  },
+  "versions": {
+    "torch": "2.6.0",
+    "transformers": "5.13.0",
+    "numpy": "1.26.4",
+    "pandas": "2.2.3",
+    "PIL": "11.2.1"
+  }
+}

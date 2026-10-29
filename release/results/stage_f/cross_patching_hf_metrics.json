@@ -1,0 +1,107 @@
+{
+  "run": "20260822T211024Z",
+  "git": "b7f0c32",
+  "critical_layer": 18,
+  "patch_layers": [
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28
+  ],
+  "n_pairs": 60,
+  "n_skipped": 0,
+  "n_segmentation_dropped": 0,
+  "context_polarity": "neutral",
+  "context": "This photo was taken on a weekday.",
+  "recovery": {
+    "pos_probe": 4.607162765661875,
+    "neg_probe": 2.5748732964197796,
+    "pos_val": 0.875779073996353,
+    "neg_val": -0.8512697754068024,
+    "image": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.3107222088732545,
+      "val_ci95": [
+        0.2406196386273403,
+        0.38369403928820983
+      ]
+    },
+    "context": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.010972519641216035,
+      "val_ci95": [
+        0.005067303059371969,
+        0.017688186108205307
+      ]
+    },
+    "question": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.18279105720374186,
+      "val_ci95": [
+        0.13420360538388315,
+        0.23732941415018435
+      ]
+    },
+    "structure": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.2066316166812854,
+      "val_ci95": [
+        0.15424681645488508,
+        0.2617305674170381
+      ]
+    },
+    "text_all": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.6339217310308377,
+      "val_ci95": [
+        0.5510203034622346,
+        0.7145591977372181
+      ]
+    },
+    "all": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.8991720661700033,
+      "val_ci95": [
+        0.8505272641567029,
+        0.9429139253458961
+      ]
+    },
+    "n_pairs": 60
+  },
+  "probe_valid": false,
+  "verdict": "image tokens carry a MODERATE share [NOTE: patched at/after the L18 probe tap, so probe recovery is invariant-by-construction \u2014 verdict uses behavioral VALENCE]: patching image tokens recovers 31% [24%,38%] of the image-driven read-out gap, vs all-text 63%. Sanity: patching every token bar the read-out query recovers 90% (expect ~100%). Mirror of the same-image result, where image tokens were inert for the TEXT context delta.",
+  "design": "CROSS-IMAGE: donor=positive image, recipient=negative image, SAME context \u2192 identical input_ids, all positions (incl. context) patchable. recovery = (patched-neg_img)/(pos_img-neg_img) at L18 read-out, resid_post over band [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28].",
+  "stack": "raw_hf",
+  "tap": "post_attention_layernorm"
+}

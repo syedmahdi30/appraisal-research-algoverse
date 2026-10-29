@@ -1,0 +1,272 @@
+{
+  "run": "20260728T004252Z",
+  "git": "31c3a21",
+  "method": "appraisal_specific_combo_steering",
+  "layer": 18,
+  "betas": [
+    -3,
+    -2,
+    -1,
+    1,
+    2,
+    3
+  ],
+  "n_images": 30,
+  "n_skipped": 0,
+  "seed": 0,
+  "base_valence_mean": -0.02862083620665133,
+  "logprob_readout": "log_softmax over the 13 closed-vocab emotion labels",
+  "arm_targets": {
+    "A1": "anger",
+    "A2": "guilt",
+    "A3": "fear",
+    "A4": "pride",
+    "A5": "surprise",
+    "N1": "surprise",
+    "N2": "boredom"
+  },
+  "arm_meta": {
+    "A1": {
+      "rule": "sum_units_rescaled",
+      "gram_schmidt": false,
+      "target_norm": 270.22560119628906
+    },
+    "A2": {
+      "rule": "sum_units_rescaled",
+      "gram_schmidt": true,
+      "target_norm": 274.36427307128906
+    },
+    "A3": {
+      "rule": "sum_units_rescaled",
+      "gram_schmidt": false,
+      "target_norm": 276.6568603515625
+    },
+    "A4": {
+      "rule": "sum_units_rescaled",
+      "gram_schmidt": true,
+      "target_norm": 271.58514404296875
+    },
+    "A5": {
+      "rule": "sum_units_rescaled",
+      "gram_schmidt": false,
+      "target_norm": 273.8777313232422
+    },
+    "N1": {
+      "rule": "sum_units_rescaled",
+      "gram_schmidt": false,
+      "target_norm": 267.44647216796875
+    },
+    "N2": {
+      "rule": "sum_units_rescaled",
+      "gram_schmidt": false,
+      "target_norm": 296.61231231689453
+    },
+    "S1": {
+      "rule": "single_raw_dmu",
+      "gram_schmidt": false
+    },
+    "S2": {
+      "rule": "single_raw_dmu",
+      "gram_schmidt": false
+    },
+    "S3": {
+      "rule": "single_raw_dmu",
+      "gram_schmidt": false
+    },
+    "S4": {
+      "rule": "single_raw_dmu",
+      "gram_schmidt": false
+    },
+    "S5": {
+      "rule": "single_raw_dmu",
+      "gram_schmidt": false
+    },
+    "S6": {
+      "rule": "single_raw_dmu",
+      "gram_schmidt": false
+    },
+    "A1~unpleasantness": {
+      "rule": "matched_norm_single",
+      "parent": "A1",
+      "appraisal": "unpleasantness",
+      "sign": 1,
+      "target_norm": 270.22560119628906,
+      "gram_schmidt": false
+    },
+    "A1~other_responsblt": {
+      "rule": "matched_norm_single",
+      "parent": "A1",
+      "appraisal": "other_responsblt",
+      "sign": 1,
+      "target_norm": 270.22560119628906,
+      "gram_schmidt": false
+    },
+    "A2~unpleasantness": {
+      "rule": "matched_norm_single",
+      "parent": "A2",
+      "appraisal": "unpleasantness",
+      "sign": 1,
+      "target_norm": 274.36427307128906,
+      "gram_schmidt": false
+    },
+    "A2~self_responsblt": {
+      "rule": "matched_norm_single",
+      "parent": "A2",
+      "appraisal": "self_responsblt",
+      "sign": 1,
+      "target_norm": 274.36427307128906,
+      "gram_schmidt": false
+    },
+    "A3~unpleasantness": {
+      "rule": "matched_norm_single",
+      "parent": "A3",
+      "appraisal": "unpleasantness",
+      "sign": 1,
+      "target_norm": 276.6568603515625,
+      "gram_schmidt": false
+    },
+    "A3~suddenness": {
+      "rule": "matched_norm_single",
+      "parent": "A3",
+      "appraisal": "suddenness",
+      "sign": 1,
+      "target_norm": 276.6568603515625,
+      "gram_schmidt": false
+    },
+    "A4~pleasantness": {
+      "rule": "matched_norm_single",
+      "parent": "A4",
+      "appraisal": "pleasantness",
+      "sign": 1,
+      "target_norm": 271.58514404296875,
+      "gram_schmidt": false
+    },
+    "A4~self_responsblt": {
+      "rule": "matched_norm_single",
+      "parent": "A4",
+      "appraisal": "self_responsblt",
+      "sign": 1,
+      "target_norm": 271.58514404296875,
+      "gram_schmidt": false
+    },
+    "A5~pleasantness": {
+      "rule": "matched_norm_single",
+      "parent": "A5",
+      "appraisal": "pleasantness",
+      "sign": 1,
+      "target_norm": 273.8777313232422,
+      "gram_schmidt": false
+    },
+    "A5~suddenness": {
+      "rule": "matched_norm_single",
+      "parent": "A5",
+      "appraisal": "suddenness",
+      "sign": 1,
+      "target_norm": 273.8777313232422,
+      "gram_schmidt": false
+    },
+    "R": {
+      "rule": "two_orthogonal_random",
+      "target_norm": 273.3419219970703,
+      "gram_schmidt": false
+    },
+    "A1-raw": {
+      "rule": "raw_dmu_sum_unrescaled",
+      "gram_schmidt": false
+    }
+  },
+  "arm_norms": {
+    "A1": 270.2256164550781,
+    "A2": 274.3642578125,
+    "A3": 276.6568603515625,
+    "A4": 271.58514404296875,
+    "A5": 273.8777160644531,
+    "N1": 267.44647216796875,
+    "N2": 296.6123046875,
+    "S1": 352.81878662109375,
+    "S2": 358.3770751953125,
+    "S3": 194.93667602539062,
+    "S4": 234.8475799560547,
+    "S5": 190.35150146484375,
+    "S6": 182.07415771484375,
+    "A1~unpleasantness": 270.2255859375,
+    "A1~other_responsblt": 270.2255859375,
+    "A2~unpleasantness": 274.3642272949219,
+    "A2~self_responsblt": 274.3642578125,
+    "A3~unpleasantness": 276.6568298339844,
+    "A3~suddenness": 276.6568603515625,
+    "A4~pleasantness": 271.58514404296875,
+    "A4~self_responsblt": 271.58514404296875,
+    "A5~pleasantness": 273.87774658203125,
+    "A5~suddenness": 273.8777160644531,
+    "R": 273.3419189453125,
+    "A1-raw": 477.275146484375
+  },
+  "cos_matrix": {
+    "pleasantness": {
+      "pleasantness": 0.9999998807907104,
+      "unpleasantness": -0.9716867208480835,
+      "suddenness": -0.4529017210006714,
+      "predict_event": 0.3728911280632019,
+      "self_responsblt": 0.7581803202629089,
+      "other_responsblt": -0.47043466567993164
+    },
+    "unpleasantness": {
+      "pleasantness": -0.9716867208480835,
+      "unpleasantness": 1.0000001192092896,
+      "suddenness": 0.5898222327232361,
+      "predict_event": -0.519099771976471,
+      "self_responsblt": -0.8034092783927917,
+      "other_responsblt": 0.5073196291923523
+    },
+    "suddenness": {
+      "pleasantness": -0.4529017210006714,
+      "unpleasantness": 0.5898222327232361,
+      "suddenness": 0.9999997615814209,
+      "predict_event": -0.556648850440979,
+      "self_responsblt": -0.6577360033988953,
+      "other_responsblt": 0.20640262961387634
+    },
+    "predict_event": {
+      "pleasantness": 0.3728911280632019,
+      "unpleasantness": -0.519099771976471,
+      "suddenness": -0.556648850440979,
+      "predict_event": 1.0000001192092896,
+      "self_responsblt": 0.6062917709350586,
+      "other_responsblt": -0.7016647458076477
+    },
+    "self_responsblt": {
+      "pleasantness": 0.7581803202629089,
+      "unpleasantness": -0.8034092783927917,
+      "suddenness": -0.6577360033988953,
+      "predict_event": 0.6062917709350586,
+      "self_responsblt": 1.0,
+      "other_responsblt": -0.6320604085922241
+    },
+    "other_responsblt": {
+      "pleasantness": -0.47043466567993164,
+      "unpleasantness": 0.5073196291923523,
+      "suddenness": 0.20640262961387634,
+      "predict_event": -0.7016647458076477,
+      "self_responsblt": -0.6320604085922241,
+      "other_responsblt": 0.9999998807907104
+    }
+  },
+  "cos_flag_threshold": 0.6,
+  "tokenization_multi_token": {},
+  "emotion_labels": [
+    "anger",
+    "boredom",
+    "disgust",
+    "fear",
+    "guilt",
+    "joy",
+    "pride",
+    "relief",
+    "sadness",
+    "shame",
+    "surprise",
+    "trust",
+    "neutral"
+  ]
+}

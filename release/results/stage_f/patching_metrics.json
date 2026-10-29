@@ -1,0 +1,55 @@
+{
+  "run": "20260807T212621Z",
+  "git": "82da102",
+  "critical_layer": 18,
+  "patch_layers": [
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "n_images": 60,
+  "n_skipped": 0,
+  "n_segmentation_dropped": 0,
+  "donor_pos_context": "This photo was taken moments after hearing wonderful news.",
+  "recipient_neg_context": "This photo was taken moments after they received devastating news.",
+  "pos_idx": 4,
+  "neg_idx": 0,
+  "recovery": {
+    "pos_probe": 5.2292163372039795,
+    "neg_probe": 4.129627549648285,
+    "pos_val": 0.198535853208704,
+    "neg_val": -0.8328343361210583,
+    "image": {
+      "probe": 0.006916417300499816,
+      "val": -0.005934387787814297
+    },
+    "question": {
+      "probe": 0.3199279732643229,
+      "val": 0.13519413314138326
+    },
+    "bos": {
+      "probe": -0.007956723016252653,
+      "val": 0.005374083575875115
+    },
+    "prefix_delim": {
+      "probe": -0.010540065399329028,
+      "val": 0.0031019649838936575
+    },
+    "suffix_delim": {
+      "probe": 0.5662334964975623,
+      "val": 0.5739333722725002
+    },
+    "structure": {
+      "probe": 0.5628609681392721,
+      "val": 0.5734096273041169
+    },
+    "text_all": {
+      "probe": 0.8672962591625684,
+      "val": 0.7848175712372423
+    }
+  },
+  "verdict": "(probe recovery) image 1%, question 32% | sinks: BOS -1%, prefix-delims -1%, suffix-delims 57% \u2192 structure 56%, all-text 87%. IMAGE tokens causally INERT; the context is BROADCAST into sink/turn tokens (structure 56% > question 32%); dominant sink = suffix-delims (57%); sink parts sum 55% vs structure 56% (additivity check); ~13% remains in the unpatched CONTEXT tokens.",
+  "note": "recovery = (patched-neg)/(pos-neg) at L18 read-out; resid_post patched over band [13, 14, 15, 16, 17] so the group's pathway is pinned to the donor through the read-out (lower bound: context tokens stay negative and re-mix downstream)."
+}

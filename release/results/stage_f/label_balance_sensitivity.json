@@ -1,0 +1,21 @@
+{
+  "run": "20260905T213758Z",
+  "git": "e715429",
+  "n_subsets": 35,
+  "within_item_contrast": {
+    "full_vocabulary": 1.1480072716435483,
+    "balanced_min": 0.25769814007788,
+    "balanced_median": 1.1437285634679761,
+    "balanced_max": 1.1774859596632212,
+    "n_positive": 35,
+    "n_ci_excludes_zero": 35
+  },
+  "uncorrected_override_gap": {
+    "full_vocabulary": 0.3939964157706094,
+    "balanced_min": -0.713530465949821,
+    "balanced_median": 0.349551971326165,
+    "balanced_max": 0.3912186379928317,
+    "n_positive": 20,
+    "n_ci_excludes_zero": 20
+  }
+}

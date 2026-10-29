@@ -1,0 +1,96 @@
+{
+  "run": "20260827T235707Z",
+  "git": "3d70501",
+  "analysis_run": "20260905T002326Z",
+  "analysis_git": "08e656c",
+  "analysis_git_dirty": true,
+  "model": "llava-hf/llava-1.5-7b-hf",
+  "read_out": "behavioral_valence",
+  "score_mode": "sequence",
+  "score_rule": "sum of teacher-forced conditional token log probabilities",
+  "n_layers": 32,
+  "patch_layers": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29
+  ],
+  "n_rows": 60,
+  "n_images": 51,
+  "n_unique_images": 51,
+  "resampling_unit": "unique image_path",
+  "bootstrap_samples": 2000,
+  "bootstrap_seed": 0,
+  "n_skipped": 0,
+  "donor_positive_context": "This photo was taken moments after they won the championship.",
+  "recipient_negative_context": "This photo was taken at the funeral of a close friend.",
+  "recovery": {
+    "pos_val": 0.4836658459342306,
+    "neg_val": -0.610286283492345,
+    "image": {
+      "val": 0.00012106493792141147,
+      "ci95": [
+        -0.00029698639217083444,
+        0.0006068146160631069
+      ]
+    },
+    "question": {
+      "val": 0.32748420720902616,
+      "ci95": [
+        0.2968523385714946,
+        0.3602499323288244
+      ]
+    },
+    "bos": {
+      "val": 0.0002962474156933299,
+      "ci95": [
+        4.086564954453474e-05,
+        0.0005600219384453238
+      ]
+    },
+    "prefix_delim": {
+      "val": 0.00015018313764107524,
+      "ci95": [
+        -0.00013634081287228127,
+        0.00043015732903400704
+      ]
+    },
+    "suffix_delim": {
+      "val": 0.20458176838718425,
+      "ci95": [
+        0.17943737028625928,
+        0.2301267635410046
+      ]
+    },
+    "structure": {
+      "val": 0.20470002882765012,
+      "ci95": [
+        0.17950927676349876,
+        0.23028906600335067
+      ]
+    },
+    "text_all": {
+      "val": 0.6602705273499101,
+      "ci95": [
+        0.6232325068224397,
+        0.6971501744412598
+      ]
+    }
+  },
+  "verdict": "image tokens are causally inert for the context delta; question 33%, structure 20%, all-text 66%; dominant structural group suffix_delim (20%). Position-group recoveries are not assumed additive."
+}

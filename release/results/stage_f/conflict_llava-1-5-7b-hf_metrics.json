@@ -1,0 +1,173 @@
+{
+  "run": "20260822T012750Z",
+  "git": "5b953ba",
+  "model": "llava-hf/llava-1.5-7b-hf",
+  "max_side": null,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 579,
+    "prompt_tokens_with_image": 597,
+    "prompt_tokens_text_only": 18,
+    "image_token_fraction": 0.9698492462311558,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.6687597356521292,
+    "mean_valence_negative_images": -0.8018321678205393,
+    "discriminability_gap": 1.4705919034726684,
+    "auc": 0.9893333333333333,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -0.5163816253695889,
+    "rise_neg_img_pos_ctx": 0.5341035458910725,
+    "congruent_pos_img_pos_ctx": 0.16874895580811425,
+    "congruent_neg_img_neg_ctx": -0.08623641810722701,
+    "asymmetry_index": -0.01772192052148358,
+    "asymmetry_ci95": [
+      -0.08060489308236439,
+      0.04885383048143844
+    ],
+    "symmetric": true,
+    "mannwhitney_u": 2611.0,
+    "mannwhitney_p_greater": 0.7761665160108983,
+    "valence_bounds_p5_p95": [
+      -0.9120073815982324,
+      0.9596780354579095
+    ],
+    "headroom_norm_pull_drop": 0.3289334328135993,
+    "headroom_norm_pull_rise": 0.33228506777250466,
+    "headroom_norm_asymmetry": -0.0033516349589053362,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "CEILING/FLOOR \u2014 the drop and the mirror rise are statistically indistinguishable in magnitude (asymmetry CI straddles 0); the 'sharp drop' is saturation geometry, not a negativity-specific effect."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.27688172043010756,
+    "pos_ctx_overrides_neg_img": 0.4027777777777778,
+    "dominance_gap": -0.12589605734767023,
+    "dominance_gap_ci95": [
+      -0.22018145161290334,
+      -0.028122759856630826
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {
+    "anger": {
+      "ids": [
+        29871,
+        27343
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "boredom": {
+      "ids": [
+        29871,
+        289,
+        4395,
+        290
+      ],
+      "n_tokens": 4,
+      "single_token": false
+    },
+    "disgust": {
+      "ids": [
+        29871,
+        766,
+        29887,
+        504
+      ],
+      "n_tokens": 4,
+      "single_token": false
+    },
+    "fear": {
+      "ids": [
+        29871,
+        8866
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "guilt": {
+      "ids": [
+        29871,
+        1410,
+        2782
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "joy": {
+      "ids": [
+        29871,
+        15331
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "pride": {
+      "ids": [
+        29871,
+        24967
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "relief": {
+      "ids": [
+        29871,
+        18892
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "sadness": {
+      "ids": [
+        29871,
+        14610,
+        2264
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "shame": {
+      "ids": [
+        29871,
+        28503
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "surprise": {
+      "ids": [
+        29871,
+        16671
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "trust": {
+      "ids": [
+        29871,
+        9311
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "neutral": {
+      "ids": [
+        29871,
+        21104
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    }
+  }
+}

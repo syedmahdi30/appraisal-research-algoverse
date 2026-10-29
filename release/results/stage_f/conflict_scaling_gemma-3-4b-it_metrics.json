@@ -1,0 +1,18 @@
+{
+  "run": "20260817T055951Z",
+  "git": "dba1607",
+  "model": "google/gemma-3-4b-it",
+  "params_billions": 4.3,
+  "seed": 0,
+  "n_images": 150,
+  "n_skipped": 0,
+  "n_forwards": 2250,
+  "n_conditions": 15,
+  "text_code": {
+    "none": 0,
+    "neutral": 0,
+    "positive": 1,
+    "negative": -1
+  },
+  "tokenization_multi_token": {}
+}

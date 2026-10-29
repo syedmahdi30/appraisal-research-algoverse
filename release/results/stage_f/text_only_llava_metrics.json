@@ -1,0 +1,125 @@
+{
+  "run": "20260819T011734Z",
+  "git": "e66c4af",
+  "model": "llava-hf/llava-1.5-7b-hf",
+  "neutral_baseline": -0.5063699540314701,
+  "pos_effect": 1.4095410919400517,
+  "neg_effect": -0.39095448688931356,
+  "pos_raw": 0.9031711379085815,
+  "neg_raw": -0.8973244409207837,
+  "text_only_ratio_vs_neutral": 0.277362958146339,
+  "text_only_ratio_raw": 0.9935264793765037,
+  "image_conditioned_ratio": 3.0600581964890523,
+  "tokenization_multi_token": {
+    "anger": {
+      "ids": [
+        29871,
+        27343
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "boredom": {
+      "ids": [
+        29871,
+        289,
+        4395,
+        290
+      ],
+      "n_tokens": 4,
+      "single_token": false
+    },
+    "disgust": {
+      "ids": [
+        29871,
+        766,
+        29887,
+        504
+      ],
+      "n_tokens": 4,
+      "single_token": false
+    },
+    "fear": {
+      "ids": [
+        29871,
+        8866
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "guilt": {
+      "ids": [
+        29871,
+        1410,
+        2782
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "joy": {
+      "ids": [
+        29871,
+        15331
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "pride": {
+      "ids": [
+        29871,
+        24967
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "relief": {
+      "ids": [
+        29871,
+        18892
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "sadness": {
+      "ids": [
+        29871,
+        14610,
+        2264
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "shame": {
+      "ids": [
+        29871,
+        28503
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "surprise": {
+      "ids": [
+        29871,
+        16671
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "trust": {
+      "ids": [
+        29871,
+        9311
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "neutral": {
+      "ids": [
+        29871,
+        21104
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    }
+  }
+}

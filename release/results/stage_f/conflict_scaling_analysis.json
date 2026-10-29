@@ -1,0 +1,42 @@
+{
+  "per_model": [
+    {
+      "model": "google/gemma-3-4b-it",
+      "params_billions": 4.3,
+      "n_images": 121,
+      "neg_ctx_overrides_pos_img": 0.838709677419355,
+      "pos_ctx_overrides_neg_img": 0.1888888888888889,
+      "dominance_gap": 0.6498207885304661,
+      "dominance_gap_ci95": [
+        0.5652307347670253,
+        0.732168458781362
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    },
+    {
+      "model": "google/gemma-3-12b-it",
+      "params_billions": 12.2,
+      "n_images": 121,
+      "neg_ctx_overrides_pos_img": 0.9274193548387096,
+      "pos_ctx_overrides_neg_img": 0.4222222222222222,
+      "dominance_gap": 0.5051971326164875,
+      "dominance_gap_ci95": [
+        0.4176478494623656,
+        0.5879525089605732
+      ],
+      "n_pos_images": 62,
+      "n_neg_images": 60
+    }
+  ],
+  "trend": {
+    "smallest": "google/gemma-3-4b-it",
+    "largest": "google/gemma-3-12b-it",
+    "gap_smallest": 0.6498207885304661,
+    "gap_largest": 0.5051971326164875,
+    "delta_gap": -0.14462365591397863,
+    "direction": "shrinks with scale",
+    "all_gaps_clear_zero": true
+  },
+  "n_models": 2
+}

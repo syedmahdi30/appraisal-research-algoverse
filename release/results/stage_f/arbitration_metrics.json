@@ -1,0 +1,20 @@
+{
+  "run": "20260730T022510Z",
+  "git": "f6764f5",
+  "layer": 18,
+  "tap": "hook_attn_out",
+  "seed": 0,
+  "betas": [
+    -3,
+    -2,
+    -1,
+    1,
+    2,
+    3
+  ],
+  "n_incongruent_cells": 150,
+  "n_skipped": 0,
+  "n_forwards": 1050,
+  "dmu_norm": 352.81878662109375,
+  "note": "PRIMARY = behavioral valence (downstream of resid_post injection). probe_readout at attn_out L18 is UPSTREAM of the injection -> invariant to steering by construction; recorded to demonstrate, not to score."
+}

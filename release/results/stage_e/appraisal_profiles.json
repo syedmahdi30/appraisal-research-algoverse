@@ -1,0 +1,389 @@
+{
+  "run": "20260726T184317Z",
+  "git": "10a403a",
+  "seed": 0,
+  "n_train": 4320,
+  "emotions": [
+    "anger",
+    "boredom",
+    "disgust",
+    "fear",
+    "guilt",
+    "joy",
+    "no-emotion",
+    "pride",
+    "relief",
+    "sadness",
+    "shame",
+    "surprise",
+    "trust"
+  ],
+  "appraisals": [
+    "pleasantness",
+    "unpleasantness",
+    "suddenness",
+    "predict_event",
+    "self_responsblt",
+    "other_responsblt"
+  ],
+  "z_profiles": {
+    "anger": {
+      "pleasantness": -0.9738671429805722,
+      "unpleasantness": 0.9918525275672455,
+      "suddenness": 0.9726374879797013,
+      "predict_event": -0.3461314443242232,
+      "self_responsblt": -1.333919448944668,
+      "other_responsblt": 1.9833064411757813
+    },
+    "boredom": {
+      "pleasantness": -0.5395596977013094,
+      "unpleasantness": 0.372560704293228,
+      "suddenness": -1.6489505322260387,
+      "predict_event": 1.6598288627338236,
+      "self_responsblt": -0.4180981842200108,
+      "other_responsblt": -0.8413572452442956
+    },
+    "disgust": {
+      "pleasantness": -1.0160329143669085,
+      "unpleasantness": 1.0730011113066,
+      "suddenness": 1.1199664015119248,
+      "predict_event": -0.8229580746904801,
+      "self_responsblt": -1.4672574108586027,
+      "other_responsblt": 1.4613046891085135
+    },
+    "fear": {
+      "pleasantness": -0.9064019087624342,
+      "unpleasantness": 0.9769041042468386,
+      "suddenness": 1.2196300783131344,
+      "predict_event": -1.2614193439927845,
+      "self_responsblt": -0.8426743261038554,
+      "other_responsblt": -0.3242340142243847
+    },
+    "guilt": {
+      "pleasantness": -0.6259995290432985,
+      "unpleasantness": 0.6715291707013747,
+      "suddenness": -0.11066334681605883,
+      "predict_event": 0.26223356683272564,
+      "self_responsblt": 1.5012666885937345,
+      "other_responsblt": -1.3438449131221328
+    },
+    "joy": {
+      "pleasantness": 1.6699267229427068,
+      "unpleasantness": -1.5451084588104542,
+      "suddenness": -1.0943005048106094,
+      "predict_event": 0.8541562803908372,
+      "self_responsblt": 0.9047547537156057,
+      "other_responsblt": 0.08556175375365686
+    },
+    "no-emotion": {
+      "pleasantness": 0.10768489307895118,
+      "unpleasantness": -0.7357581104626865,
+      "suddenness": -1.0856340981322432,
+      "predict_event": 1.6159827358035923,
+      "self_responsblt": 0.2415738378805085,
+      "other_responsblt": -0.9096565399073023
+    },
+    "pride": {
+      "pleasantness": 1.5349962545064315,
+      "unpleasantness": -1.4041661817894708,
+      "suddenness": -1.0683012847755111,
+      "predict_event": 0.541752626012945,
+      "self_responsblt": 1.1047616965865077,
+      "other_responsblt": -0.021765709288210956
+    },
+    "relief": {
+      "pleasantness": 0.6347570354081538,
+      "unpleasantness": -0.5243446949312113,
+      "suddenness": -0.16699499022543887,
+      "predict_event": -0.20911229766725248,
+      "self_responsblt": 0.2029760068001591,
+      "other_responsblt": -0.5827956297343405
+    },
+    "sadness": {
+      "pleasantness": -1.0244660686441756,
+      "unpleasantness": 1.1050334469931866,
+      "suddenness": 0.6736464575760718,
+      "predict_event": -0.4667082933823567,
+      "self_responsblt": -1.0532079501784897,
+      "other_responsblt": -0.5437674613554787
+    },
+    "shame": {
+      "pleasantness": -0.8789941573613157,
+      "unpleasantness": 0.9662266590179759,
+      "suddenness": 0.47865230731283487,
+      "predict_event": 0.010118336983900189,
+      "self_responsblt": 1.480213326186271,
+      "other_responsblt": -0.9242921030493753
+    },
+    "surprise": {
+      "pleasantness": 1.2292944119554936,
+      "unpleasantness": -1.1906172772122234,
+      "suddenness": 1.379958601862907,
+      "predict_event": -1.9684381407427518,
+      "self_responsblt": -0.6286318082946445,
+      "other_responsblt": 1.1588363841723388
+    },
+    "trust": {
+      "pleasantness": 0.7886621009682806,
+      "unpleasantness": -0.7571130009204112,
+      "suddenness": -0.6696465775706714,
+      "predict_event": 0.13069518604203367,
+      "self_responsblt": 0.30824281883747623,
+      "other_responsblt": 0.8027043477152312
+    }
+  },
+  "arms": {
+    "A1": {
+      "combo": [
+        [
+          "unpleasantness",
+          1
+        ],
+        [
+          "other_responsblt",
+          1
+        ]
+      ],
+      "theory_target": "anger",
+      "theory_alt": null,
+      "empirical_target": "anger",
+      "runner_up": "disgust",
+      "agrees": true,
+      "final_target": "anger",
+      "must_not": [
+        "guilt",
+        "shame"
+      ],
+      "scores": {
+        "anger": 2.9751589687430267,
+        "boredom": -0.46879654095106754,
+        "disgust": 2.5343058004151136,
+        "fear": 0.6526700900224539,
+        "guilt": -0.6723157424207581,
+        "joy": -1.4595467050567974,
+        "no-emotion": -1.6454146503699887,
+        "pride": -1.4259318910776817,
+        "relief": -1.1071403246655518,
+        "sadness": 0.5612659856377079,
+        "shame": 0.04193455596860063,
+        "surprise": -0.03178089303988463,
+        "trust": 0.04559134679482002
+      }
+    },
+    "A2": {
+      "combo": [
+        [
+          "unpleasantness",
+          1
+        ],
+        [
+          "self_responsblt",
+          1
+        ]
+      ],
+      "theory_target": "guilt",
+      "theory_alt": "shame",
+      "empirical_target": "shame",
+      "runner_up": "guilt",
+      "agrees": true,
+      "final_target": "guilt",
+      "must_not": [
+        "anger"
+      ],
+      "scores": {
+        "anger": -0.34206692137742245,
+        "boredom": -0.04553747992678281,
+        "disgust": -0.3942562995520027,
+        "fear": 0.1342297781429832,
+        "guilt": 2.172795859295109,
+        "joy": -0.6403537050948486,
+        "no-emotion": -0.49418427258217795,
+        "pride": -0.29940448520296314,
+        "relief": -0.3213686881310522,
+        "sadness": 0.05182549681469695,
+        "shame": 2.446439985204247,
+        "surprise": -1.819249085506868,
+        "trust": -0.448870182082935
+      }
+    },
+    "A3": {
+      "combo": [
+        [
+          "unpleasantness",
+          1
+        ],
+        [
+          "suddenness",
+          1
+        ]
+      ],
+      "theory_target": "fear",
+      "theory_alt": "surprise",
+      "empirical_target": "fear",
+      "runner_up": "disgust",
+      "agrees": true,
+      "final_target": "fear",
+      "must_not": [
+        "pride"
+      ],
+      "scores": {
+        "anger": 1.964490015546947,
+        "boredom": -1.2763898279328107,
+        "disgust": 2.192967512818525,
+        "fear": 2.196534182559973,
+        "guilt": 0.5608658238853159,
+        "joy": -2.6394089636210634,
+        "no-emotion": -1.8213922085949297,
+        "pride": -2.472467466564982,
+        "relief": -0.6913396851566501,
+        "sadness": 1.7786799045692585,
+        "shame": 1.4448789663308108,
+        "surprise": 0.18934132465068365,
+        "trust": -1.4267595784910827
+      }
+    },
+    "A4": {
+      "combo": [
+        [
+          "pleasantness",
+          1
+        ],
+        [
+          "self_responsblt",
+          1
+        ]
+      ],
+      "theory_target": "pride",
+      "theory_alt": null,
+      "empirical_target": "pride",
+      "runner_up": "joy",
+      "agrees": true,
+      "final_target": "pride",
+      "must_not": [
+        "guilt"
+      ],
+      "scores": {
+        "anger": -2.30778659192524,
+        "boredom": -0.9576578819213202,
+        "disgust": -2.483290325225511,
+        "fear": -1.7490762348662896,
+        "guilt": 0.875267159550436,
+        "joy": 2.5746814766583124,
+        "no-emotion": 0.3492587309594597,
+        "pride": 2.639757951092939,
+        "relief": 0.8377330422083129,
+        "sadness": -2.0776740188226652,
+        "shame": 0.6012191688249554,
+        "surprise": 0.6006626036608491,
+        "trust": 1.0969049198057568
+      }
+    },
+    "A5": {
+      "combo": [
+        [
+          "pleasantness",
+          1
+        ],
+        [
+          "suddenness",
+          1
+        ]
+      ],
+      "theory_target": "surprise",
+      "theory_alt": "joy",
+      "empirical_target": "surprise",
+      "runner_up": "joy",
+      "agrees": true,
+      "final_target": "surprise",
+      "must_not": [
+        "sadness"
+      ],
+      "scores": {
+        "anger": -0.0012296550008709106,
+        "boredom": -2.1885102299273482,
+        "disgust": 0.10393348714501638,
+        "fear": 0.3132281695507002,
+        "guilt": -0.7366628758593573,
+        "joy": 0.5756262181320975,
+        "no-emotion": -0.9779492050532921,
+        "pride": 0.4666949697309204,
+        "relief": 0.4677620451827149,
+        "sadness": -0.3508196110681038,
+        "shame": -0.40034185004848083,
+        "surprise": 2.6092530138184005,
+        "trust": 0.11901552339760924
+      }
+    },
+    "N1": {
+      "combo": [
+        [
+          "pleasantness",
+          1
+        ],
+        [
+          "other_responsblt",
+          1
+        ]
+      ],
+      "theory_target": null,
+      "theory_alt": null,
+      "empirical_target": "surprise",
+      "runner_up": "joy",
+      "agrees": true,
+      "final_target": "surprise",
+      "must_not": [
+        "anger"
+      ],
+      "scores": {
+        "anger": 1.009439298195209,
+        "boredom": -1.380916942945605,
+        "disgust": 0.44527177474160506,
+        "fear": -1.230635922986819,
+        "guilt": -1.9698444421654313,
+        "joy": 1.7554884766963637,
+        "no-emotion": -0.8019716468283511,
+        "pride": 1.5132305452182206,
+        "relief": 0.051961405673813243,
+        "sadness": -1.5682335299996542,
+        "shame": -1.803286260410691,
+        "surprise": 2.3881307961278324,
+        "trust": 1.591366448683512
+      }
+    },
+    "N2": {
+      "combo": [
+        [
+          "unpleasantness",
+          1
+        ],
+        [
+          "predict_event",
+          1
+        ]
+      ],
+      "theory_target": null,
+      "theory_alt": null,
+      "empirical_target": "boredom",
+      "runner_up": "shame",
+      "agrees": true,
+      "final_target": "boredom",
+      "must_not": [],
+      "scores": {
+        "anger": 0.6457210832430222,
+        "boredom": 2.0323895670270518,
+        "disgust": 0.25004303661611993,
+        "fear": -0.28451523974594595,
+        "guilt": 0.9337627375341004,
+        "joy": -0.690952178419617,
+        "no-emotion": 0.8802246253409058,
+        "pride": -0.8624135557765258,
+        "relief": -0.7334569925984638,
+        "sadness": 0.6383251536108299,
+        "shame": 0.9763449960018761,
+        "surprise": -3.159055417954975,
+        "trust": -0.6264178148783776
+      }
+    }
+  },
+  "disagreements": []
+}

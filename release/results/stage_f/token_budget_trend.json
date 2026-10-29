@@ -1,0 +1,206 @@
+{
+  "run": "20260823T185858Z",
+  "git": "ecf7b02",
+  "n_runs": 10,
+  "rows": [
+    {
+      "source": "conflict_qwen3-vl-8b-instruct_px448_metrics.json",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "bank": "full",
+      "max_side": 448.0,
+      "image_tokens": 128.0,
+      "image_token_fraction": 0.8888888888888888,
+      "discriminability_gap": 1.470136085511209,
+      "auc": 0.9831111111111112,
+      "text_only_ratio": 0.9978867365429639,
+      "override_gap": 0.41827956989247334,
+      "ci_lo": 0.32113575268817196,
+      "ci_hi": 0.5083378136200717
+    },
+    {
+      "source": "conflict_qwen3-vl-8b-instruct_minimal_metrics.json",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "bank": "minimal",
+      "max_side": NaN,
+      "image_tokens": 262.0,
+      "image_token_fraction": 0.9424460431654677,
+      "discriminability_gap": 1.557770016389162,
+      "auc": 0.9866666666666667,
+      "text_only_ratio": 0.9999953097228348,
+      "override_gap": 0.4077060931899641,
+      "ci_lo": 0.3129009856630826,
+      "ci_hi": 0.49006048387096773
+    },
+    {
+      "source": "conflict_qwen3-vl-8b-instruct_px1344_metrics.json",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "bank": "full",
+      "max_side": 1344.0,
+      "image_tokens": 262.0,
+      "image_token_fraction": 0.9424460431654677,
+      "discriminability_gap": 1.561536387894477,
+      "auc": 0.9864888888888889,
+      "text_only_ratio": 0.9978867365429639,
+      "override_gap": 0.38566308243727604,
+      "ci_lo": 0.2864650537634409,
+      "ci_hi": 0.4811827956989248
+    },
+    {
+      "source": "conflict_qwen3-vl-8b-instruct_px896_metrics.json",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "bank": "full",
+      "max_side": 896.0,
+      "image_tokens": 262.0,
+      "image_token_fraction": 0.9424460431654677,
+      "discriminability_gap": 1.5520429642581282,
+      "auc": 0.9863111111111111,
+      "text_only_ratio": 0.9978867365429639,
+      "override_gap": 0.37446236559139795,
+      "ci_lo": 0.2750739247311829,
+      "ci_hi": 0.470076164874552
+    },
+    {
+      "source": "conflict_qwen_metrics.json",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "bank": "full",
+      "max_side": NaN,
+      "image_tokens": NaN,
+      "image_token_fraction": NaN,
+      "discriminability_gap": NaN,
+      "auc": NaN,
+      "text_only_ratio": 0.9978867365429639,
+      "override_gap": 0.3939964157706094,
+      "ci_lo": 0.2954144265232974,
+      "ci_hi": 0.49014784946236595
+    },
+    {
+      "source": "conflict_gemma-3-4b-it_legacy_metrics.json",
+      "model": "google/gemma-3-4b-it",
+      "bank": "full",
+      "max_side": NaN,
+      "image_tokens": 258.0,
+      "image_token_fraction": 0.9347826086956522,
+      "discriminability_gap": 1.6495493588632248,
+      "auc": 0.9813333333333333,
+      "text_only_ratio": NaN,
+      "override_gap": 0.12410394265232977,
+      "ci_lo": -0.004802867383512589,
+      "ci_hi": 0.2428382616487455
+    },
+    {
+      "source": "conflict_gemma-3-4b-it_metrics.json",
+      "model": "google/gemma-3-4b-it",
+      "bank": "full",
+      "max_side": NaN,
+      "image_tokens": 259.0,
+      "image_token_fraction": 0.9350180505415162,
+      "discriminability_gap": 1.6742425021844032,
+      "auc": 0.9822222222222222,
+      "text_only_ratio": NaN,
+      "override_gap": 0.12159498207885294,
+      "ci_lo": -0.003857526881720495,
+      "ci_hi": 0.23683019713261647
+    },
+    {
+      "source": "conflict_llava-1-5-7b-hf_metrics.json",
+      "model": "llava-hf/llava-1.5-7b-hf",
+      "bank": "full",
+      "max_side": NaN,
+      "image_tokens": 579.0,
+      "image_token_fraction": 0.9698492462311558,
+      "discriminability_gap": 1.4705919034726684,
+      "auc": 0.9893333333333333,
+      "text_only_ratio": NaN,
+      "override_gap": -0.12589605734767023,
+      "ci_lo": -0.22018145161290334,
+      "ci_hi": -0.028122759856630826
+    },
+    {
+      "source": "conflict_llava_metrics.json",
+      "model": "llava-hf/llava-1.5-7b-hf",
+      "bank": "full",
+      "max_side": NaN,
+      "image_tokens": NaN,
+      "image_token_fraction": NaN,
+      "discriminability_gap": NaN,
+      "auc": NaN,
+      "text_only_ratio": NaN,
+      "override_gap": -0.12589605734767023,
+      "ci_lo": -0.22018145161290334,
+      "ci_hi": -0.028122759856630826
+    },
+    {
+      "source": "conflict_llava-v1-6-mistral-7b-hf_metrics.json",
+      "model": "llava-hf/llava-v1.6-mistral-7b-hf",
+      "bank": "full",
+      "max_side": NaN,
+      "image_tokens": 2147.0,
+      "image_token_fraction": 0.9926028663892742,
+      "discriminability_gap": 1.6337175211224046,
+      "auc": 0.9975111111111111,
+      "text_only_ratio": 1.391028043343363,
+      "override_gap": 0.1873655913978494,
+      "ci_lo": 0.07785170250896067,
+      "ci_hi": 0.3003651433691757
+    }
+  ],
+  "excluded_missing_image_tokens": [
+    {
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "source": "conflict_qwen_metrics.json",
+      "override_gap": 0.3939964157706094
+    },
+    {
+      "model": "llava-hf/llava-1.5-7b-hf",
+      "source": "conflict_llava_metrics.json",
+      "override_gap": -0.12589605734767023
+    }
+  ],
+  "within_model": [
+    {
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "n_runs": 4,
+      "tokens_min": 128.0,
+      "tokens_max": 262.0,
+      "fold_range": 2.046875,
+      "gap_min": 0.37446236559139795,
+      "gap_max": 0.41827956989247334,
+      "all_cis_overlap": true,
+      "discriminability_auc_range": [
+        0.9831111111111112,
+        0.9866666666666667
+      ],
+      "verdict": "FLAT \u2014 every CI overlaps, so no effect of the token budget is detectable over this range"
+    },
+    {
+      "model": "google/gemma-3-4b-it",
+      "n_runs": 2,
+      "tokens_min": 258.0,
+      "tokens_max": 259.0,
+      "fold_range": 1.003875968992248,
+      "gap_min": 0.12159498207885294,
+      "gap_max": 0.12410394265232977,
+      "all_cis_overlap": true,
+      "discriminability_auc_range": [
+        0.9813333333333333,
+        0.9822222222222222
+      ],
+      "verdict": "FLAT \u2014 every CI overlaps, so no effect of the token budget is detectable over this range"
+    }
+  ],
+  "cross_model": {
+    "n_models": 4,
+    "models": [
+      "Qwen/Qwen3-VL-8B-Instruct",
+      "google/gemma-3-4b-it",
+      "llava-hf/llava-1.5-7b-hf",
+      "llava-hf/llava-v1.6-mistral-7b-hf"
+    ],
+    "pearson_tokens_vs_gap": 0.0004414482467083449,
+    "leave_one_out_range": [
+      -0.8522826052888863,
+      0.5354177736728281
+    ],
+    "caveat": "n=4 models: a correlation this small is descriptive only, ignores every CI, and confounds the budget with everything else that differs between checkpoints. Runs are missing image-token counts (see excluded_missing_image_tokens), so this omits models that may break the pattern."
+  }
+}

@@ -74,8 +74,9 @@ def group_arrays(d: pd.DataFrame, group: str, value: str, neutral_ids) -> dict |
     Rows are photographs, not person-annotations: EMOTIC can annotate several people in one photo, the
     model sees the whole photo, and those rows are byte-identical forward passes, so they are averaged
     rather than counted twice (the convention `analyze_stage_f_unbounded` already uses).
-    Returns `neg` and `pos` (photos x context ids; NaN where a bank has no such member), `neutral`
-    (photos x neutral ids) and the photo index.
+    Returns `neg` and `pos` (photos x that arm's own context ids), `neutral` (photos x neutral ids)
+    and the photo index. In the matched bank both arms carry the same pair ids in the same order
+    (`paired`); in the varied bank they carry different sentences, and each arm keeps only its own.
     """
     sub = d[d["image_group"] == group]
     neutral = sub[(sub["condition"] == "neutral") & sub["context_id"].isin(neutral_ids)]
@@ -90,19 +91,20 @@ def group_arrays(d: pd.DataFrame, group: str, value: str, neutral_ids) -> dict |
     photos = z.index.intersection(neg.index).intersection(pos.index)
     if not len(photos):
         return None
-    cols = sorted(set(neg.columns) | set(pos.columns))
+    neg_ids, pos_ids = sorted(neg.columns), sorted(pos.columns)
     return {"photos": list(photos),
-            "neg": neg.reindex(index=photos, columns=cols).to_numpy(dtype=float),
-            "pos": pos.reindex(index=photos, columns=cols).to_numpy(dtype=float),
+            "neg": neg.loc[photos, neg_ids].to_numpy(dtype=float),
+            "pos": pos.loc[photos, pos_ids].to_numpy(dtype=float),
             "neutral": z.loc[photos].to_numpy(dtype=float),
-            "context_ids": cols, "neutral_ids": list(z.columns)}
+            "neg_ids": neg_ids, "pos_ids": pos_ids, "paired": neg_ids == pos_ids,
+            "neutral_ids": list(z.columns)}
 
 
 def _effects(g: dict, rows, cols, ncols, headroom: bool = False):
     """Per-cell shifts of the negative and positive members against each photo's neutral mean."""
     base = g["neutral"][np.ix_(rows, ncols)].mean(axis=1, keepdims=True)
-    neg = g["neg"][np.ix_(rows, cols)] - base
-    pos = g["pos"][np.ix_(rows, cols)] - base
+    neg = g["neg"][np.ix_(rows, cols[0])] - base
+    pos = g["pos"][np.ix_(rows, cols[1])] - base
     if headroom:
         neg = neg / np.clip(base + 1.0, ROOM_FLOOR, None)
         pos = pos / np.clip(1.0 - base, ROOM_FLOOR, None)
@@ -149,11 +151,18 @@ def _replicate(rng, P: dict | None, N: dict | None, resample_cols: bool, resampl
     ref = P if P is not None else N
     n_neu = ref["neutral"].shape[1]
     ncols = rng.integers(0, n_neu, n_neu) if resample_neutral else np.arange(n_neu)
-    same = (P is not None and N is not None and P["context_ids"] == N["context_ids"])
+    same = (P is not None and N is not None and P["paired"] and N["paired"]
+            and P["neg_ids"] == N["neg_ids"])
+
+    def draw(n):
+        return rng.integers(0, n, n) if resample_cols else np.arange(n)
 
     def cols_for(g):
-        n = g["neg"].shape[1]
-        return rng.integers(0, n, n) if resample_cols else np.arange(n)
+        # A matched pair is one unit: its two members are resampled together.
+        if g["paired"]:
+            c = draw(g["neg"].shape[1])
+            return (c, c)
+        return (draw(g["neg"].shape[1]), draw(g["pos"].shape[1]))
 
     if shared_pairs and same:
         cols = cols_for(P)
@@ -168,7 +177,8 @@ _INTERVALS = (("ci95_photo", False, False), ("ci95_crossed", True, False),
 
 
 def _full(g):
-    return None if g is None else (g, np.arange(g["neg"].shape[0]), np.arange(g["neg"].shape[1]),
+    return None if g is None else (g, np.arange(g["neg"].shape[0]),
+                                   (np.arange(g["neg"].shape[1]), np.arange(g["pos"].shape[1])),
                                    np.arange(g["neutral"].shape[1]))
 
 
@@ -189,6 +199,9 @@ def contrast(name: str, P: dict | None, N: dict | None, n_boot: int = 2000, seed
     needs_p = name in ("mirror", "within_pos", "equal_room", "at_zero_baseline")
     if (needs_p and P is None) or (needs_n and N is None):
         return {}
+    # Within-photograph contrasts compare the two members of a pair; the varied bank has no pairs.
+    if name != "mirror" and not (P if needs_p else N)["paired"]:
+        return {}
     stat = lambda Pd, Nd: _stat(name, Pd, Nd, headroom)
     out = {"estimate": float(stat(_full(P), _full(N))),
            **_intervals(stat, P, N, n_boot, seed, shared_pairs)}
@@ -203,8 +216,7 @@ def arms(P: dict | None, N: dict | None, headroom: bool = False) -> dict:
     for tag, g in (("positive_images", P), ("negative_images", N)):
         if g is None:
             continue
-        neg, pos = _effects(g, np.arange(g["neg"].shape[0]), np.arange(g["neg"].shape[1]),
-                            np.arange(g["neutral"].shape[1]), headroom=headroom)
+        neg, pos = _effects(*_full(g), headroom=headroom)
         out[tag] = {"neg_sentence": float(np.nanmean(neg)), "pos_sentence": float(np.nanmean(pos)),
                     "n_photos": int(g["neg"].shape[0])}
     return out
@@ -463,11 +475,19 @@ def latex_table(out: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _rel(path: Path) -> str:
+    """Repo-relative where possible: the metrics file is released, the analysing machine is not."""
+    try:
+        return Path(path).resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return Path(path).name
+
+
 def run(matched_pq: Path, equal_room_pq: Path | None, n_boot: int, seed: int,
         bank_pq: Path | None = None) -> dict:
     ensure_dirs()
     out = {"run": run_stamp(), "git": git_hash(), "n_boot": n_boot, "seed": seed,
-           "matched_parquet": str(matched_pq), "matched": {}}
+           "matched_parquet": _rel(matched_pq), "matched": {}}
     df = pd.read_parquet(matched_pq)
     if bank_pq is not None and bank_pq.exists():
         df, out["neutral_bank_reproduction"] = merge_neutral_bank(df, pd.read_parquet(bank_pq))
@@ -503,7 +523,7 @@ def run(matched_pq: Path, equal_room_pq: Path | None, n_boot: int, seed: int,
                            if isinstance(c, str) and c.startswith("zb")))
         # The run already screened; threshold=inf keeps every measured photo.
         out["equal_room_run"] = equal_room(er, ids, threshold=np.inf, n_boot=n_boot, seed=seed)
-        out["equal_room_run"]["parquet"] = str(equal_room_pq)
+        out["equal_room_run"]["parquet"] = _rel(equal_room_pq)
         out["equal_room_run"]["neutral_sentence_profile"] = neutral_sentence_profile(er, ids)
         print(f"\n== equal-room RUN (n={out['equal_room_run']['n_photos']} screened photos, "
               f"baseline = bank B)")

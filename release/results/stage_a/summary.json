@@ -1,0 +1,59 @@
+{
+  "rows": [
+    {
+      "appraisal": "pleasantness",
+      "display": "Pleasantness",
+      "layer": 18,
+      "val_r2": 0.6410822618912011,
+      "baseline_r2": 0.00655408074132291,
+      "delta": 0.6345281811498782,
+      "mid_layer": true
+    },
+    {
+      "appraisal": "unpleasantness",
+      "display": "Unpleasantness",
+      "layer": 18,
+      "val_r2": 0.6003402735915349,
+      "baseline_r2": -0.04107379125327726,
+      "delta": 0.6414140648448121,
+      "mid_layer": true
+    },
+    {
+      "appraisal": "self_responsblt",
+      "display": "Own Responsibility",
+      "layer": 21,
+      "val_r2": 0.4420216415253573,
+      "baseline_r2": -0.011688044040309986,
+      "delta": 0.45370968556566726,
+      "mid_layer": true
+    },
+    {
+      "appraisal": "suddenness",
+      "display": "Suddenness",
+      "layer": 17,
+      "val_r2": 0.31474084770402055,
+      "baseline_r2": -0.002988487941972595,
+      "delta": 0.31772933564599315,
+      "mid_layer": true
+    },
+    {
+      "appraisal": "other_responsblt",
+      "display": "Others' Responsibility",
+      "layer": 19,
+      "val_r2": 0.31278540415923206,
+      "baseline_r2": -0.019668904898848982,
+      "delta": 0.33245430905808104,
+      "mid_layer": true
+    },
+    {
+      "appraisal": "predict_event",
+      "display": "Event Predictability",
+      "layer": 17,
+      "val_r2": 0.2375057795942096,
+      "baseline_r2": -0.030116867406370762,
+      "delta": 0.26762264700058036,
+      "mid_layer": true
+    }
+  ],
+  "verdict": "SUPPORTS localization: 6/6 appraisals peak mid-network (layers 10-24) and beat the shuffled baseline by >0.10 r2. This is the Tak-style mid-layer, MHSA-dominant signature."
+}

@@ -1,0 +1,15 @@
+{
+  "run": "20260810T211132Z",
+  "git": "38f10ec",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "neutral_baseline": -0.9964003944018573,
+  "none_baseline": -0.995302342564969,
+  "pos_effect": 1.9962638860361162,
+  "neg_effect": -0.001350122253505966,
+  "pos_raw": 0.9998634916342586,
+  "neg_raw": -0.9977505166553634,
+  "text_only_ratio_vs_neutral": 0.0006763245395311128,
+  "text_only_ratio_raw": 0.9978867365429639,
+  "image_conditioned_ratio": 3.64283093990944,
+  "tokenization_multi_token": {}
+}

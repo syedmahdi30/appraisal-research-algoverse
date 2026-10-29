@@ -1,0 +1,105 @@
+{
+  "run": "20260819T004243Z",
+  "git": "0d56d9d",
+  "critical_layer": 18,
+  "patch_layers": [
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28
+  ],
+  "n_pairs": 60,
+  "n_skipped": 0,
+  "n_segmentation_dropped": 0,
+  "context_polarity": "negative",
+  "context": "This photo was taken moments after they received devastating news.",
+  "recovery": {
+    "pos_probe": 4.087504088878632,
+    "neg_probe": 3.458469474315643,
+    "pos_val": -0.8490791457417206,
+    "neg_val": -0.930736014911199,
+    "image": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.07571958968714755,
+      "val_ci95": [
+        -0.41474596333089,
+        0.48729109699501216
+      ]
+    },
+    "context": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": -0.06458859646007016,
+      "val_ci95": [
+        -0.5868261555132058,
+        0.14945604228727621
+      ]
+    },
+    "question": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": -0.028974286170824308,
+      "val_ci95": [
+        -0.546363493343545,
+        0.259117587694663
+      ]
+    },
+    "structure": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.8374884812519282,
+      "val_ci95": [
+        -0.026033349035946875,
+        2.3996989452564614
+      ]
+    },
+    "text_all": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 0.9254771340417951,
+      "val_ci95": [
+        0.14731810388477176,
+        2.123862733018838
+      ]
+    },
+    "all": {
+      "probe": 0.0,
+      "probe_ci95": [
+        0.0,
+        0.0
+      ],
+      "val": 1.0683686053715407,
+      "val_ci95": [
+        0.24182466067941263,
+        2.127336827002586
+      ]
+    },
+    "n_pairs": 60
+  },
+  "probe_valid": false,
+  "verdict": "image tokens carry LITTLE in this band [NOTE: patched at/after the L18 probe tap, so probe recovery is invariant-by-construction \u2014 verdict uses behavioral VALENCE]: patching image tokens recovers 8% [-41%,49%] of the image-driven read-out gap, vs all-text 93%. Sanity: patching every token bar the read-out query recovers 107% (expect ~100%). Mirror of the same-image result, where image tokens were inert for the TEXT context delta.",
+  "design": "CROSS-IMAGE: donor=positive image, recipient=negative image, SAME context \u2192 identical input_ids, all positions (incl. context) patchable. recovery = (patched-neg_img)/(pos_img-neg_img) at L18 read-out, resid_post over band [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]."
+}

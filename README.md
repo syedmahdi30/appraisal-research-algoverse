@@ -1,122 +1,109 @@
-# Cross-Modal Appraisal Transfer & Multimodal Valence Conflict in VLMs
+# Does Negative Text Pull Harder? A Cross-Modal Valence Asymmetry Depends on How It Is Read
 
-This repository contains the replication code, dataset loaders, probe training pipelines, activation patching harnesses, and analysis scripts for the paper:
-**"When One Word Changes an Image Judgment: A Valence Asymmetry in Vision-Language Models"** (anonymous double-blind submission).
+Code, stimuli, and released results for the VLM4RWD 2026 workshop paper (camera-ready source:
+`paper/neurips_2026.tex`).
 
----
+## What the paper finds
 
-## 1. Overview & Findings
+We pair EMOTIC photographs with one-sentence contexts that flip one valence word
+(*won ↔ lost*) and measure how each sentence shifts a vision-language model's emotion judgment
+against that photograph's own neutral-context response.
 
-1. **Valence Asymmetry in Multimodal Conflict**: When an image and a one-sentence text context carry conflicting emotional cues, negative text overrides positive image judgments more than positive text overrides negative image judgments. On Qwen3-VL-8B, baseline-corrected override rates are 57% vs 35% (gap +21.7%, 95% CI [+10.9, +31.9]); uncorrected the same comparison reads 76% vs 37%. The paper relies on the corrected measure.
-2. **Valence, Not Event Semantics**: 6 token-matched minimal pairs flipping only the valence word (*won ↔ lost*, *wonderful ↔ devastating*, *celebration ↔ memorial*) sharpen the effect rather than dissolve it: on positive images the within-item contrast is +1.148 (95% CI [+0.943, +1.344]), and all six pairs agree, confirming the effect is driven by valence rather than event semantics.
-3. **Shared Text-Stream Carrier**: Same-image activation patching reveals that image tokens are causally inert for the context difference (~0%), with downstream text positions recovering 88–93% of the delta. Cross-image patching shows visual valence migrates from image tokens (early layers, 100%) to text-token positions (late layers, 63%).
-4. **Cross-Modal Appraisal Probe Transfer**: Frozen linear probes fit on text appraisal ratings transfer to image activations ($\rho = +0.510$, Polarity AUC $0.912$), and text difference-of-means directions causally steer multimodal outputs under image input (slope $+0.336$).
-5. **Multi-Model Evaluation & Scoring Rules**: Evaluated across Gemma-3-4B, Gemma-3-12B, Qwen3-VL-8B, LLaVA-1.5-7B, and LLaVA-NeXT-7B. Teacher-forced complete sequence-sum scoring is used for multi-token emotion words.
+1. **On a bounded score, negative text looks much stronger.** In Qwen3-VL-8B, with
+   P(positive) − P(negative) as the readout, the mirror contrast between the two conflict directions
+   is +0.496, with an interval excluding zero when word pairs are resampled.
+2. **Most of that is the measurement.** On the log-odds of the same probabilities the contrast
+   reverses sign without clearing zero. It ranges from +0.24 to +0.76 depending on which neutral
+   sentence defines the baseline. A larger within-photograph contrast reverses on negative
+   photographs, so it tracks conflict versus agreement, not valence (Table 2 of the paper).
+3. **Across four models, the readout and the label scoring decide size and sometimes sign.**
+   Scoring only the first token of a multi-token emotion label manufactures a null in LLaVA-1.5-7B
+   and reverses the categorical ordering in LLaVA-NeXT-7B.
+4. **In Gemma-3-4B**, downstream text positions restore 88–93% of a context difference under
+   activation patching; a frozen text-trained valence probe transfers to image-conditioned states
+   (ρ = +0.510).
 
----
-
-## 2. Repository Layout
+## Layout
 
 ```
-├── config/                  # Experiment YAML configs (stages A, C, D, E, F)
-├── data/                    # Datasets (raw/ and processed/ parquets)
-├── docs/                    # Detailed experimental logs, audits, and runbooks
-├── paper/                   # LaTeX manuscript, figures, and bibliography
-├── results/                 # Pre-computed evaluation metrics, probe weights, and figures
-│   ├── stage_a/             # Text probe weights (probes.npz) & localization metrics
-│   ├── stage_c/             # Readout transfer metrics & caption control parquets
-│   ├── stage_d/             # Cross-modal steering slopes & evaluation JSONs
-│   └── stage_f/             # Conflict parquets, patching JSONs, crossed bootstrap outputs
-├── scripts/                 # Utility scripts (packaging, environment check, download)
-├── src/
-│   ├── bridge/              # TransformerBridge boot and hook utilities
-│   ├── data/                # Loaders for crowd-enVENT, EMOTIC, and minimal pairs
-│   ├── experiments/         # Stage A-F experiment runners and analysis modules
-│   │   └── shared/          # Raw-HF hooks, sequence scoring, and bootstrap reporting
-│   └── probes/              # Ridge probe training, evaluation, and unique-effect vectors
-└── tests/                   # 134 unit and regression tests
+config/            experiment configs; stage_f_matched_photos.csv pins the published photo set
+src/data/          crowd-enVENT and EMOTIC loaders, context and neutral sentence banks
+src/experiments/   runners (GPU) and analyses (CPU) for every stage
+src/probes/        ridge probes
+release/results/   the released results bundle (model outputs; see "Results bundle")
+release/MANIFEST.json   every released file: sha256, whether and where the paper cites it
+scripts/           data download, results packaging/rehydration, paper build
+paper/             LaTeX source, tables, figures
+tests/             pytest suite
 ```
 
----
-
-## 3. Quickstart & Verification
-
-### Installation
+## Install and test
 
 ```bash
-# Clone or extract archive
 python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt          # Qwen3-VL runs use requirements-qwen.txt
+pytest tests/
 ```
 
-### Run Unit Tests
-```bash
-pytest tests/  # 134 tests covering labels, probes, sequence scoring, and hooks
-```
+## Results bundle
 
----
-
-## 4. Reproducing Paper Results & Figures (CPU-Only, Seconds)
-
-The repository includes pre-computed evaluation parquets and metrics in `results/`, allowing full reproduction of all paper tables and figures on a laptop in seconds without needing GPUs or raw image downloads.
+`release/results/` holds every forward-pass output and metrics file behind the paper, plus
+superseded runs the paper mentions (marked `"cited_in_paper": false` in `release/MANIFEST.json`).
+EMOTIC's own annotations are **not** redistributed: wherever a file carried an EMOTIC rating, that
+column is replaced by `<column>_emotic_row`, an index into `data/processed/emotic_test.parquet`.
 
 ```bash
-# 1. Cross-model conflict tables, override gaps, and minimal-pair contrasts (§5, §7, Table 1 & Table 5)
-python -m src.experiments.analyze_stage_f
+# With EMOTIC access (build data/processed/ first, see "Data"): restores the original columns
+python scripts/rehydrate_results.py
 
-# 2. Crossed (image × sentence) bootstrap and unbounded log-odds margins (§5.2, Table 2)
-python -m src.experiments.analyze_stage_f_unbounded
-
-# 3. Stage C semipartial caption controls (§4, Table 3)
-python -m src.experiments.analyze_stage_c_mechanism
-
-# 4. Stage A text localization summary (§4, Appendix A)
-python -m src.experiments.analyze_stage_a
+# Without EMOTIC: copies the bundle as-is. Everything below except the probe-transfer numbers runs.
+python scripts/rehydrate_results.py --no-emotic
 ```
 
----
+## Reproducing the paper's numbers (CPU, no images needed)
 
-## 5. End-to-End GPU Reproduction Pipeline
+Each command reads `results/` and was checked against a fresh rehydrated copy of the bundle.
 
-To rerun model forward passes and activations from scratch (GPU required, e.g. NVIDIA A100 40GB or 80GB):
+| Paper | Command |
+|---|---|
+| Table 2 (every readout × contrast, matched set) and the corrected categorical gaps of Tables 3, 4, 9 | `python -m src.experiments.analyze_matched_readouts` |
+| Table 9 (four models: mirror contrast, unbounded margin, uncorrected gap) | `python -m src.experiments.analyze_stage_f_unbounded` |
+| Balanced label subsets (Sec. 4.3) | `python -m src.experiments.analyze_label_balance` |
+| Tables 7–8 (patching intervals) | `python -m src.experiments.patching_intervals` |
+| Wording robustness (Table 6) | `python -m src.experiments.stage_f_controls --reanalyze controls_frame_qwen` and `... controls_question_qwen` |
+| Person grounding (App. A) | `python -m src.experiments.stage_f_controls --reanalyze controls_person_box_qwen` and `... controls_person_crop_qwen` |
+| Probe localization (Table 11) | `python -m src.experiments.analyze_stage_a` |
 
-### Step 0: Data Acquisition
-* **crowd-enVENT** (Text, public direct download):
-  ```bash
-  python scripts/download_data.py --dataset crowd_envent
-  ```
-* **EMOTIC** (Images, gated non-commercial academic agreement):
-  1. Submit the academic access request at `s3.sunai.uoc.edu/emotic/download.html`.
-  2. Once approved and downloaded (`emotic.zip` and `Annotations.mat`), run:
-  ```bash
-  python scripts/download_data.py --dataset emotic --archive /path/to/emotic.zip --annotations /path/to/Annotations.mat
-  ```
+`analyze_matched_readouts` also writes `paper/tables/readouts.tex`, so the main-text table cannot
+drift from its source.
 
-### Step 1: Stage A — Text Probe Training & Steering
+## Data
+
+* **crowd-enVENT** (text, public): `python scripts/download_data.py --dataset crowd_envent`
+* **EMOTIC** (images, gated non-commercial agreement): request access from the EMOTIC authors, then
+  `python scripts/download_data.py --dataset emotic --archive emotic.zip --annotations Annotations.mat`.
+  MSCOCO and ADE20K images are distributed by their own projects.
+
+## Re-running forward passes (GPU)
+
+Image-conditioned results use reference HuggingFace implementations in bf16 on one 40 GB A100.
+Runbooks: `docs/reviewer-controls-runbook.md` (Qwen3-VL controls, including the camera-ready
+neutral-bank, equal-room and generation runs). Principal entry points:
+
 ```bash
-python -m src.experiments.stage_a_text           # Fits Ridge probes -> results/stage_a/probes.npz
-python -m src.experiments.stage_a_steering_v2   # Causal diff-of-means text steering
+python -m src.experiments.stage_f_qwen                         # Qwen3-VL-8B varied set
+python -m src.experiments.stage_f_controls --equal-room        # camera-ready runs; see runbook
+python -m src.experiments.stage_f_controls --neutral-bank
+python -m src.experiments.stage_f_controls --generate
+python -m src.experiments.stage_f_patching_hf                  # Gemma-3-4B same-image patching
+python -m src.experiments.stage_f_cross_patching_hf            # Gemma-3-4B cross-image patching
 ```
 
-### Step 2: Stage C & D — Cross-Modal Transfer & Steering
-```bash
-python -m src.experiments.stage_c_transfer_hf   # Evaluates frozen text probe on EMOTIC images
-python -m src.experiments.stage_c_caption       # Neutral and rich caption controls
-python -m src.experiments.stage_d_steering_hf   # Injects text directions under image input
-```
+The published 150 annotations are pinned by `config/stage_f_matched_photos.csv`. Re-deriving them
+with `select_extreme_rows` is not reproducible across library versions, because EMOTIC's valence
+ties at the cut are broken by an unstable sort.
 
-### Step 3: Stage F — Modality Conflict & Activation Patching
-```bash
-# Multimodal conflict evaluation (Gemma, Qwen, LLaVA)
-python -m src.experiments.stage_f_conflict --bank minimal    # Minimal-pair valence control
-python -m src.experiments.stage_f_text_only --bank minimal   # Unimodal text strength control
+## License
 
-# Activation patching
-python -m src.experiments.stage_f_patching_hf               # Same-image position patching (Table 3)
-python -m src.experiments.stage_f_cross_patching_hf         # Cross-image depth patching (Table 4)
-```
-
----
-
-## 6. License
-This codebase is licensed under the [MIT License](LICENSE).
+Code: MIT. Released results inherit the terms of the models and datasets they derive from; EMOTIC
+is for non-commercial research use under its own agreement.

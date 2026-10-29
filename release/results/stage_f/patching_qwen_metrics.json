@@ -1,0 +1,78 @@
+{
+  "run": "20260810T224932Z",
+  "git": "9c15de3",
+  "analysis_run": "20260905T002308Z",
+  "analysis_git": "08e656c",
+  "analysis_git_dirty": true,
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "n_layers": 36,
+  "patch_band": [
+    13,
+    33
+  ],
+  "n_skipped": 0,
+  "n_segmentation_dropped": 0,
+  "donor_pos_context": "This photo was taken moments after they won the championship.",
+  "recipient_neg_context": "This photo was taken at the funeral of a close friend.",
+  "read_out": "behavioral_valence",
+  "n_rows": 60,
+  "n_images": 51,
+  "n_unique_images": 51,
+  "resampling_unit": "unique image_path",
+  "bootstrap_samples": 2000,
+  "bootstrap_seed": 0,
+  "recovery": {
+    "pos_val": 0.9207029643901898,
+    "neg_val": -0.9938548903409711,
+    "image": {
+      "val": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "question": {
+      "val": 0.12106770265564035,
+      "ci95": [
+        0.07380675164252677,
+        0.17593765227143654
+      ]
+    },
+    "bos": {
+      "val": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "prefix_delim": {
+      "val": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ]
+    },
+    "suffix_delim": {
+      "val": 0.06159288621209437,
+      "ci95": [
+        0.02086578118520798,
+        0.11866174036237417
+      ]
+    },
+    "structure": {
+      "val": 0.06159288621209437,
+      "ci95": [
+        0.02086578118520798,
+        0.11866174036237417
+      ]
+    },
+    "text_all": {
+      "val": 0.6225622863354682,
+      "ci95": [
+        0.5363700813572423,
+        0.7092822740660553
+      ]
+    }
+  },
+  "verdict": "(valence recovery) image 0%, question 12% | BOS 0%, prefix 0%, suffix 6% \u2192 structure 6%, all-text 62%. IMAGE tokens causally INERT (matches Gemma); question and structure comparable (12% / 6%)."
+}

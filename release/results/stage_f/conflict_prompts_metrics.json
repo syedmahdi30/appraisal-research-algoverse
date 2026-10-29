@@ -1,0 +1,44 @@
+{
+  "run": "20260814T234119Z",
+  "git": "772bffc",
+  "layer": 18,
+  "tap": "hook_attn_out",
+  "seed": 0,
+  "n_images": 150,
+  "n_skipped": 0,
+  "n_forwards": 13500,
+  "variants": {
+    "v0_original": {
+      "frame": "_labelled",
+      "question": "What single emotion is this person feeling?"
+    },
+    "v1_howfeel": {
+      "frame": "_labelled",
+      "question": "How is this person feeling?"
+    },
+    "v2_oneword": {
+      "frame": "_labelled",
+      "question": "In one word, what emotion is this person experiencing?"
+    },
+    "v3_mostlikely": {
+      "frame": "_labelled",
+      "question": "What is the most likely emotion of the person in this photo?"
+    },
+    "v4_ctx_after": {
+      "frame": "_ctx_after",
+      "question": "What single emotion is this person feeling?"
+    },
+    "v5_no_label": {
+      "frame": "_unlabelled",
+      "question": "What single emotion is this person feeling?"
+    }
+  },
+  "n_conditions": 15,
+  "text_code": {
+    "none": 0,
+    "neutral": 0,
+    "positive": 1,
+    "negative": -1
+  },
+  "tokenization_multi_token": {}
+}

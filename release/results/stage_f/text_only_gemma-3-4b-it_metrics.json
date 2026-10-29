@@ -1,0 +1,26 @@
+{
+  "run": "20260823T193237Z",
+  "git": "38b0bf9",
+  "model": "google/gemma-3-4b-it",
+  "bank": "full",
+  "keyed_by": "model + bank (no image in this pass; --max-side cannot affect it)",
+  "neutral_baseline": -0.6090239978737699,
+  "none_baseline": 0.09749567388111302,
+  "pos_effect": 1.0253648604951493,
+  "neg_effect": -0.25889972153222524,
+  "pos_raw": 0.41634086262137937,
+  "neg_raw": -0.8679237194059951,
+  "text_only_ratio_vs_neutral": 0.252495215612521,
+  "text_only_ratio_raw": 2.0846469739754694,
+  "reference_ratio": 2.0846469739754694,
+  "per_base_run": [
+    {
+      "base_run": "conflict_gemma-3-4b-it_metrics.json",
+      "max_side": null,
+      "image_tokens": 259,
+      "image_conditioned_ratio": 13.017566371418127,
+      "verdict": "CROSS-MODAL amplification (image inflates the ratio)"
+    }
+  ],
+  "tokenization_multi_token": {}
+}

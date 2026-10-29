@@ -1,0 +1,461 @@
+{
+  "run": "20260822T004152Z",
+  "git": "1427a3c",
+  "n_boot": 2000,
+  "anchor_passed": true,
+  "models": {
+    "Gemma-3-4B": {
+      "anchor": {
+        "ok": true,
+        "parametric_gap": 0.6385304659498208,
+        "reference_gap": 0.6385304659498208,
+        "max_abs_diff": 0.0,
+        "logic_exact": true,
+        "published_gap": 0.6385304659498208,
+        "data_exact": true
+      },
+      "evaluators": {
+        "E0_published": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.8440860215053763,
+            "pos_ctx_overrides_neg_img": 0.20555555555555555,
+            "dominance_gap": 0.6385304659498208,
+            "dominance_gap_ci95": [
+              0.5508064516129032,
+              0.7186424731182798
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.264921230318587,
+            "asymmetry_ci95": [
+              0.09463728816745647,
+              0.4313893832225372
+            ],
+            "headroom_norm_pull_drop": 0.6320430325963344,
+            "headroom_norm_pull_rise": 0.2592427478588395
+          },
+          "note": "the paper's evaluator \u2014 anchor"
+        },
+        "J1_sparest": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.8440860215053763,
+            "pos_ctx_overrides_neg_img": 0.3611111111111111,
+            "dominance_gap": 0.48297491039426516,
+            "dominance_gap_ci95": [
+              0.37140681003584225,
+              0.5938284050179212
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.05219397811926485,
+            "asymmetry_ci95": [
+              -0.1262493211834688,
+              0.2372874794210891
+            ],
+            "headroom_norm_pull_drop": 13.403906770882854,
+            "headroom_norm_pull_rise": 0.42601865943108164
+          },
+          "note": "cleanest 1-vs-1 antonym contrast"
+        },
+        "J2_drop_weak_pos": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.8440860215053763,
+            "pos_ctx_overrides_neg_img": 0.19166666666666668,
+            "dominance_gap": 0.6524193548387096,
+            "dominance_gap_ci95": [
+              0.5663888888888889,
+              0.7346796594982078
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.28205342237193565,
+            "asymmetry_ci95": [
+              0.1110098849162075,
+              0.4463301441178078
+            ],
+            "headroom_norm_pull_drop": 0.6559675886589609,
+            "headroom_norm_pull_rise": 0.2538952310059184
+          },
+          "note": "drop arguably-weak positives relief, trust -> 'other'"
+        },
+        "J3_boredom_neutral": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.836021505376344,
+            "pos_ctx_overrides_neg_img": 0.20555555555555555,
+            "dominance_gap": 0.6304659498207885,
+            "dominance_gap_ci95": [
+              0.5427419354838712,
+              0.7121975806451613
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.3177562475651116,
+            "asymmetry_ci95": [
+              0.15555386070596142,
+              0.48155077711097716
+            ],
+            "headroom_norm_pull_drop": 0.6590173595306036,
+            "headroom_norm_pull_rise": 0.26089000785685373
+          },
+          "note": "re-file low-arousal boredom out of NEG"
+        },
+        "J4_denom_swap": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.8440860215053763,
+            "pos_ctx_overrides_neg_img": 0.20555555555555555,
+            "dominance_gap": 0.6385304659498208,
+            "dominance_gap_ci95": [
+              0.5508064516129032,
+              0.7186424731182798
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.10672651276424572,
+            "asymmetry_ci95": [
+              -0.0711125116766633,
+              0.27959933959804206
+            ],
+            "headroom_norm_pull_drop": 53.330907850444206,
+            "headroom_norm_pull_rise": 0.23692174653651407
+          },
+          "note": "renormalise over pos u neg only (drop surprise/neutral sink mass)"
+        },
+        "J5_rank_only": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.8440860215053763,
+            "pos_ctx_overrides_neg_img": 0.20555555555555555,
+            "dominance_gap": 0.6385304659498208,
+            "dominance_gap_ci95": [
+              0.5508064516129032,
+              0.7186424731182798
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.264921230318587,
+            "asymmetry_ci95": [
+              0.09463728816745647,
+              0.4313893832225372
+            ],
+            "headroom_norm_pull_drop": 0.6320430325963344,
+            "headroom_norm_pull_rise": 0.2592427478588395
+          },
+          "note": "identical partition; argmax-only, magnitudes ignored (== E0 override)"
+        }
+      }
+    },
+    "Qwen3-VL-8B": {
+      "anchor": {
+        "ok": true,
+        "parametric_gap": 0.3939964157706094,
+        "reference_gap": 0.3939964157706094,
+        "max_abs_diff": 0.0,
+        "logic_exact": true,
+        "published_gap": 0.3939964157706094,
+        "data_exact": true
+      },
+      "evaluators": {
+        "E0_published": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.7634408602150539,
+            "pos_ctx_overrides_neg_img": 0.36944444444444446,
+            "dominance_gap": 0.3939964157706094,
+            "dominance_gap_ci95": [
+              0.2954144265232974,
+              0.49014784946236595
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.39394020371642935,
+            "asymmetry_ci95": [
+              0.24930019261936315,
+              0.5416400728893918
+            ],
+            "headroom_norm_pull_drop": 0.7136766282108233,
+            "headroom_norm_pull_rise": 0.3935924573861592
+          },
+          "note": "the paper's evaluator \u2014 anchor"
+        },
+        "J1_sparest": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.7607526881720432,
+            "pos_ctx_overrides_neg_img": 0.4222222222222222,
+            "dominance_gap": 0.338530465949821,
+            "dominance_gap_ci95": [
+              0.2322468637992833,
+              0.44193996415770626
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.356004267746191,
+            "asymmetry_ci95": [
+              0.2034857306727833,
+              0.5056725972939136
+            ],
+            "headroom_norm_pull_drop": 0.7117717856884095,
+            "headroom_norm_pull_rise": 0.4312830405823837
+          },
+          "note": "cleanest 1-vs-1 antonym contrast"
+        },
+        "J2_drop_weak_pos": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.7634408602150539,
+            "pos_ctx_overrides_neg_img": 0.36944444444444446,
+            "dominance_gap": 0.3939964157706094,
+            "dominance_gap_ci95": [
+              0.2954144265232974,
+              0.49014784946236595
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.3931750299634864,
+            "asymmetry_ci95": [
+              0.24838704107732232,
+              0.5404020421702614
+            ],
+            "headroom_norm_pull_drop": 0.7137000345443628,
+            "headroom_norm_pull_rise": 0.3934643778439666
+          },
+          "note": "drop arguably-weak positives relief, trust -> 'other'"
+        },
+        "J3_boredom_neutral": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.7634408602150539,
+            "pos_ctx_overrides_neg_img": 0.36944444444444446,
+            "dominance_gap": 0.3939964157706094,
+            "dominance_gap_ci95": [
+              0.2954144265232974,
+              0.49014784946236595
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.43911183877005366,
+            "asymmetry_ci95": [
+              0.2934158791148465,
+              0.5861810336209168
+            ],
+            "headroom_norm_pull_drop": 0.7191731870680539,
+            "headroom_norm_pull_rise": 0.3925463789178457
+          },
+          "note": "re-file low-arousal boredom out of NEG"
+        },
+        "J4_denom_swap": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.7634408602150539,
+            "pos_ctx_overrides_neg_img": 0.36944444444444446,
+            "dominance_gap": 0.3939964157706094,
+            "dominance_gap_ci95": [
+              0.2954144265232974,
+              0.49014784946236595
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.39269782149423427,
+            "asymmetry_ci95": [
+              0.24802951064876783,
+              0.5406779947370725
+            ],
+            "headroom_norm_pull_drop": 0.7134131637150533,
+            "headroom_norm_pull_rise": 0.39276724378194744
+          },
+          "note": "renormalise over pos u neg only (drop surprise/neutral sink mass)"
+        },
+        "J5_rank_only": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.7634408602150539,
+            "pos_ctx_overrides_neg_img": 0.36944444444444446,
+            "dominance_gap": 0.3939964157706094,
+            "dominance_gap_ci95": [
+              0.2954144265232974,
+              0.49014784946236595
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.39394020371642935,
+            "asymmetry_ci95": [
+              0.24930019261936315,
+              0.5416400728893918
+            ],
+            "headroom_norm_pull_drop": 0.7136766282108233,
+            "headroom_norm_pull_rise": 0.3935924573861592
+          },
+          "note": "identical partition; argmax-only, magnitudes ignored (== E0 override)"
+        }
+      }
+    },
+    "LLaVA-1.5-7B": {
+      "anchor": {
+        "ok": true,
+        "parametric_gap": -0.12589605734767023,
+        "reference_gap": -0.12589605734767023,
+        "max_abs_diff": 0.0,
+        "logic_exact": true,
+        "published_gap": -0.12589605734767023,
+        "data_exact": true
+      },
+      "evaluators": {
+        "E0_published": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.27688172043010756,
+            "pos_ctx_overrides_neg_img": 0.4027777777777778,
+            "dominance_gap": -0.12589605734767023,
+            "dominance_gap_ci95": [
+              -0.22018145161290334,
+              -0.028122759856630826
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": -0.017721917986590063,
+            "asymmetry_ci95": [
+              -0.08060488756593133,
+              0.048853837476340624
+            ],
+            "headroom_norm_pull_drop": 0.3289334356296614,
+            "headroom_norm_pull_rise": 0.332285066696314
+          },
+          "note": "the paper's evaluator \u2014 anchor"
+        },
+        "J1_sparest": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.27688172043010756,
+            "pos_ctx_overrides_neg_img": 0.586111111111111,
+            "dominance_gap": -0.30922939068100347,
+            "dominance_gap_ci95": [
+              -0.4084296594982079,
+              -0.2082437275985664
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": -0.11428767747980612,
+            "asymmetry_ci95": [
+              -0.18831454882769047,
+              -0.0388411076241513
+            ],
+            "headroom_norm_pull_drop": 0.28324196465393814,
+            "headroom_norm_pull_rise": 0.45699769009915836
+          },
+          "note": "cleanest 1-vs-1 antonym contrast"
+        },
+        "J2_drop_weak_pos": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.27688172043010756,
+            "pos_ctx_overrides_neg_img": 0.38333333333333336,
+            "dominance_gap": -0.1064516129032258,
+            "dominance_gap_ci95": [
+              -0.20502240143369183,
+              -0.008599910394265194
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.04937749827568688,
+            "asymmetry_ci95": [
+              -0.010377981763439122,
+              0.11303946038023303
+            ],
+            "headroom_norm_pull_drop": 0.3403392111588438,
+            "headroom_norm_pull_rise": 0.3040063548526612
+          },
+          "note": "drop arguably-weak positives relief, trust -> 'other'"
+        },
+        "J3_boredom_neutral": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.27688172043010756,
+            "pos_ctx_overrides_neg_img": 0.4027777777777778,
+            "dominance_gap": -0.12589605734767023,
+            "dominance_gap_ci95": [
+              -0.22018145161290334,
+              -0.028122759856630826
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": 0.026518576966647556,
+            "asymmetry_ci95": [
+              -0.03137384137334729,
+              0.08901351012872309
+            ],
+            "headroom_norm_pull_drop": 0.33851735161555413,
+            "headroom_norm_pull_rise": 0.32854515827770703
+          },
+          "note": "re-file low-arousal boredom out of NEG"
+        },
+        "J4_denom_swap": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.27688172043010756,
+            "pos_ctx_overrides_neg_img": 0.4027777777777778,
+            "dominance_gap": -0.12589605734767023,
+            "dominance_gap_ci95": [
+              -0.22018145161290334,
+              -0.028122759856630826
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": -0.009082303059024355,
+            "asymmetry_ci95": [
+              -0.0730656307657657,
+              0.05847742368338452
+            ],
+            "headroom_norm_pull_drop": 0.3335294594289287,
+            "headroom_norm_pull_rise": 0.33325782750696004
+          },
+          "note": "renormalise over pos u neg only (drop surprise/neutral sink mass)"
+        },
+        "J5_rank_only": {
+          "override": {
+            "neg_ctx_overrides_pos_img": 0.27688172043010756,
+            "pos_ctx_overrides_neg_img": 0.4027777777777778,
+            "dominance_gap": -0.12589605734767023,
+            "dominance_gap_ci95": [
+              -0.22018145161290334,
+              -0.028122759856630826
+            ],
+            "n_pos_images": 62,
+            "n_neg_images": 60
+          },
+          "mirror": {
+            "asymmetry_index": -0.017721917986590063,
+            "asymmetry_ci95": [
+              -0.08060488756593133,
+              0.048853837476340624
+            ],
+            "headroom_norm_pull_drop": 0.3289334356296614,
+            "headroom_norm_pull_rise": 0.332285066696314
+          },
+          "note": "identical partition; argmax-only, magnitudes ignored (== E0 override)"
+        }
+      }
+    }
+  }
+}

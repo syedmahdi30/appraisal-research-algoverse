@@ -1,0 +1,34 @@
+{
+  "run": "20260822T195019Z",
+  "git": "aece33c",
+  "stack": "raw_huggingface",
+  "layer": 18,
+  "n_dir": 1200,
+  "dmu_norm": {
+    "pleasantness": 352.3135681152344,
+    "unpleasantness": 358.2230224609375,
+    "suddenness": 195.9381561279297,
+    "_random": 302.15826416015625
+  },
+  "site_check": {
+    "ok": true,
+    "worst_rel_err": 0.005137340110557353,
+    "per_appraisal": {
+      "pleasantness": {
+        "raw_hf": 352.3135681152344,
+        "published": 352.8188,
+        "rel_err": 0.0014319868577457753
+      },
+      "unpleasantness": {
+        "raw_hf": 358.2230224609375,
+        "published": 358.3771,
+        "rel_err": 0.00042993131833056426
+      },
+      "suddenness": {
+        "raw_hf": 195.9381561279297,
+        "published": 194.9367,
+        "rel_err": 0.005137340110557353
+      }
+    }
+  }
+}

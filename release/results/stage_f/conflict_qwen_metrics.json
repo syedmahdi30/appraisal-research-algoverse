@@ -1,0 +1,45 @@
+{
+  "run": "20260810T214814Z",
+  "git": "9fe8769",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_skipped": 0,
+  "n_rows": 2250,
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -1.1555412171779096,
+    "rise_neg_img_pos_ctx": 0.7616010128495024,
+    "congruent_pos_img_pos_ctx": 0.3172096746292146,
+    "congruent_neg_img_neg_ctx": -0.017431135108214875,
+    "asymmetry_index": 0.39394020432840715,
+    "asymmetry_ci95": [
+      0.2493002003270403,
+      0.5416400839294748
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 3991.0,
+    "mannwhitney_p_greater": 4.754288943815714e-06,
+    "valence_bounds_p5_p95": [
+      -0.9999997646990375,
+      0.9999896502056913
+    ],
+    "headroom_norm_pull_drop": 0.713677197007135,
+    "headroom_norm_pull_rise": 0.3935924560642166,
+    "headroom_norm_asymmetry": 0.32008474094291833,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.394 valence (CI +0.249,+0.542); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.7634408602150539,
+    "pos_ctx_overrides_neg_img": 0.36944444444444446,
+    "dominance_gap": 0.3939964157706094,
+    "dominance_gap_ci95": [
+      0.2954144265232974,
+      0.49014784946236595
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {}
+}

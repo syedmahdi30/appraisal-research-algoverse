@@ -1,0 +1,57 @@
+{
+  "run": "20260804T210330Z",
+  "git": "6d0296f",
+  "layer": 18,
+  "tap": "hook_attn_out",
+  "n_images": 124,
+  "n_skipped": 0,
+  "image_group": "positive",
+  "segmentation_example": {
+    "n": 286,
+    "img_len": 256,
+    "image_ok": true,
+    "context_text": "<end_of_image>\n\nContext: This photo was taken on a weekday.",
+    "template_text": "<bos><start_of_turn>user\n\n\n<start_of_image> What single emotion is this person feeling?<end_of_turn>\n<start_of_turn>model\n"
+  },
+  "pattern_hook_sanity": {
+    "checked": true,
+    "pattern_edits_attn_out": true
+  },
+  "by_condition": {
+    "neutral": {
+      "attn_image": 0.08512546341245374,
+      "attn_context": 0.03508230136707425,
+      "attn_template": 0.8798295350869497,
+      "contrib_image_probe": 0.794540589650472,
+      "contrib_context_probe": -0.055842729409535725,
+      "contrib_image_val": -0.002193191712048566,
+      "contrib_context_val": -0.002799452127741966,
+      "r_full_probe": 4.80488835811615,
+      "v_full": -0.2231865442707557
+    },
+    "negative": {
+      "attn_image": 0.08549382715589471,
+      "attn_context": 0.037075302008953356,
+      "attn_template": 0.8774059467845493,
+      "contrib_image_probe": 0.8003881857130263,
+      "contrib_context_probe": -0.03020935985777113,
+      "contrib_image_val": 0.0011290054258917613,
+      "contrib_context_val": 0.0004301773752906259,
+      "r_full_probe": 4.202165617677901,
+      "v_full": -0.7290921284025506
+    },
+    "positive": {
+      "attn_image": 0.08479944203876787,
+      "attn_context": 0.03428202376907898,
+      "attn_template": 0.8809434159596761,
+      "contrib_image_probe": 0.7768988553682963,
+      "contrib_context_probe": 0.0035852220323350694,
+      "contrib_image_val": -0.001478029392152943,
+      "contrib_context_val": 0.0002031647068230855,
+      "r_full_probe": 5.010610111554464,
+      "v_full": 0.00018936553362991837
+    }
+  },
+  "note": "causal attention-knockout attribution at last-token blocks.18.attn.hook_pattern; contribution(G)=probe(full)-probe(knockout G). direct-L18 path only (lower bound on context influence that leaked upstream).",
+  "verdict": "VALUE COMPETITION dominates \u2014 negative-context tokens write a stronger read-out shift per unit of attention; the positive channel collapses in what it WRITES, not in attention share. |contrib_ctx| neg 0.030 vs pos 0.004; attn share neg 0.037 vs pos 0.034 (\u00d71.08); per-unit-attention |contrib| neg 0.81 vs pos 0.10 (\u00d77.79)."
+}

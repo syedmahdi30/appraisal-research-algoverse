@@ -1,0 +1,88 @@
+{
+  "run": "20260822T042921Z",
+  "git": "c98d07a",
+  "stack": "raw_huggingface",
+  "model": "google/gemma-3-4b-it",
+  "layer": 18,
+  "tap": "post_attention_layernorm",
+  "seed": 0,
+  "n_images_scored": 7280,
+  "n_skipped_unreadable": 0,
+  "n_single_label": 503,
+  "n_dropped_multilabel": 6777,
+  "polarity_groups": {
+    "positive": [
+      "joy"
+    ],
+    "negative": [
+      "anger",
+      "disgust",
+      "fear",
+      "sadness"
+    ]
+  },
+  "supersedes": "results/stage_c/metrics.json (TransformerBridge; image path shown unreliable)",
+  "image_readout": {
+    "pleasantness": {
+      "vs_valence": {
+        "n": 7280,
+        "pearson": 0.5268651963736952,
+        "spearman": 0.5099447074411625
+      },
+      "polarity_auc": {
+        "n": 440,
+        "n_pos": 384,
+        "n_neg": 56,
+        "auc": 0.9117838541666666
+      },
+      "vs_control_p": 0.009900990099009901
+    },
+    "unpleasantness": {
+      "vs_valence": {
+        "n": 7280,
+        "pearson": -0.474547208679316,
+        "spearman": -0.4478354984414272
+      },
+      "polarity_auc": {
+        "n": 440,
+        "n_pos": 384,
+        "n_neg": 56,
+        "auc": 0.10077194940476192
+      },
+      "vs_control_p": 0.009900990099009901
+    }
+  },
+  "random_control": {
+    "n_random": 100,
+    "n_valid": 100,
+    "mean": 0.13334310166543611,
+    "std": 0.09488682346461826,
+    "max": 0.3836919596310381,
+    "p95": 0.2915534291596453
+  },
+  "text_reference": {
+    "pleasantness": {
+      "n": 1000,
+      "pearson": 0.795244311878938,
+      "spearman": 0.7687448977212861
+    },
+    "unpleasantness": {
+      "n": 1000,
+      "pearson": 0.7693254520284629,
+      "spearman": 0.7460793193216213
+    }
+  },
+  "transfer": {
+    "pleasantness": {
+      "text_abs_spearman": 0.7687448977212861,
+      "image_abs_spearman": 0.5099447074411625,
+      "retention": 0.6633471115746469
+    },
+    "unpleasantness": {
+      "text_abs_spearman": 0.7460793193216213,
+      "image_abs_spearman": 0.4478354984414272,
+      "retention": 0.6002518590766265
+    }
+  },
+  "verdict": "supports read-out transfer (pleasantness rho=+0.51 vs valence, polarity AUC=0.91, beats random dirs p=0.010, unpleasantness mirrors) \u2014 NEXT: caption baseline to separate shared-geometry vs verbalization"
+}

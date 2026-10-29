@@ -628,11 +628,19 @@ def select_published_photos(emotic: pd.DataFrame, index_path: Path = MATCHED_PHO
     from .analyze_matched_readouts import photo_key
 
     index = pd.read_csv(index_path)
-    rows = emotic.assign(photo=emotic["image_path"].map(photo_key)).drop_duplicates("photo")
-    sel = index.merge(rows.drop(columns=["valence"]), on="photo", how="left", validate="m:1")
-    if sel["image_path"].isna().any():
-        raise ValueError(f"{int(sel['image_path'].isna().sum())} indexed photos are not in EMOTIC test")
-    return sel.rename(columns={"image_valence": "valence"}).reset_index(drop=True)
+    rows = emotic.assign(photo=emotic["image_path"].map(photo_key))
+    # The index holds photographs and groups only: EMOTIC's own ratings are not ours to ship. Each
+    # photo's valence is read back from EMOTIC as the most extreme annotation in its group's
+    # direction, which is the annotation that put it in the published selection.
+    best = []
+    for _, r in index.iterrows():
+        cand = rows[rows["photo"] == r["photo"]]
+        if cand.empty:
+            raise ValueError(f"indexed photo {r['photo']} is not in EMOTIC test")
+        pick = cand["valence"].idxmax() if r["image_group"] == "positive" else cand["valence"].idxmin()
+        best.append(rows.loc[pick].drop(labels=["photo"]).to_dict() | {"photo": r["photo"],
+                                                                         "image_group": r["image_group"]})
+    return pd.DataFrame(best).reset_index(drop=True)
 
 
 def run_neutral_bank(config_path: str, model_name: str, limit: int | None,

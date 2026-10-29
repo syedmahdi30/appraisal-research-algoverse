@@ -1,0 +1,777 @@
+{
+  "run": "20260818T231738Z",
+  "git": "04a47df",
+  "layer": 18,
+  "tap": "hook_attn_out",
+  "seed": 0,
+  "bank": "minimal",
+  "n_images": 150,
+  "n_skipped": 0,
+  "n_forwards": 2250,
+  "full_context_bank": true,
+  "contexts": {
+    "positive": "This photo was taken at a celebration held in their honor.",
+    "negative": "This photo was taken just after they lost their job.",
+    "neutral": "This photo was taken indoors."
+  },
+  "n_conditions": 15,
+  "text_code": {
+    "none": 0,
+    "neutral": 0,
+    "positive": 1,
+    "negative": -1
+  },
+  "tokenization_multi_token": {},
+  "image_ids": [
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000529454.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_d4g0gbar3h5fcn8o.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000172513.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_56nn3am5hb1apzid.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/0vkwe47dmhqf4qqwbp.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000248839.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/61bwku5m7n86sk4rpx.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000067631.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_62s5z0qbvvv8yjvu.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000517946.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/4dqqr157rtt73iykdv.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000171649.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/0uwcgmlhal9bdry2q4.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_9szrille7ff24to7.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_a3cjmc19k0nk4fyi.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/1oxtnlhqcthrbf8gah.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/4dqqr157rtt73iykdv.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_a3cjmc19k0nk4fyi.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000085007.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_ckul9rcair6zawsu.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/ade20k/images/sun_afkmyrcmtmhjsetu.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000486834.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000532503.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000091656.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_868emwx224wg3c1y.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/545lwzv95vupqz1pnt.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_99ijy8dyrcb88aio.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000358334.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/4xbay2l0vzxbzpuvni.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000158445.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000575711.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_8gzqp0xjp7h5ora8.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/61bwku5m7n86sk4rpx.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000098350.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000534131.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000088120.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_60d4x8gju68fkrcn.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_8gzqp0xjp7h5ora8.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/35f76sta29phctt064.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000471698.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/4e770sm6qh097gdx26.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_7ck7is70unlvq9d5.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000062324.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/61bwku5m7n86sk4rpx.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000511271.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/2ig8p0yev9pvxpn6ov.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/d30i8x6mo35zziyjb7.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000370802.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000018699.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_train2014_000000012345.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/43n0cugq550z9nress.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_a6kjhi0dlu4luddd.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/1ur587hhql42nei76a.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000148570.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_g23a2uoxn1k5m9s0.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_l5lse8mifnp8bvoe.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/0vkwe47dmhqf4qqwbp.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/4ag2acyygf19qloq23.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/61vtity4vwkufukg5s.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_727wc6gn8jzpwa2p.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/2wmgp3c02scvu1kuhr.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_7ciap63tblbnitef.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_ayg0ndulhw4p016l.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/31s239sw5axbcf17ri.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_7ciap63tblbnitef.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/5rydeluvd3pper3nlu.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_7ciap63tblbnitef.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_e11mu8cl6zkkscci.jpg",
+      "valence": 9.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_a3cjmc19k0nk4fyi.jpg",
+      "valence": 10.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/5vwlcdxdulwec88cyb.jpg",
+      "valence": 10.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/5vwlcdxdulwec88cyb.jpg",
+      "valence": 10.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/5vwlcdxdulwec88cyb.jpg",
+      "valence": 10.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/9d05mol0ji5qlmawoc.jpg",
+      "valence": 10.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/5vwlcdxdulwec88cyb.jpg",
+      "valence": 10.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/5vwlcdxdulwec88cyb.jpg",
+      "valence": 10.0,
+      "group": "positive"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/exurvv6qfajne3y0mx.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/etswvxyv27ydevi65z.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ea4g15cexenqz583hl.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/evl9e4hfu2hbdbnir0.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/h3myzm0wa22g62u7qx.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/mscoco/images/COCO_val2014_000000121875.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/empuy2m5ddvjh0b74h.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/empuy2m5ddvjh0b74h.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ete2v3b5evma5yb9qu.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/exurvv6qfajne3y0mx.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ewm2467b4ruthple4l.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/fvml8gkv8ifwp33bsv.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ewm2467b4ruthple4l.jpg",
+      "valence": 1.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eekvarqfyw7p7gcv3q.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/bdgr2brn2xa8enigpa.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/8q867u6ph6i5w1l5wp.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ejj2ox6poue4sylhv1.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eq7dn752e1l8774du3.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eq7dn752e1l8774du3.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eq7dn752e1l8774du3.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/gthmpih8udn51ec8eo.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_a6l7pnryjpogch9r.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/f6o53wmduiqj32huba.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/gthmpih8udn51ec8eo.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/9wjudzi8z4t8hkyxuf.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/fopzqpxqyzu4leffdi.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/fskf0sgyoyrcutjm9w.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/bkujn7hoksf0txl9on.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/a0c8930r565mx3yjbw.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eguo51wlqklizivon4.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/dd27ta97t63sjxfner.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/es2dzw4alwgt3ffp29.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/f6o53wmduiqj32huba.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/93wrezd5zl1z73b73u.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/fun4ci5htykctewum9.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/9t5ioucouitef3v4k2.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/erb89q7dbhrqjw2f6h.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/erb89q7dbhrqjw2f6h.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/h6mrzcotjb74dlqb9e.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eyj87lggu6ezrn9zho.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ew4jd8yisn1e8eja1k.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/erb89q7dbhrqjw2f6h.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/e5oq7a3tdo80dbng0n.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ckbee3cuuu4tal7zrv.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/erb89q7dbhrqjw2f6h.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ee3ycqaetu7oi2ocfm.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/erb89q7dbhrqjw2f6h.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/9ep7a58mqgct32gq00.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/f36j0deu657obta0ln.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/6kt4xw4h2tpw47vfvo.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/e1nm684czifvxdjljh.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/empuy2m5ddvjh0b74h.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/csskeiw7j9mfawjy4r.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eekvarqfyw7p7gcv3q.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/dhwrquyvad1bnnwyr4.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/erjklbeehps11xy5gj.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eo7doie87y0one22cw.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/gxdbkax6jk36e5fqf5.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/fp0o2rcalukypvm1i7.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ehxkf6tbaioe933rzs.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/gjd2m0twkxuuko294r.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/9d05mol0ji5qlmawoc.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/eguo51wlqklizivon4.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/g6xgrntszdu0qzwpji.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/bj6qnim3c43cj2j7n3.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/fnrwv12pamqdkoqzr8.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/f5nqr1m8slxtv6vnfo.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ete2v3b5evma5yb9qu.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/epe8lw46ff0xqzfj2e.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/ezudenkdouc419xarc.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/e3rtkruiwguzu10lwq.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/elk3h1kczwpa35cp0t.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/framesdb/images/frame_ek1bld00g1nvr6xi.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/esvfw7mtniszylo1hx.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    },
+    {
+      "image_path": "/content/appraisal-research-algoverse/data/raw/emotic/emotic/emodb_small/images/6ih3tuaipxycy3gpz4.jpg",
+      "valence": 2.0,
+      "group": "negative"
+    }
+  ]
+}

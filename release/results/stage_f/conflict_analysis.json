@@ -1,0 +1,336 @@
+{
+  "run": "20260810T221051Z",
+  "git": "9fe8769",
+  "n_rows": 2250,
+  "n_images": 121,
+  "dominance": {
+    "probe_readout": {
+      "beta_img": 0.3671040842461081,
+      "beta_txt": 0.31468272545270387,
+      "dominance_ratio": 0.8572030085117203,
+      "lead": "balanced/integrated"
+    },
+    "valence": {
+      "beta_img": 0.32179719193973144,
+      "beta_txt": 0.3820312713001936,
+      "dominance_ratio": 1.1871802516279981,
+      "lead": "balanced/integrated"
+    }
+  },
+  "dominance_excludes_no_context": true,
+  "cell_means": {
+    "probe_readout": {
+      "positive_img/none_ctx": 4.5439187558492025,
+      "positive_img/positive_ctx": 5.144725778367785,
+      "positive_img/negative_ctx": 4.381081508530511,
+      "positive_img/neutral_ctx": 4.867923576037089,
+      "negative_img/none_ctx": 3.5460776964823406,
+      "negative_img/positive_ctx": 4.3046714443630645,
+      "negative_img/negative_ctx": 3.5104231113857693,
+      "negative_img/neutral_ctx": 4.108288784027099
+    },
+    "valence": {
+      "positive_img/none_ctx": -0.46889728032089406,
+      "positive_img/positive_ctx": 0.10853127720766406,
+      "positive_img/negative_ctx": -0.6562876988812497,
+      "positive_img/neutral_ctx": -0.058411986324449904,
+      "negative_img/none_ctx": -0.8426749627445808,
+      "negative_img/positive_ctx": -0.4730146958620466,
+      "negative_img/negative_ctx": -0.8618790520527374,
+      "negative_img/neutral_ctx": -0.805969177018726
+    }
+  },
+  "context_effect_vs_neutral": {
+    "positive": {
+      "positive": 0.16694326353211397,
+      "negative": -0.5978757125567998
+    },
+    "negative": {
+      "positive": 0.33295448115667936,
+      "negative": -0.05590987503401146
+    }
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -0.5978757125567998,
+    "rise_neg_img_pos_ctx": 0.3329544811566793,
+    "congruent_pos_img_pos_ctx": 0.16694326353211397,
+    "congruent_neg_img_neg_ctx": -0.05590987503401151,
+    "asymmetry_index": 0.2649212314001205,
+    "asymmetry_ci95": [
+      0.09463728285030838,
+      0.43138938803217136
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 3492.0,
+    "mannwhitney_p_greater": 0.005350178047798818,
+    "valence_bounds_p5_p95": [
+      -0.9997662569293047,
+      0.9985159661605627
+    ],
+    "headroom_norm_pull_drop": 0.6320432915327668,
+    "headroom_norm_pull_rise": 0.2592427426380726,
+    "headroom_norm_asymmetry": 0.3728005488946942,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.265 valence (CI +0.095,+0.431); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.8440860215053763,
+    "pos_ctx_overrides_neg_img": 0.20555555555555555,
+    "dominance_gap": 0.6385304659498208,
+    "dominance_gap_ci95": [
+      0.5508064516129032,
+      0.7186424731182798
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "condition_breakdown": {
+    "by_condition": {
+      "positive/none": {
+        "n": 75,
+        "valence": -0.46889728032089406,
+        "probe": 4.5439187558492025
+      },
+      "positive/neutral": {
+        "n": 150,
+        "valence": -0.058411986324449904,
+        "probe": 4.867923576037089
+      },
+      "positive/positive": {
+        "n": 450,
+        "valence": 0.10853127720766406,
+        "probe": 5.144725778367785
+      },
+      "positive/negative": {
+        "n": 450,
+        "valence": -0.6562876988812497,
+        "probe": 4.381081508530511
+      },
+      "negative/none": {
+        "n": 75,
+        "valence": -0.8426749627445808,
+        "probe": 3.5460776964823406
+      },
+      "negative/neutral": {
+        "n": 150,
+        "valence": -0.805969177018726,
+        "probe": 4.108288784027099
+      },
+      "negative/positive": {
+        "n": 450,
+        "valence": -0.4730146958620466,
+        "probe": 4.3046714443630645
+      },
+      "negative/negative": {
+        "n": 450,
+        "valence": -0.8618790520527374,
+        "probe": 3.5104231113857693
+      }
+    },
+    "by_context_id": {
+      "positive/n0": {
+        "n": 75,
+        "valence": -0.8392913131139964,
+        "probe": 4.120278558731079,
+        "context": "This photo was taken moments after they received devastating news."
+      },
+      "positive/n1": {
+        "n": 75,
+        "valence": -0.3301217556738089,
+        "probe": 4.9392669328053795,
+        "context": "This photo was taken moments before the accident."
+      },
+      "positive/n2": {
+        "n": 75,
+        "valence": -0.9324946987157379,
+        "probe": 3.8033758481343587,
+        "context": "This photo was taken at the funeral of a close friend."
+      },
+      "positive/n3": {
+        "n": 75,
+        "valence": -0.6287195985343016,
+        "probe": 4.510947691599528,
+        "context": "This photo was taken just after they lost their job."
+      },
+      "positive/n4": {
+        "n": 75,
+        "valence": -0.5668296277750955,
+        "probe": 4.605960531234741,
+        "context": "This photo was taken during the worst week of their life."
+      },
+      "positive/n5": {
+        "n": 75,
+        "valence": -0.6402691994745584,
+        "probe": 4.306659488677979,
+        "context": "This photo was taken right after a painful goodbye."
+      },
+      "positive/none": {
+        "n": 75,
+        "valence": -0.46889728032089406,
+        "probe": 4.5439187558492025,
+        "context": ""
+      },
+      "positive/p0": {
+        "n": 75,
+        "valence": 0.4020079301003642,
+        "probe": 5.106583436330159,
+        "context": "This photo was taken moments after they won the championship."
+      },
+      "positive/p1": {
+        "n": 75,
+        "valence": 0.15171623143692145,
+        "probe": 4.90117115020752,
+        "context": "This photo was taken at their surprise birthday party."
+      },
+      "positive/p2": {
+        "n": 75,
+        "valence": -0.17742614852026548,
+        "probe": 4.839358148574829,
+        "context": "This photo was taken just after they got the job they wanted."
+      },
+      "positive/p3": {
+        "n": 75,
+        "valence": -0.12990955171973753,
+        "probe": 5.347665068308513,
+        "context": "This photo was taken on the best day of their life."
+      },
+      "positive/p4": {
+        "n": 75,
+        "valence": 0.23568355278835895,
+        "probe": 5.260952803293864,
+        "context": "This photo was taken moments after hearing wonderful news."
+      },
+      "positive/p5": {
+        "n": 75,
+        "valence": 0.16911564916034277,
+        "probe": 5.412624063491822,
+        "context": "This photo was taken at a celebration held in their honor."
+      },
+      "positive/z0": {
+        "n": 75,
+        "valence": 0.046321779411261706,
+        "probe": 4.9761570326487226,
+        "context": "This photo was taken on a weekday."
+      },
+      "positive/z1": {
+        "n": 75,
+        "valence": -0.16314575206016155,
+        "probe": 4.759690119425456,
+        "context": "This photo was taken indoors."
+      },
+      "negative/n0": {
+        "n": 75,
+        "valence": -0.9242688175583041,
+        "probe": 3.4111173248291013,
+        "context": "This photo was taken moments after they received devastating news."
+      },
+      "negative/n1": {
+        "n": 75,
+        "valence": -0.7775027379473038,
+        "probe": 3.8624428590138753,
+        "context": "This photo was taken moments before the accident."
+      },
+      "negative/n2": {
+        "n": 75,
+        "valence": -0.9041296936256412,
+        "probe": 2.9977117156982422,
+        "context": "This photo was taken at the funeral of a close friend."
+      },
+      "negative/n3": {
+        "n": 75,
+        "valence": -0.8339357797832807,
+        "probe": 3.6498625532786053,
+        "context": "This photo was taken just after they lost their job."
+      },
+      "negative/n4": {
+        "n": 75,
+        "valence": -0.8662072472586315,
+        "probe": 3.649966319402059,
+        "context": "This photo was taken during the worst week of their life."
+      },
+      "negative/n5": {
+        "n": 75,
+        "valence": -0.8652300361432632,
+        "probe": 3.491437896092733,
+        "context": "This photo was taken right after a painful goodbye."
+      },
+      "negative/none": {
+        "n": 75,
+        "valence": -0.8426749627445808,
+        "probe": 3.5460776964823406,
+        "context": ""
+      },
+      "negative/p0": {
+        "n": 75,
+        "valence": -0.14264396605089535,
+        "probe": 4.240836140314738,
+        "context": "This photo was taken moments after they won the championship."
+      },
+      "negative/p1": {
+        "n": 75,
+        "valence": -0.6019629354967787,
+        "probe": 4.097073434193929,
+        "context": "This photo was taken at their surprise birthday party."
+      },
+      "negative/p2": {
+        "n": 75,
+        "valence": -0.5907311583942584,
+        "probe": 4.202026472091675,
+        "context": "This photo was taken just after they got the job they wanted."
+      },
+      "negative/p3": {
+        "n": 75,
+        "valence": -0.6100294306263805,
+        "probe": 4.4524782943725585,
+        "context": "This photo was taken on the best day of their life."
+      },
+      "negative/p4": {
+        "n": 75,
+        "valence": -0.2521632869014036,
+        "probe": 4.408324670791626,
+        "context": "This photo was taken moments after hearing wonderful news."
+      },
+      "negative/p5": {
+        "n": 75,
+        "valence": -0.6405573977025628,
+        "probe": 4.427289654413859,
+        "context": "This photo was taken at a celebration held in their honor."
+      },
+      "negative/z0": {
+        "n": 75,
+        "valence": -0.8009689698324785,
+        "probe": 4.224370466868082,
+        "context": "This photo was taken on a weekday."
+      },
+      "negative/z1": {
+        "n": 75,
+        "valence": -0.8109693842049733,
+        "probe": 3.9922071011861164,
+        "context": "This photo was taken indoors."
+      }
+    }
+  },
+  "arbitration": {
+    "valence": {
+      "-3": -0.27037972083263906,
+      "-2": -0.2392496831075891,
+      "-1": -0.16601140526313277,
+      "1": 0.2703601926040363,
+      "2": 0.6320285288606012,
+      "3": 1.011588066112206
+    },
+    "probe": {
+      "-3": 0.0,
+      "-2": 0.0,
+      "-1": 0.0,
+      "1": 0.0,
+      "2": 0.0,
+      "3": 0.0
+    },
+    "valence_slope": 0.21517254937993166,
+    "probe_slope": 0.0,
+    "within_50pct_of_stage_d": true
+  },
+  "verdict": "SIGNAL \u2014 both cues sign-correct (\u03b2_img=+0.32, \u03b2_txt=+0.38; balanced/integrated, ratio 1.19). Image and text both write valence into the shared read-out; the two are comparable (shared-representation reading). Steering arbitrates the conflict: behavioral-valence slope +0.22 (~65% of Stage D's 0.33)."
+}

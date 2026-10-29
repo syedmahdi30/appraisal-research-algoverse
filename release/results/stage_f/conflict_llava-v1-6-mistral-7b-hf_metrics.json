@@ -1,0 +1,169 @@
+{
+  "run": "20260822T005221Z",
+  "git": "1427a3c",
+  "model": "llava-hf/llava-v1.6-mistral-7b-hf",
+  "max_side": null,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 2147,
+    "prompt_tokens_with_image": 2163,
+    "prompt_tokens_text_only": 16,
+    "image_token_fraction": 0.9926028663892742,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.8397184276703047,
+    "mean_valence_negative_images": -0.7939990934520998,
+    "discriminability_gap": 1.6337175211224046,
+    "auc": 0.9975111111111111,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -0.6403462579646859,
+    "rise_neg_img_pos_ctx": 0.24786041840736284,
+    "congruent_pos_img_pos_ctx": 0.10404907170586132,
+    "congruent_neg_img_neg_ctx": -0.12014106884275355,
+    "asymmetry_index": 0.3924858395573231,
+    "asymmetry_ci95": [
+      0.33680981928500275,
+      0.4498792295574063
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 5282.0,
+    "mannwhitney_p_greater": 8.404488509520638e-21,
+    "valence_bounds_p5_p95": [
+      -0.93452271745482,
+      0.9336483234670594
+    ],
+    "headroom_norm_pull_drop": 0.40465617054291525,
+    "headroom_norm_pull_rise": 0.15626930329995967,
+    "headroom_norm_asymmetry": 0.24838686724295558,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.392 valence (CI +0.337,+0.450); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.37903225806451607,
+    "pos_ctx_overrides_neg_img": 0.19166666666666668,
+    "dominance_gap": 0.1873655913978494,
+    "dominance_gap_ci95": [
+      0.07785170250896067,
+      0.3003651433691757
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {
+    "anger": {
+      "ids": [
+        28705,
+        11217
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "boredom": {
+      "ids": [
+        28705,
+        19739,
+        300
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "disgust": {
+      "ids": [
+        28705,
+        21536
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "fear": {
+      "ids": [
+        28705,
+        4813
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "guilt": {
+      "ids": [
+        28705,
+        19150
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "joy": {
+      "ids": [
+        28705,
+        10186
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "pride": {
+      "ids": [
+        28705,
+        14384
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "relief": {
+      "ids": [
+        28705,
+        10853
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "sadness": {
+      "ids": [
+        28705,
+        7456,
+        1467
+      ],
+      "n_tokens": 3,
+      "single_token": false
+    },
+    "shame": {
+      "ids": [
+        28705,
+        14717
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "surprise": {
+      "ids": [
+        28705,
+        8982
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "trust": {
+      "ids": [
+        28705,
+        4893
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    },
+    "neutral": {
+      "ids": [
+        28705,
+        14214
+      ],
+      "n_tokens": 2,
+      "single_token": false
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "run": "20260822T014159Z",
+  "git": "44d7f19",
+  "model": "google/gemma-3-4b-it",
+  "max_side": null,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 258,
+    "prompt_tokens_with_image": 276,
+    "prompt_tokens_text_only": 18,
+    "image_token_fraction": 0.9347826086956522,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.8976159868138708,
+    "mean_valence_negative_images": -0.7519333720493542,
+    "discriminability_gap": 1.6495493588632248,
+    "auc": 0.9813333333333333,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -0.7060516852559604,
+    "rise_neg_img_pos_ctx": 0.42873880639958173,
+    "congruent_pos_img_pos_ctx": 0.07629075194131187,
+    "congruent_neg_img_neg_ctx": 0.022958794943237926,
+    "asymmetry_index": 0.2773128788563787,
+    "asymmetry_ci95": [
+      0.1473595589487302,
+      0.4022853791083845
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 3612.0,
+    "mannwhitney_p_greater": 0.0013348604171711386,
+    "valence_bounds_p5_p95": [
+      -0.9852916503543114,
+      0.9999838292093632
+    ],
+    "headroom_norm_pull_drop": 149.44109144147734,
+    "headroom_norm_pull_rise": 0.26854621700008063,
+    "headroom_norm_asymmetry": 149.17254522447726,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.277 valence (CI +0.147,+0.402); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.44354838709677424,
+    "pos_ctx_overrides_neg_img": 0.3194444444444445,
+    "dominance_gap": 0.12410394265232977,
+    "dominance_gap_ci95": [
+      -0.004802867383512589,
+      0.2428382616487455
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {},
+  "prompt_style": "legacy"
+}

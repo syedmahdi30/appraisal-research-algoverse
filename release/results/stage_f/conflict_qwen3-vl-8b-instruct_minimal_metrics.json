@@ -1,0 +1,63 @@
+{
+  "run": "20260822T214622Z",
+  "git": "c7ea9d5",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "max_side": null,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 262,
+    "prompt_tokens_with_image": 278,
+    "prompt_tokens_text_only": 16,
+    "image_token_fraction": 0.9424460431654677,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.5697818080836438,
+    "mean_valence_negative_images": -0.9879882083055181,
+    "discriminability_gap": 1.557770016389162,
+    "auc": 0.9866666666666667,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -1.4879715889522702,
+    "rise_neg_img_pos_ctx": 1.009654035448009,
+    "congruent_pos_img_pos_ctx": 0.32356364101744417,
+    "congruent_neg_img_neg_ctx": -0.025675187680052593,
+    "asymmetry_index": 0.4783175535042612,
+    "asymmetry_ci95": [
+      0.3260592028533318,
+      0.6269679252731678
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 4298.0,
+    "mannwhitney_p_greater": 1.188443586071295e-08,
+    "valence_bounds_p5_p95": [
+      -0.9999997299363328,
+      0.9999943271240678
+    ],
+    "headroom_norm_pull_drop": 0.9242706744173044,
+    "headroom_norm_pull_rise": 0.5177237431775493,
+    "headroom_norm_asymmetry": 0.40654693123975505,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.478 valence (CI +0.326,+0.627); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.9354838709677419,
+    "pos_ctx_overrides_neg_img": 0.5277777777777778,
+    "dominance_gap": 0.4077060931899641,
+    "dominance_gap_ci95": [
+      0.3129009856630826,
+      0.49006048387096773
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {},
+  "prompt_style": "chat"
+}

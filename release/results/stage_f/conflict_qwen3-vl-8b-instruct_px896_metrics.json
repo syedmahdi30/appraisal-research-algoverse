@@ -1,0 +1,62 @@
+{
+  "run": "20260822T010222Z",
+  "git": "1427a3c",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "max_side": 896,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 262,
+    "prompt_tokens_with_image": 278,
+    "prompt_tokens_text_only": 16,
+    "image_token_fraction": 0.9424460431654677,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.5644072866188048,
+    "mean_valence_negative_images": -0.9876356776393234,
+    "discriminability_gap": 1.5520429642581282,
+    "auc": 0.9863111111111111,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -1.1689017973982516,
+    "rise_neg_img_pos_ctx": 0.8017623905916651,
+    "congruent_pos_img_pos_ctx": 0.31272609371647514,
+    "congruent_neg_img_neg_ctx": -0.017355558437789687,
+    "asymmetry_index": 0.3671394068065865,
+    "asymmetry_ci95": [
+      0.21815774099894397,
+      0.5184537444252831
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 3874.0,
+    "mannwhitney_p_greater": 3.3280062041897674e-05,
+    "valence_bounds_p5_p95": [
+      -0.9999997825868608,
+      0.9999871004457286
+    ],
+    "headroom_norm_pull_drop": 0.7171815524813416,
+    "headroom_norm_pull_rise": 0.41399519794270784,
+    "headroom_norm_asymmetry": 0.3031863545386338,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.367 valence (CI +0.218,+0.518); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.7661290322580646,
+    "pos_ctx_overrides_neg_img": 0.39166666666666666,
+    "dominance_gap": 0.37446236559139795,
+    "dominance_gap_ci95": [
+      0.2750739247311829,
+      0.470076164874552
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {}
+}

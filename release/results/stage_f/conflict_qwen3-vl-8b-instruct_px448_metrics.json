@@ -1,0 +1,62 @@
+{
+  "run": "20260822T005756Z",
+  "git": "1427a3c",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "max_side": 448,
+  "read_out": "behavioral_valence",
+  "n_images": 121,
+  "n_rows": 2250,
+  "n_skipped": 0,
+  "image_tokens": {
+    "image_tokens": 128,
+    "prompt_tokens_with_image": 144,
+    "prompt_tokens_text_only": 16,
+    "image_token_fraction": 0.8888888888888888,
+    "expansion_ok": true,
+    "note": ""
+  },
+  "image_discriminability": {
+    "mean_valence_positive_images": 0.5038996185924969,
+    "mean_valence_negative_images": -0.9662364669187121,
+    "discriminability_gap": 1.470136085511209,
+    "auc": 0.9831111111111112,
+    "n_pos": 75,
+    "n_neg": 75
+  },
+  "asymmetry_vs_floor": {
+    "drop_pos_img_neg_ctx": -1.170201025723882,
+    "rise_neg_img_pos_ctx": 0.7271399305154332,
+    "congruent_pos_img_pos_ctx": 0.3190578659809267,
+    "congruent_neg_img_neg_ctx": -0.048498379020290326,
+    "asymmetry_index": 0.4430610952084487,
+    "asymmetry_ci95": [
+      0.29530070954326165,
+      0.590250946462598
+    ],
+    "symmetric": false,
+    "mannwhitney_u": 4199.0,
+    "mannwhitney_p_greater": 9.44605041102013e-08,
+    "valence_bounds_p5_p95": [
+      -0.9999998438076663,
+      0.9999902904689171
+    ],
+    "headroom_norm_pull_drop": 0.7164965212184672,
+    "headroom_norm_pull_rise": 0.3941363750638568,
+    "headroom_norm_asymmetry": 0.3223601461546104,
+    "n_pos_images": 75,
+    "n_neg_images": 75,
+    "interpretation": "RESIDUAL NEGATIVITY ASYMMETRY \u2014 the drop exceeds the geometry-mirrored rise by +0.443 valence (CI +0.295,+0.590); negative context moves valence more than the floor alone allows."
+  },
+  "flip_override": {
+    "neg_ctx_overrides_pos_img": 0.78494623655914,
+    "pos_ctx_overrides_neg_img": 0.36666666666666664,
+    "dominance_gap": 0.41827956989247334,
+    "dominance_gap_ci95": [
+      0.32113575268817196,
+      0.5083378136200717
+    ],
+    "n_pos_images": 62,
+    "n_neg_images": 60
+  },
+  "tokenization_multi_token": {}
+}
