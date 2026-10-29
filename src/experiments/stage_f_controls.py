@@ -98,6 +98,23 @@ def build_inputs(processor, image, context_sentence, question: str = QUESTION):
                      padding=True, return_tensors="pt")
 
 
+def build_batch_inputs(processor, image, context_sentences, question: str = QUESTION):
+    """One image under several contexts as a single left-padded batch, for batched generation.
+
+    Each row is the prompt `build_inputs` builds for that context. Left padding puts every row's
+    last prompt token at the end of the sequence, which generation requires.
+    """
+    texts = []
+    for c in context_sentences:
+        context = "" if not c else f"Context: {c} "
+        messages = [{"role": "user", "content": [{"type": "image", "image": image},
+                                                  {"type": "text", "text": f"{context}{question}"}]}]
+        texts.append(processor.apply_chat_template(messages, tokenize=False,
+                                                   add_generation_prompt=True))
+    processor.tokenizer.padding_side = "left"
+    return processor(text=texts, images=[image] * len(texts), padding=True, return_tensors="pt")
+
+
 # --------------------------------------------------------------------------- person grounding
 def _bbox(row) -> tuple[int, int, int, int] | None:
     raw = row.get("bbox")
@@ -500,14 +517,17 @@ def run_generate(config_path: str, model_name: str, limit: int | None,
         except (FileNotFoundError, OSError):
             n_missing += 1
             continue
-        for condition, context_id, sentence in conditions:
-            inputs = build_inputs(processor, image, sentence)
-            moved = {k: v.to(model.device) for k, v in inputs.items()}
-            with torch.no_grad():
-                out = model.generate(**moved, max_new_tokens=max_new_tokens, do_sample=False,
-                                     stop_strings=stops, tokenizer=processor.tokenizer)
-            text = processor.tokenizer.decode(
-                out[0][moved["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
+        # All conditions of one photograph in one batch: a sequence that has stopped is padded
+        # while the rest finish, so the batch costs about as much as its longest answer.
+        inputs = build_batch_inputs(processor, image, [c[2] for c in conditions])
+        moved = {k: v.to(model.device) for k, v in inputs.items()}
+        with torch.no_grad():
+            out = model.generate(**moved, max_new_tokens=max_new_tokens, do_sample=False,
+                                 stop_strings=stops, tokenizer=processor.tokenizer)
+        texts = processor.tokenizer.batch_decode(out[:, moved["input_ids"].shape[-1]:],
+                                                 skip_special_tokens=True)
+        for (condition, context_id, sentence), text in zip(conditions, texts):
+            text = text.strip()
             hit, polarity = parse_generated(text)
             rows.append({"image_path": row["image_path"], "image_group": row["image_group"],
                          "condition": condition, "context_id": context_id,
