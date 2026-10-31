@@ -10,11 +10,15 @@ against that photograph's own neutral-context response.
 
 1. **On a bounded score, negative text looks much stronger.** In Qwen3-VL-8B, with
    P(positive) − P(negative) as the readout, the mirror contrast between the two conflict directions
-   is +0.496, with an interval excluding zero when word pairs are resampled.
-2. **Most of that is the measurement.** On the log-odds of the same probabilities the contrast
-   reverses sign without clearing zero. It ranges from +0.24 to +0.76 depending on which neutral
-   sentence defines the baseline. A larger within-photograph contrast reverses on negative
-   photographs, so it tracks conflict versus agreement, not valence (Table 2 of the paper).
+   is +0.698 against twelve neutral sentences, with an interval excluding zero when photographs,
+   word pairs and neutral sentences are resampled (+0.496 against the original two).
+2. **Most of that is the measurement.** On the log-odds of the same probabilities the contrast is
+   −0.37 [−2.53, +1.90], no detectable difference. A larger within-photograph contrast reverses on
+   negative photographs, so it tracks conflict versus agreement, not valence (Table 2 of the paper).
+   Without conflict, on mid-valence photographs estimated at a zero baseline (the screen did not
+   equalize baselines), log-odds shows a clear negative advantage (+5.48 [+3.75, +7.09]) and the
+   bounded score a small, extrapolated one (+0.11). In generated answers the categorical negative
+   advantage does not appear (−12.1% [−35.6%, +17.4%]).
 3. **Across four models, the readout and the label scoring decide size and sometimes sign.**
    Scoring only the first token of a multi-token emotion label manufactures a null in LLaVA-1.5-7B
    and reverses the categorical ordering in LLaVA-NeXT-7B.
