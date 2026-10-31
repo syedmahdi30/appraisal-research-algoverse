@@ -1,6 +1,6 @@
 """Boot Gemma 3 4B through TransformerBridge, with the project's safety checks.
 
-See docs/models-gemma3.md and .claude/rules/bridge-rules.md. torch / transformer_lens
+See docs/models-gemma3.md. torch / transformer_lens
 are imported lazily so that importing this module (e.g. in tests) does not require them.
 """
 from __future__ import annotations

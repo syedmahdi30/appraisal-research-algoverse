@@ -63,3 +63,39 @@ overleaf/
 
 # The public results bundle (EMOTIC annotation columns stripped; see scripts/package_results.py)
 !release/**/*.npz
+
+# Local-only: paper source, drafts, agent/assistant config, and working notes. The public repo is
+# code, configs, tests, released results and the docs needed to re-run them.
+/paper/
+/archive/
+/.agents/
+/.claude/
+/AGENTS.md
+/CLAUDE.md
+/MEMORY.md
+/PAPER-CONTEXT.md
+/PROJECT-INSTRUCTIONS.md
+/REVISION-LOG.md
+/handoff.md
+/pilot-plan-stage-e-f.md
+/*session*.md
+/codexcontext.md
+/tmp/
+/scripts/build-overleaf.sh
+/scripts/build-paper.sh
+/scripts/flatten-paper.py
+/scripts/generate_method_diagram*.py
+/scripts/package-codebase.sh
+/tests/test_method_diagram*.py
+/tests/test_generate_method_diagram.py
+/docs/*
+!/docs/setup.md
+!/docs/colab.md
+!/docs/datasets.md
+!/docs/experiment-1.md
+!/docs/models-gemma3.md
+!/docs/probes.md
+!/docs/full-run.md
+!/docs/rescore-runbook.md
+!/docs/reviewer-controls-runbook.md
+!/docs/bridge-bug-2026-08-22.md

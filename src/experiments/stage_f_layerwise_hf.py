@@ -1,6 +1,6 @@
 """Stage F layer-resolved localization on raw HuggingFace — re-score §6.1 without the bridge.
 
-WHY. This is the last un-re-measured piece of the mechanism section (docs/paper-retraction-audit.md).
+WHY. This is the last un-re-measured piece of the mechanism section.
 Both statistics it feeds are probe-projected DIFFERENCES between two runs --- the class of measurement
 that reproduced everywhere it has been checked (Stage C rho +0.507 -> +0.510, Stage D slope +0.329 ->
 +0.336, patching recovery within a few points) --- so we expect it to hold. It gets measured anyway,

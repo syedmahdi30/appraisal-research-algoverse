@@ -7,8 +7,7 @@ partition, by re-scoring the SAME stored runs under a bank of alternative evalua
 
 It is a pure re-analysis: `stage_f_conflict.py` and `stage_f_qwen.py` already persist per-label
 log-probs (`lp_{label}`) for all 13 labels, every row, every model. Any pos/neg sub-partition of the
-13 is therefore exactly recoverable from disk — no forward passes, no GPU. See
-`docs/judge-robustness-spec.md`.
+13 is therefore exactly recoverable from disk — no forward passes, no GPU.
 
 Start here: the E0 ANCHOR CHECK proves the parametric estimator reduces to the published one before any
 alternative evaluator is trusted — (1) logic-exact: parametric E0 == imported `_flip_override`;
@@ -73,7 +72,7 @@ class Evaluator:
             raise ValueError(f"{self.name}: pos/neg must be within the argmax set")
 
 
-# E0 is the anchor; J1..J5 are the perturbations from docs/judge-robustness-spec.md.
+# E0 is the anchor; J1..J5 are the perturbations.
 E0 = Evaluator("E0_published", note="the paper's evaluator — anchor")
 EVALUATORS: list[Evaluator] = [
     E0,

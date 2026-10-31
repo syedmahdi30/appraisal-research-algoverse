@@ -75,7 +75,7 @@ CANDIDATE_TAPS = ("self_attn", "self_attn.o_proj", "post_attention_layernorm")
 #
 #   (0, 2)  championship / funeral      — paper Pair 1. DOC-ONLY: the run that produced it was
 #                                         overwritten by the old fixed-path clobbering, so it
-#                                         survives only in docs/stage-f-mechanism.md.
+#                                         is superseded by this raw-HF run.
 #   (4, 0)  wonderful / devastating     — paper Pair 2. Artifact-backed:
 #                                         results/stage_f/patching_metrics.json.
 PUBLISHED_BY_PAIR = {

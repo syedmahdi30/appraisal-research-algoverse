@@ -1,7 +1,6 @@
 # Does Negative Text Pull Harder? A Cross-Modal Valence Asymmetry Depends on How It Is Read
 
-Code, stimuli, and released results for the VLM4RWD 2026 workshop paper (camera-ready source:
-`paper/neurips_2026.tex`).
+Code, stimuli, and released results for the VLM4RWD 2026 workshop paper.
 
 ## What the paper finds
 
@@ -32,8 +31,8 @@ src/experiments/   runners (GPU) and analyses (CPU) for every stage
 src/probes/        ridge probes
 release/results/   the released results bundle (model outputs; see "Results bundle")
 release/MANIFEST.json   every released file: sha256, whether and where the paper cites it
-scripts/           data download, results packaging/rehydration, paper build
-paper/             LaTeX source, tables, figures
+scripts/           environment check, data download, results packaging/rehydration
+docs/              setup, Colab, datasets, model notes, and run books
 tests/             pytest suite
 ```
 
@@ -75,8 +74,7 @@ Each command reads `results/` and was checked against a fresh rehydrated copy of
 | Person grounding (App. A) | `python -m src.experiments.stage_f_controls --reanalyze controls_person_box_qwen` and `... controls_person_crop_qwen` |
 | Probe localization (Table 11) | `python -m src.experiments.analyze_stage_a` |
 
-`analyze_matched_readouts` also writes `paper/tables/readouts.tex`, so the main-text table cannot
-drift from its source.
+`analyze_matched_readouts` also writes the main-text table as LaTeX to `paper/tables/readouts.tex`.
 
 ## Data
 
