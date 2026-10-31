@@ -1,6 +1,6 @@
 {
-  "run": "20261029T015003Z",
-  "git": "85039c8",
+  "run": "20261031T215840Z",
+  "git": "4dacb17",
   "n_boot": 10000,
   "seed": 0,
   "matched_parquet": "results/stage_f/conflict_qwen3-vl-8b-instruct_minimal.parquet",
@@ -1267,6 +1267,11 @@
         "pos_sentence": 0.8864830017587324,
         "n_photos": 18
       },
+      "arms_within_room_window": {
+        "neg_sentence": -1.044081932105765,
+        "pos_sentence": 0.8864830017587324,
+        "n_photos": 18
+      },
       "equal_room": {
         "estimate": 0.15759893034703273,
         "ci95_photo": [
@@ -1322,6 +1327,11 @@
         "pos_sentence": 5.610643448266783,
         "n_photos": 18
       },
+      "arms_within_room_window": {
+        "neg_sentence": -9.163389196369632,
+        "pos_sentence": 5.610643448266783,
+        "n_photos": 18
+      },
       "equal_room": {
         "estimate": 3.378535945267823,
         "ci95_photo": [
@@ -1373,6 +1383,11 @@
     },
     "best_lo": {
       "arms": {
+        "neg_sentence": -9.491030093799331,
+        "pos_sentence": 5.442419002619791,
+        "n_photos": 18
+      },
+      "arms_within_room_window": {
         "neg_sentence": -9.491030093799331,
         "pos_sentence": 5.442419002619791,
         "n_photos": 18
@@ -1461,6 +1476,11 @@
         "pos_sentence": 0.21218451855004875,
         "n_photos": 117
       },
+      "arms_within_room_window": {
+        "neg_sentence": -1.0651865545741468,
+        "pos_sentence": 0.8061161207569273,
+        "n_photos": 9
+      },
       "equal_room": {
         "estimate": 1.46383392649729,
         "ci95_photo": [
@@ -1516,6 +1536,11 @@
         "pos_sentence": 3.09742601006916,
         "n_photos": 117
       },
+      "arms_within_room_window": {
+        "neg_sentence": -10.34265845532202,
+        "pos_sentence": 5.187463015646896,
+        "n_photos": 9
+      },
       "equal_room": {
         "estimate": 10.359959817446502,
         "ci95_photo": [
@@ -1570,6 +1595,11 @@
         "neg_sentence": -14.707594378424005,
         "pos_sentence": 3.0058582608140982,
         "n_photos": 117
+      },
+      "arms_within_room_window": {
+        "neg_sentence": -10.605324018150073,
+        "pos_sentence": 5.29861112240165,
+        "n_photos": 9
       },
       "equal_room": {
         "estimate": 10.748717963716038,

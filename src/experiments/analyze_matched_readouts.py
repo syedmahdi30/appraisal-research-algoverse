@@ -332,6 +332,8 @@ def equal_room(df: pd.DataFrame, neutral_ids, threshold: float = 0.3, n_boot: in
         P = group_arrays(d, "all", value, neutral_ids)
         Pin = group_arrays(d[d["image_path"].isin(inside)], "all", value, neutral_ids)
         out[value] = {"arms": arms(P, None).get("positive_images", {}),
+                      "arms_within_room_window": (arms(Pin, None).get("positive_images", {})
+                                                  if Pin is not None else {}),
                       "equal_room": contrast("equal_room", P, None, n_boot, seed),
                       "within_room_window": (contrast("equal_room", Pin, None, n_boot, seed)
                                              if Pin is not None and len(inside) >= 5 else {}),

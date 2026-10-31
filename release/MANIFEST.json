@@ -843,7 +843,7 @@
  },
  {
   "path": "stage_f/controls_pytest_metrics.json",
-  "sha256": "25ffa364a44cc2b7236abff16ae612d957190ed4867766fe263e74a04e105ac8",
+  "sha256": "f23cc8a620a6dcc127cf8d9ac32e2e27ebb7c0acca1fd21ff61c053774edaae0",
   "bytes": 6652,
   "cited_in_paper": false,
   "where": null,
@@ -1031,8 +1031,8 @@
  },
  {
   "path": "stage_f/matched_readouts.json",
-  "sha256": "97a9fae19477b40a444d5654c47239183414b0623a4ae6ed7f1fc39bbf1605f5",
-  "bytes": 44051,
+  "sha256": "ebc32dc99aa042681c6db6db95f99fa51332cd4606d7d13f5d7235123c6ce753",
+  "bytes": 44975,
   "cited_in_paper": true,
   "where": "Table 2 and Sec. 4.2.2 (every readout x contrast)",
   "emotic_columns_stripped": []
