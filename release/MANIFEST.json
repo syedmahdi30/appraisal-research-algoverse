@@ -124,7 +124,7 @@
   "sha256": "7529b9512d1ed4c7b6989ebc2291c3fd028777da5fea6a8ba140b35805de14d7",
   "bytes": 48143,
   "cited_in_paper": true,
-  "where": "Table 11 (probe localization)",
+  "where": "Table 12 (probe localization)",
   "emotic_columns_stripped": []
  },
  {
@@ -132,7 +132,7 @@
   "sha256": "c9fe4479cc138a5cb7c8b92be02dace621f1490f71cb93bfcfba39125fa916a2",
   "bytes": 124536,
   "cited_in_paper": true,
-  "where": "frozen probe, Sec. 4.1 and App. E",
+  "where": "frozen probe, Sec. 4.1 and App. I",
   "emotic_columns_stripped": []
  },
  {
@@ -148,7 +148,7 @@
   "sha256": "e0143a7dfc7952208f7996396fcdad4f2d785643eebb6cb64e43912ddb5df993",
   "bytes": 1195,
   "cited_in_paper": true,
-  "where": "Table 12 (text-only steering)",
+  "where": "Table 13 (text-only steering)",
   "emotic_columns_stripped": []
  },
  {
@@ -216,7 +216,7 @@
   "sha256": "5ecdabaa6cab09bf3450c3eacd1a79999c6f89ea7c8aa9309164cccd223524f8",
   "bytes": 2258,
   "cited_in_paper": true,
-  "where": "Sec. 4.1, App. E.2 (rho = +0.510, random-direction null)",
+  "where": "Sec. 4.1, App. I.2 (rho = +0.510, random-direction null)",
   "emotic_columns_stripped": []
  },
  {
@@ -248,7 +248,7 @@
   "sha256": "f5b4c87cb36c4cc30a704108854174f1c47d472ad0baebd242365a446f0f2ea5",
   "bytes": 2384,
   "cited_in_paper": true,
-  "where": "Table 13 (cross-modal steering)",
+  "where": "Table 14 (cross-modal steering)",
   "emotic_columns_stripped": []
  },
  {
@@ -328,7 +328,7 @@
   "sha256": "b534daadae6cc3652a06c8a9b0f7a6328df7b509705df7e790dac1238fba2db5",
   "bytes": 111590,
   "cited_in_paper": true,
-  "where": "App. E.4 (steering under conflict)",
+  "where": "App. I.4 (steering under conflict)",
   "emotic_columns_stripped": [
    "image_valence"
   ]
@@ -726,7 +726,7 @@
   "sha256": "e63c9f06a97f8ab550ced1e37788d851cb5678e6fe45a55adad97745240465fd",
   "bytes": 732412,
   "cited_in_paper": true,
-  "where": "App. B, Table 6 (wording: frame)",
+  "where": "App. B, Table 11 (wording: frame)",
   "emotic_columns_stripped": [
    "image_valence"
   ]
@@ -744,7 +744,7 @@
   "sha256": "5faabab78c1e3972fce18d012de9fb8bee5655fad8bf3a27710a66569f749030",
   "bytes": 192978,
   "cited_in_paper": true,
-  "where": "App. on generated answers (final run)",
+  "where": "App. F (generated answers, final run)",
   "emotic_columns_stripped": []
  },
  {
@@ -752,7 +752,7 @@
   "sha256": "a6a0c0147e8ae32c12f84f0a9e05b9bd63afcff7cef7018bf7a6d5c5fd5fc210",
   "bytes": 1726,
   "cited_in_paper": true,
-  "where": "App. on generated answers (final run)",
+  "where": "App. F (generated answers, final run)",
   "emotic_columns_stripped": []
  },
  {
@@ -760,7 +760,7 @@
   "sha256": "ab66a3351f1b6ee31397d7580eb9b2e6771c24ee874719db8a859d0add338b05",
   "bytes": 63051,
   "cited_in_paper": true,
-  "where": "App. on generated answers (second, void run)",
+  "where": "App. F (generated answers, second, void run)",
   "emotic_columns_stripped": []
  },
  {
@@ -776,7 +776,7 @@
   "sha256": "758ca9a963da89fbb97b04d4e953aef594ea4d9e743aed1b8c6ed2a2e52a02b2",
   "bytes": 13913,
   "cited_in_paper": true,
-  "where": "App. on generated answers (first, void run)",
+  "where": "App. F (generated answers, first, void run)",
   "emotic_columns_stripped": []
  },
  {
@@ -792,7 +792,7 @@
   "sha256": "532baff7b6b79ce80cd5f1bec71f71745b3906827304607c398c95bb14ad07bb",
   "bytes": 165922,
   "cited_in_paper": true,
-  "where": "App. on the neutral baseline (bank B)",
+  "where": "App. D (neutral baseline, bank B)",
   "emotic_columns_stripped": [
    "image_valence"
   ]
@@ -843,7 +843,7 @@
  },
  {
   "path": "stage_f/controls_pytest_metrics.json",
-  "sha256": "017f7336ea06e5f8d7b9cd0869313ba32b8f244a395fc2a0cc4f8615b2128959",
+  "sha256": "25ffa364a44cc2b7236abff16ae612d957190ed4867766fe263e74a04e105ac8",
   "bytes": 6652,
   "cited_in_paper": false,
   "where": null,
@@ -854,7 +854,7 @@
   "sha256": "66c91379db6e57b35468165fbbbe4fc599a0c5fdbdef41bce004b085169d387b",
   "bytes": 792181,
   "cited_in_paper": true,
-  "where": "App. B, Table 6 (wording: question)",
+  "where": "App. B, Table 11 (wording: question)",
   "emotic_columns_stripped": [
    "image_valence"
   ]
@@ -934,7 +934,7 @@
   "sha256": "79eaae2d6f0c2f259b196600cd71b730c1177821f7a54088d87b8eaacac55a02",
   "bytes": 302166,
   "cited_in_paper": true,
-  "where": "Table 2, App. on the equal-room comparison",
+  "where": "Table 2, App. E (equal-room comparison)",
   "emotic_columns_stripped": [
    "image_valence"
   ]
@@ -952,7 +952,7 @@
   "sha256": "21cb9e5a306c824800df7bd7f50a9fe862d514dcfb6153154a54ae16889f6ad9",
   "bytes": 218874,
   "cited_in_paper": true,
-  "where": "App. on the equal-room comparison (screen)",
+  "where": "App. E (equal-room comparison, screen)",
   "emotic_columns_stripped": [
    "image_valence"
   ]
@@ -994,7 +994,7 @@
   "sha256": "7d558b39252e5e7023ab20d211af589dce38a246ab1f88f26a6fba80a267e25b",
   "bytes": 407446,
   "cited_in_paper": true,
-  "where": "App. on where the context signal appears",
+  "where": "App. K (where the context signal appears)",
   "emotic_columns_stripped": []
  },
  {
@@ -1050,7 +1050,7 @@
   "sha256": "9fffb57eefb1f5588172d167ac3797119fee51ef26cb475a62e2599157dab230",
   "bytes": 21986,
   "cited_in_paper": true,
-  "where": "Table 7 (same-image patching, pair 2)",
+  "where": "Table 6 (same-image patching, pair 2)",
   "emotic_columns_stripped": []
  },
  {
@@ -1066,7 +1066,7 @@
   "sha256": "691fc0231a22645525099b32af3f3922535e91e5c82c25fafbff37104d34ebbe",
   "bytes": 22030,
   "cited_in_paper": true,
-  "where": "Table 7 (same-image patching, pair 1)",
+  "where": "Table 6 (same-image patching, pair 1)",
   "emotic_columns_stripped": []
  },
  {
@@ -1082,7 +1082,7 @@
   "sha256": "ed3a720c3e4907941ed9a7d139e53b6adeb76510de4c48dfd4b144789204c1c1",
   "bytes": 13985,
   "cited_in_paper": true,
-  "where": "mechanism replication table (LLaVA-1.5-7B)",
+  "where": "Table 7 (cross-model replacement, LLaVA-1.5-7B)",
   "emotic_columns_stripped": [
    "image_valence"
   ]
@@ -1108,7 +1108,7 @@
   "sha256": "df7c8a100041b111edccd7be5ae28102a6e8750db87c77da0e9d951de11a7c4f",
   "bytes": 12995,
   "cited_in_paper": true,
-  "where": "mechanism replication table (Qwen3-VL-8B)",
+  "where": "Table 7 (cross-model replacement, Qwen3-VL-8B)",
   "emotic_columns_stripped": []
  },
  {
@@ -1180,7 +1180,7 @@
   "sha256": "cbc584490ec433f814b9c2b5bfc2723ade83ed3f26d2a41ba590d9842f498ccf",
   "bytes": 46130,
   "cited_in_paper": true,
-  "where": "Sec. 4.3, App. G (LLaVA-NeXT)",
+  "where": "Sec. 4.3, App. J (LLaVA-NeXT)",
   "emotic_columns_stripped": []
  },
  {
@@ -1212,7 +1212,7 @@
   "sha256": "d0e5e320c0fe61913871a4ea1e34bc1bf33e1841208cd3fd93f5f3c45bbf7237",
   "bytes": 46144,
   "cited_in_paper": true,
-  "where": "Sec. 4.3, App. G (LLaVA-1.5-7B)",
+  "where": "Sec. 4.3, App. J (LLaVA-1.5-7B)",
   "emotic_columns_stripped": []
  },
  {
@@ -1236,7 +1236,7 @@
   "sha256": "2b548fc9c147f611b47ec35be81f7ef3cab5f1e7fa6fe6f89a4a4c08c1c7e98a",
   "bytes": 13936,
   "cited_in_paper": true,
-  "where": "App. G (text-only control, matched pairs)",
+  "where": "App. J (text-only control, matched pairs)",
   "emotic_columns_stripped": []
  },
  {
@@ -1260,7 +1260,7 @@
   "sha256": "efdcb9e84a9c5f951c0a9239133552924a0e57cb96588fdfdc16050139a95761",
   "bytes": 13929,
   "cited_in_paper": true,
-  "where": "App. G (text-only control, Qwen)",
+  "where": "App. J (text-only control, Qwen)",
   "emotic_columns_stripped": []
  },
  {

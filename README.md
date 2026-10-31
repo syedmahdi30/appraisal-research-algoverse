@@ -68,11 +68,11 @@ Each command reads `results/` and was checked against a fresh rehydrated copy of
 | Table 2 (every readout × contrast, matched set) and the corrected categorical gaps of Tables 3, 4, 9 | `python -m src.experiments.analyze_matched_readouts` |
 | Table 9 (four models: mirror contrast, unbounded margin, uncorrected gap) | `python -m src.experiments.analyze_stage_f_unbounded` |
 | Balanced label subsets (Sec. 4.3) | `python -m src.experiments.analyze_label_balance` |
-| Tables 7–8 (patching intervals) | `python -m src.experiments.patching_intervals` |
-| Wording robustness (Table 6) | `python -m src.experiments.stage_f_controls --reanalyze controls_frame_qwen` and `... controls_question_qwen` |
+| Tables 6 and 8 (patching intervals) | `python -m src.experiments.patching_intervals` |
+| Wording robustness (Table 11) | `python -m src.experiments.stage_f_controls --reanalyze controls_frame_qwen` and `... controls_question_qwen` |
 | Generated answers (appendix): flip rates, override gap, strict and synonym parses | `python -m src.experiments.stage_f_controls --reanalyze controls_generate_qwen` |
 | Person grounding (App. A) | `python -m src.experiments.stage_f_controls --reanalyze controls_person_box_qwen` and `... controls_person_crop_qwen` |
-| Probe localization (Table 11) | `python -m src.experiments.analyze_stage_a` |
+| Probe localization (Table 12) | `python -m src.experiments.analyze_stage_a` |
 
 `analyze_matched_readouts` also writes the main-text table as LaTeX to `paper/tables/readouts.tex`.
 
