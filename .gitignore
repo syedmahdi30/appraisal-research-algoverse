@@ -99,3 +99,6 @@ overleaf/
 !/docs/rescore-runbook.md
 !/docs/reviewer-controls-runbook.md
 !/docs/bridge-bug-2026-08-22.md
+
+# Workshop poster: source, template and figures, kept local like paper/
+/poster/
